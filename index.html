@@ -16,17 +16,83 @@
 </head>
 <body>
 
-  <div id="map"></div>
+<div id="map"></div>
 
-  <script>
-    // 地図の初期表示（緯度,経度,ズーム）
-    const map = L.map('map').setView([35.0, 138.0], 14);
+<script>
+  const map = L.map('map').setView([35.0, 138.0], 14);
 
-    // 背景地図：国土地理院 標準地図
-    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
-      attribution: '© 地理院'
-    }).addTo(map);
-  </script>
+  L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+    attribution: '© 地理院'
+  }).addTo(map);
+
+  // --- 現在地ボタン ---
+  const gpsBtn = L.control({ position: 'topleft' });
+  gpsBtn.onAdd = function() {
+    const btn = L.DomUtil.create('button', '');
+    btn.textContent = '📍 現在地';
+    btn.style.padding = '8px 10px';
+    btn.style.background = 'white';
+    btn.style.border = '1px solid #ccc';
+    btn.style.borderRadius = '6px';
+    btn.style.cursor = 'pointer';
+
+    L.DomEvent.on(btn, 'click', (e) => {
+      L.DomEvent.stopPropagation(e);
+      map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true });
+    });
+    return btn;
+  };
+  gpsBtn.addTo(map);
+
+  // 現在地表示
+  let me;
+  map.on('locationfound', (e) => {
+    if (me) map.removeLayer(me);
+    me = L.circleMarker(e.latlng, { radius: 8 });
+    me.addTo(map).bindPopup('現在地').openPopup();
+  });
+
+  map.on('locationerror', (e) => {
+    alert('現在地を取得できませんでした：' + e.message);
+  });
+
+  // --- 共有URLボタン ---
+  const shareBtn = L.control({ position: 'topleft' });
+  shareBtn.onAdd = function() {
+    const btn = L.DomUtil.create('button', '');
+    btn.textContent = '🔗 共有';
+    btn.style.marginTop = '6px';
+    btn.style.padding = '8px 10px';
+    btn.style.background = 'white';
+    btn.style.border = '1px solid #ccc';
+    btn.style.borderRadius = '6px';
+    btn.style.cursor = 'pointer';
+
+    L.DomEvent.on(btn, 'click', async (e) => {
+      L.DomEvent.stopPropagation(e);
+      const c = map.getCenter();
+      const z = map.getZoom();
+      const url = `${location.origin}${location.pathname}?lat=${c.lat.toFixed(6)}&lng=${c.lng.toFixed(6)}&z=${z}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        alert('共有URLをコピーしました');
+      } catch {
+        prompt('コピーできない場合はこのURLをコピーしてください', url);
+      }
+    });
+    return btn;
+  };
+  shareBtn.addTo(map);
+
+  // --- URLパラメータ復元 ---
+  const p = new URLSearchParams(location.search);
+  if (p.has('lat') && p.has('lng') && p.has('z')) {
+    map.setView(
+      [parseFloat(p.get('lat')), parseFloat(p.get('lng'))],
+      parseInt(p.get('z'), 10)
+    );
+  }
+</script>
 
 </body>
 </html>
