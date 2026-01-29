@@ -92,6 +92,28 @@
       parseInt(p.get('z'), 10)
     );
   }
+  // --- QGIS成果物（GeoJSON）を表示 ---
+fetch('data/result.geojson')
+  .then(res => res.json())
+  .then(data => {
+    const layer = L.geoJSON(data, {
+      style: {
+        color: 'red',
+        weight: 2,
+        fillOpacity: 0.4
+      },
+      onEachFeature: (feature, layer) => {
+        let html = '';
+        for (const key in feature.properties) {
+          html += `<b>${key}</b>: ${feature.properties[key]}<br>`;
+        }
+        layer.bindPopup(html);
+      }
+    }).addTo(map);
+
+    // GeoJSONの範囲にズーム
+    map.fitBounds(layer.getBounds());
+  });
 </script>
 
 </body>
