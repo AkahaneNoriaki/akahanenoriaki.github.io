@@ -25,6 +25,17 @@
     attribution: '© 地理院'
   }).addTo(map);
 
+  // ===== 施業 → 色 =====
+  function colorBySEGYO(segyo) {
+    if (!segyo) return '#999999';
+
+    if (segyo.includes('間伐')) return '#ff7f00'; // オレンジ
+    if (segyo.includes('主伐')) return '#e41a1c'; // 赤
+    if (segyo.includes('保育')) return '#4daf4a'; // 緑
+
+    return '#999999';
+  }
+
   // --- 現在地ボタン ---
   const gpsBtn = L.control({ position: 'topleft' });
   gpsBtn.onAdd = function() {
@@ -44,7 +55,6 @@
   };
   gpsBtn.addTo(map);
 
-  // 現在地表示
   let me;
   map.on('locationfound', (e) => {
     if (me) map.removeLayer(me);
@@ -56,7 +66,7 @@
     alert('現在地を取得できませんでした：' + e.message);
   });
 
-  // --- 共有URLボタン ---
+  // --- 共有URL ---
   const shareBtn = L.control({ position: 'topleft' });
   shareBtn.onAdd = function() {
     const btn = L.DomUtil.create('button', '');
@@ -84,7 +94,7 @@
   };
   shareBtn.addTo(map);
 
-  // --- URLパラメータ復元 ---
+  // --- URL復元 ---
   const p = new URLSearchParams(location.search);
   if (p.has('lat') && p.has('lng') && p.has('z')) {
     map.setView(
@@ -92,29 +102,28 @@
       parseInt(p.get('z'), 10)
     );
   }
-  // --- QGIS成果物（GeoJSON）を表示 ---
-fetch('data/result.geojson')
-  .then(res => res.json())
-  .then(data => {
-    const layer = L.geoJSON(data, {
-      style: {
-        color: 'red',
-        weight: 2,
-        fillOpacity: 0.4
-      },
-      onEachFeature: (feature, layer) => {
-        let html = '';
-        for (const key in feature.properties) {
-          html += `<b>${key}</b>: ${feature.properties[key]}<br>`;
+
+  // --- GeoJSON表示（施業で色分け） ---
+  fetch('data/result.geojson')
+    .then(r => r.json())
+    .then(data => {
+      const layer = L.geoJSON(data, {
+        style: f => ({
+          color: colorBySEGYO(f.properties.SEGYO),
+          weight: 2,
+          fillOpacity: 0.5
+        }),
+        onEachFeature: (f, layer) => {
+          layer.bindPopup(`
+            <b>市町村</b>: ${f.properties.CITY}<br>
+            <b>林班</b>: ${f.properties.RIN}<br>
+            <b>小班</b>: ${f.properties.SHO}<br>
+            <b>施業</b>: ${f.properties.SEGYO}<br>
+            <b>面積</b>: ${Math.round(f.properties.AREA_)} ㎡
+          `);
         }
-        layer.bindPopup(html);
-      }
-    }).addTo(map);
+      }).addTo(map);
 
-    // GeoJSONの範囲にズーム
-    map.fitBounds(layer.getBounds());
-  });
+      map.fitBounds(layer.getBounds());
+    });
 </script>
-
-</body>
-</html>
