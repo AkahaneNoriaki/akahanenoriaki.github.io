@@ -103,57 +103,48 @@
     );
   }
 
-  // --- 施業別にON/OFFできるように表示 ---
-fetch('data/result.geojson')
-  .then(r => r.json())
-  .then(data => {
+    // --- 施業別にON/OFFできるように表示 ---
+  fetch('data/result.geojson')
+    .then(r => r.json())
+    .then(data => {
 
-    // 施業ごとのレイヤグループ
-    const groups = {};   // { "間伐": L.layerGroup(), ... }
-    const all = L.layerGroup(); // 全部まとめ（fitBounds用）
+      const groups = {};        // 施業名 -> LayerGroup
+      const all = L.featureGroup(); // fitBounds用（boundsが取りやすい）
 
-    // GeoJSONの各地物を1件ずつ処理
-    data.features.forEach(f => {
-      const segyo = (f.properties && f.properties.SEGYO) ? String(f.properties.SEGYO) : '（不明）';
+      data.features.forEach(f => {
+        const segyo = (f.properties && f.properties.SEGYO) ? String(f.properties.SEGYO) : '（不明）';
+        if (!groups[segyo]) groups[segyo] = L.layerGroup();
 
-      if (!groups[segyo]) groups[segyo] = L.layerGroup();
+        const one = L.geoJSON(f, {
+          style: ff => ({
+            color: colorBySEGYO(ff.properties.SEGYO),
+            weight: 2,
+            fillOpacity: 0.5
+          }),
+          onEachFeature: (ff, layer) => {
+            layer.bindPopup(`
+              <b>市町村</b>: ${ff.properties.CITY}<br>
+              <b>林班</b>: ${ff.properties.RIN}<br>
+              <b>小班</b>: ${ff.properties.SHO}<br>
+              <b>施業</b>: ${ff.properties.SEGYO}<br>
+              <b>面積</b>: ${Math.round(ff.properties.AREA_)} ㎡
+            `);
+          }
+        });
 
-      // 1地物だけのGeoJSONとしてレイヤ化
-      const one = L.geoJSON(f, {
-        style: ff => ({
-          color: colorBySEGYO(ff.properties.SEGYO),
-          weight: 2,
-          fillOpacity: 0.5
-        }),
-        onEachFeature: (ff, layer) => {
-          layer.bindPopup(`
-            <b>市町村</b>: ${ff.properties.CITY}<br>
-            <b>林班</b>: ${ff.properties.RIN}<br>
-            <b>小班</b>: ${ff.properties.SHO}<br>
-            <b>施業</b>: ${ff.properties.SEGYO}<br>
-            <b>面積</b>: ${Math.round(ff.properties.AREA_)} ㎡
-          `);
-        }
+        one.addTo(groups[segyo]);
+        one.addTo(all);
       });
 
-      one.addTo(groups[segyo]);
-      one.addTo(all);
-    });
+      // 初期表示：全部ON
+      Object.values(groups).forEach(g => g.addTo(map));
 
-    // 初期表示：全部ON（必要なら一部だけONにもできる）
-    Object.values(groups).forEach(g => g.addTo(map));
+      // 右上にON/OFF（collapsed:false で常に展開）
+      L.control.layers(null, groups, { collapsed: false }).addTo(map);
 
-    // ON/OFFコントロール（右上）
-    L.control.layers(null, groups, { collapsed: false }).addTo(map);
-
-    // 全体範囲にズーム（地物がある時だけ）
-    if (all.getLayers().length > 0) {
-      map.fitBounds(all.getBounds());
-    }
-  });
-        }
-      }).addTo(map);
-
-      map.fitBounds(layer.getBounds());
+      // 範囲にズーム（地物があれば）
+      if (all.getLayers().length > 0) {
+        map.fitBounds(all.getBounds());
+      }
     });
 </script>
