@@ -2,53 +2,65 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>Leaflet Map</title>
+  <title>現場確認マップ</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Leaflet（CDN） -->
+  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
     html, body { height: 100%; margin: 0; }
     #map { height: 100vh; width: 100vw; }
+    .leaflet-control button{
+      background:white; border:1px solid #ccc; border-radius:6px;
+      padding:6px 10px; cursor:pointer;
+    }
   </style>
 </head>
 <body>
-
 <div id="map"></div>
 
 <script>
+  /* =========================
+     0) map を先に作る
+  ========================= */
+  const map = L.map('map').setView([35.0, 138.0], 14);
+
+  /* =========================
+     1) ベース／タイル
+  ========================= */
   const gsiLayer = L.tileLayer(
-  'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
-  { attribution: '© 地理院' }
-).addTo(map);
+    'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
+    { attribution: '© 地理院' }
+  ).addTo(map);
 
-const csLayer = L.tileLayer('tile_cs/{z}/{x}/{y}.png', {
-  minZoom: 10,
-  maxZoom: 14,
-  opacity: 0.8
-});
+  // ※ズーム範囲は「あなたが作ったタイルのズーム」に合わせる
+  // 例：12-18で作ったなら minZoom:12, maxZoom:18 にする
+  const csLayer = L.tileLayer('tile_cs/{z}/{x}/{y}.png', {
+    opacity: 0.8,
+    minZoom: 10,
+    maxZoom: 14
+  });
 
-L.control.layers(
-  { "地理院": gsiLayer },
-  { "CS立体図": csLayer },
-  { collapsed: false }
-).addTo(map);
- 
+  /* =========================
+     2) 施業 → 色
+  ========================= */
+  function colorBySEGYO(segyo) {
+    if (!segyo) return '#999999';
+    if (segyo.includes('間伐')) return '#ff7f00';
+    if (segyo.includes('主伐')) return '#e41a1c';
+    if (segyo.includes('保育')) return '#4daf4a';
+    return '#999999';
   }
 
-  // --- 現在地ボタン ---
+  /* =========================
+     3) 現在地ボタン
+  ========================= */
   const gpsBtn = L.control({ position: 'topleft' });
   gpsBtn.onAdd = function() {
     const btn = L.DomUtil.create('button', '');
     btn.textContent = '📍 現在地';
-    btn.style.padding = '8px 10px';
-    btn.style.background = 'white';
-    btn.style.border = '1px solid #ccc';
-    btn.style.borderRadius = '6px';
-    btn.style.cursor = 'pointer';
-
     L.DomEvent.on(btn, 'click', (e) => {
       L.DomEvent.stopPropagation(e);
       map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true });
@@ -63,22 +75,18 @@ L.control.layers(
     me = L.circleMarker(e.latlng, { radius: 8 });
     me.addTo(map).bindPopup('現在地').openPopup();
   });
-
   map.on('locationerror', (e) => {
     alert('現在地を取得できませんでした：' + e.message);
   });
 
-  // --- 共有URL ---
+  /* =========================
+     4) 共有URLボタン
+  ========================= */
   const shareBtn = L.control({ position: 'topleft' });
   shareBtn.onAdd = function() {
     const btn = L.DomUtil.create('button', '');
     btn.textContent = '🔗 共有';
     btn.style.marginTop = '6px';
-    btn.style.padding = '8px 10px';
-    btn.style.background = 'white';
-    btn.style.border = '1px solid #ccc';
-    btn.style.borderRadius = '6px';
-    btn.style.cursor = 'pointer';
 
     L.DomEvent.on(btn, 'click', async (e) => {
       L.DomEvent.stopPropagation(e);
@@ -96,7 +104,9 @@ L.control.layers(
   };
   shareBtn.addTo(map);
 
-  // --- URL復元 ---
+  /* =========================
+     5) URL復元
+  ========================= */
   const p = new URLSearchParams(location.search);
   if (p.has('lat') && p.has('lng') && p.has('z')) {
     map.setView(
@@ -105,17 +115,18 @@ L.control.layers(
     );
   }
 
-    // --- 施業別にON/OFFできるように表示 ---
+  /* =========================
+     6) GeoJSON（施業別ON/OFF）
+  ========================= */
+  const segyoGroups = {};             // 施業名→LayerGroup
+  const segyoAll = L.featureGroup();  // 範囲計算用
+
   fetch('data/result.geojson')
     .then(r => r.json())
     .then(data => {
-
-      const groups = {};        // 施業名 -> LayerGroup
-      const all = L.featureGroup(); // fitBounds用（boundsが取りやすい）
-
       data.features.forEach(f => {
         const segyo = (f.properties && f.properties.SEGYO) ? String(f.properties.SEGYO) : '（不明）';
-        if (!groups[segyo]) groups[segyo] = L.layerGroup();
+        if (!segyoGroups[segyo]) segyoGroups[segyo] = L.layerGroup();
 
         const one = L.geoJSON(f, {
           style: ff => ({
@@ -134,19 +145,24 @@ L.control.layers(
           }
         });
 
-        one.addTo(groups[segyo]);
-        one.addTo(all);
+        one.addTo(segyoGroups[segyo]);
+        one.addTo(segyoAll);
       });
 
       // 初期表示：全部ON
-      Object.values(groups).forEach(g => g.addTo(map));
+      Object.values(segyoGroups).forEach(g => g.addTo(map));
 
-      // 右上にON/OFF（collapsed:false で常に展開）
-      L.control.layers(null, groups, { collapsed: false }).addTo(map);
-
-      // 範囲にズーム（地物があれば）
-      if (all.getLayers().length > 0) {
-        map.fitBounds(all.getBounds());
+      // 施業の範囲へズーム（URL指定が無いときだけ）
+      if (!(p.has('lat') && p.has('lng') && p.has('z')) && segyoAll.getLayers().length > 0) {
+        map.fitBounds(segyoAll.getBounds());
       }
+
+      // 7) レイヤ切替（ここで1回だけ作る）
+      const baseMaps = { "地理院": gsiLayer };
+      const overlayMaps = { "CS立体図": csLayer, ...segyoGroups };
+      L.control.layers(baseMaps, overlayMaps, { collapsed: false }).addTo(map);
     });
 </script>
+
+</body>
+</html>
