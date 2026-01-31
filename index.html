@@ -46,7 +46,7 @@
     .small{ font-size: 12px; opacity: 0.8; }
     .hidden{ display:none; }
 
-    /* 自分矢印（CSSで三角形） */
+    /* 自分矢印 */
     .me-arrow{
       width: 0;
       height: 0;
@@ -56,16 +56,34 @@
       transform-origin: 50% 75%;
       filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35));
     }
-    /* 自分位置の精度円（オプションで使うなら） */
-    .me-acc{
-      color: #0066ff;
-      fill-color: #3399ff;
+
+    /* ドロップガイド */
+    #dropHint{
+      position: fixed;
+      right: 10px;
+      top: 10px;
+      z-index: 9999;
+      background: rgba(255,255,255,0.92);
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-family: sans-serif;
+      font-size: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
     }
+    #dropHint strong{ display:block; margin-bottom:4px; }
+    #dropHint .ok{ color:#0a7; }
+    #dropHint .ng{ color:#c00; }
   </style>
 </head>
 <body>
 
 <div id="map"></div>
+
+<div id="dropHint">
+  <strong>GeoJSONをドロップ</strong>
+  <div class="small">PC: ファイルをこの画面へドロップ</div>
+  <div class="small">対応: <span class="ok">.geojson / .json</span></div>
+</div>
 
 <!-- カメラ入力（スマホでカメラ起動） -->
 <input id="cameraInput" class="hidden" type="file" accept="image/*" capture="environment">
@@ -104,14 +122,30 @@ const csLayer = L.tileLayer(
   }
 ).addTo(map);
 
-L.control.layers(
+/* ===============================
+   3) レイヤコントロール（DnDで増える）
+================================ */
+let overlayLayers = {
+  "CS立体図": csLayer
+};
+
+let layerControl = L.control.layers(
   { "地理院": gsiLayer },
-  { "CS立体図": csLayer },
+  overlayLayers,
   { collapsed: false }
 ).addTo(map);
 
+function refreshLayerControl(){
+  map.removeControl(layerControl);
+  layerControl = L.control.layers(
+    { "地理院": gsiLayer },
+    overlayLayers,
+    { collapsed: false }
+  ).addTo(map);
+}
+
 /* ===============================
-   3) 共有URL（中心＋ズーム）
+   4) 共有URL（中心＋ズーム）
 ================================ */
 const shareBtn = L.control({ position: 'topleft' });
 shareBtn.onAdd = function() {
@@ -148,17 +182,15 @@ if (p.has('lat') && p.has('lng') && p.has('z')) {
 }
 
 /* ===============================
-   4) 現在地（リアルタイム追従）
-   + 方法A：自分矢印を回して「進行方向＝上」感
+   5) 現在地（リアルタイム追従）＋矢印回転（方法A）
 ================================ */
-let meMarker = null;     // 矢印マーカー
-let accCircle = null;    // 精度円（任意）
-let followMe = true;     // 追従
-let lastLatLng = null;   // 前回位置（方位が取れない時の補助）
+let meMarker = null;
+let accCircle = null;
+let followMe = true;
+let lastLatLng = null;
 let headingEnabled = false;
-let lastHeadingDeg = 0;  // 直近の方位（度）
+let lastHeadingDeg = 0;
 
-// 自分矢印アイコン（DOMを回転させる）
 const meIcon = L.divIcon({
   className: '',
   html: `<div id="meArrow" class="me-arrow"></div>`,
@@ -169,35 +201,37 @@ const meIcon = L.divIcon({
 function setArrowRotation(deg){
   lastHeadingDeg = deg;
   const el = document.getElementById('meArrow');
-  if (el) {
-    // 「進行方向＝上」に感じさせるため、矢印は逆回転（画面上を向ける）
-    el.style.transform = `rotate(${-deg}deg)`;
-  }
+  if (el) el.style.transform = `rotate(${-deg}deg)`; // “進行方向=上”感
 }
 
-// 位置監視開始
+function bearingDeg(from, to){
+  const lat1 = from.lat * Math.PI/180;
+  const lat2 = to.lat * Math.PI/180;
+  const dLon = (to.lng - from.lng) * Math.PI/180;
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLon);
+  let brng = Math.atan2(y, x) * 180/Math.PI;
+  return (brng + 360) % 360;
+}
+
 function startWatchingLocation() {
   if (!navigator.geolocation) {
     alert('位置情報に対応していません');
     return;
   }
-
   navigator.geolocation.watchPosition(
     (pos) => {
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
       const acc = pos.coords.accuracy;
-
       const ll = L.latLng(lat, lng);
 
-      // 矢印マーカー
       if (!meMarker) {
         meMarker = L.marker(ll, { icon: meIcon, zIndexOffset: 1000 }).addTo(map);
       } else {
         meMarker.setLatLng(ll);
       }
 
-      // 精度円（任意：重いなら消してOK）
       if (!accCircle) {
         accCircle = L.circle(ll, {
           radius: acc,
@@ -211,40 +245,19 @@ function startWatchingLocation() {
         accCircle.setRadius(acc);
       }
 
-      // 追従
-      if (followMe) {
-        map.setView([lat, lng], Math.max(map.getZoom(), 16), { animate: true });
-      }
+      if (followMe) map.setView(ll, Math.max(map.getZoom(), 16), { animate: true });
 
-      // 方位が取れない環境向け：移動方向（前回→今回のベアリング）で補助
+      // 方位が無いときは移動方向で補助
       if (!headingEnabled && lastLatLng) {
         const deg = bearingDeg(lastLatLng, ll);
         if (isFinite(deg)) setArrowRotation(deg);
       }
-
       lastLatLng = ll;
-
-      // popupは必要な時だけ出す（邪魔なので自動では開かない）
-      meMarker.bindPopup(`現在地（±${Math.round(acc)}m）`);
     },
     (err) => alert('現在地エラー: ' + err.message),
     { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
   );
 }
-
-// 2点から方位角（北=0, 東=90）
-function bearingDeg(from, to){
-  const lat1 = from.lat * Math.PI/180;
-  const lat2 = to.lat * Math.PI/180;
-  const dLon = (to.lng - from.lng) * Math.PI/180;
-
-  const y = Math.sin(dLon) * Math.cos(lat2);
-  const x = Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLon);
-  let brng = Math.atan2(y, x) * 180/Math.PI;
-  brng = (brng + 360) % 360;
-  return brng;
-}
-
 startWatchingLocation();
 
 /* 追従ON/OFF */
@@ -252,51 +265,39 @@ const followBtn = L.control({ position: 'topleft' });
 followBtn.onAdd = function() {
   const btn = L.DomUtil.create('button', '');
   btn.textContent = '🧲 追従ON';
-
   L.DomEvent.on(btn, 'click', (e) => {
     L.DomEvent.stopPropagation(e);
     L.DomEvent.preventDefault(e);
     followMe = !followMe;
     btn.textContent = followMe ? '🧲 追従ON' : '🧲 追従OFF';
   });
-
   return btn;
 };
 followBtn.addTo(map);
 
-/* GoogleMapっぽく：手で地図を動かしたら追従OFF */
+/* 手で動かしたら追従OFF */
 map.on('dragstart zoomstart', () => {
   if (followMe) {
     followMe = false;
-    // 追従ボタン表示を同期（雑に全ボタンから探す）
     const btns = document.querySelectorAll('.leaflet-control button');
     btns.forEach(b => { if (b.textContent.includes('追従')) b.textContent = '🧲 追従OFF'; });
   }
 });
 
-/* ===============================
-   5) 🧭 方位ON（iOS許可が必要）
-   - 許可が取れたら headingEnabled=true
-   - 取得した方位で矢印を回転（方法A）
-================================ */
+/* 🧭 方位ON（iPhone許可） */
 const compassBtn = L.control({ position: 'topleft' });
 compassBtn.onAdd = function() {
   const btn = L.DomUtil.create('button', '');
   btn.textContent = '🧭 方位ON';
-
   L.DomEvent.on(btn, 'click', async (e) => {
     L.DomEvent.stopPropagation(e);
     L.DomEvent.preventDefault(e);
 
     try{
-      // iOS: 明示許可が必要
       if (typeof DeviceOrientationEvent !== 'undefined' &&
           typeof DeviceOrientationEvent.requestPermission === 'function') {
         const res = await DeviceOrientationEvent.requestPermission();
-        if (res !== 'granted') {
-          alert('方位の許可が必要です');
-          return;
-        }
+        if (res !== 'granted') { alert('方位の許可が必要です'); return; }
       }
       startHeadingListener();
       headingEnabled = true;
@@ -305,7 +306,6 @@ compassBtn.onAdd = function() {
       alert('方位の有効化に失敗: ' + (err.message || err));
     }
   });
-
   return btn;
 };
 compassBtn.addTo(map);
@@ -316,22 +316,16 @@ function startHeadingListener(){
   headingListenerStarted = true;
 
   window.addEventListener('deviceorientation', (ev) => {
-    // iOS（北=0°のことが多い）
     let heading = null;
-    if (typeof ev.webkitCompassHeading === 'number') {
-      heading = ev.webkitCompassHeading;
-    } else if (typeof ev.alpha === 'number') {
-      // Android等：alphaの基準が端末で揺れることがある（簡易対応）
-      heading = ev.alpha;
-    }
+    if (typeof ev.webkitCompassHeading === 'number') heading = ev.webkitCompassHeading;
+    else if (typeof ev.alpha === 'number') heading = ev.alpha;
     if (heading === null) return;
-
     setArrowRotation(heading);
   }, { passive: true });
 }
 
 /* ===============================
-   6) カメラ＋連番ピン
+   6) カメラ＋連番ピン（写真＋JSON保存）
 ================================ */
 const cameraInput = document.getElementById('cameraInput');
 const panel = document.getElementById('panel');
@@ -348,19 +342,14 @@ const camBtn = L.control({ position: 'topleft' });
 camBtn.onAdd = function() {
   const btn = L.DomUtil.create('button', '');
   btn.textContent = '📷 カメラ';
-
   L.DomEvent.on(btn, 'click', (e) => {
     L.DomEvent.stopPropagation(e);
     L.DomEvent.preventDefault(e);
 
-    if (!meMarker) {
-      alert('現在地を取得中です。青い矢印が出てから撮影してください。');
-      return;
-    }
+    if (!meMarker) { alert('現在地取得中です。青い矢印が出てから撮影してください。'); return; }
     cameraInput.value = '';
     cameraInput.click();
   });
-
   return btn;
 };
 camBtn.addTo(map);
@@ -368,11 +357,7 @@ camBtn.addTo(map);
 cameraInput.addEventListener('change', () => {
   const file = cameraInput.files[0];
   if (!file) return;
-
-  if (!meMarker) {
-    alert('現在地が未取得です。少し待ってからもう一度撮影してください。');
-    return;
-  }
+  if (!meMarker) { alert('現在地が未取得です。少し待ってからもう一度撮影してください。'); return; }
 
   photoCount += 1;
   const id = `P${String(photoCount).padStart(3, '0')}`;
@@ -390,12 +375,10 @@ cameraInput.addEventListener('change', () => {
   lastPhoto = file;
   preview.src = URL.createObjectURL(file);
 
-  // 写真地点ピン
   L.marker([latlng.lat, latlng.lng])
     .addTo(photoLayer)
     .bindPopup(
-      `<b>${id}</b><br>` +
-      `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}` +
+      `<b>${id}</b><br>${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}` +
       (headingEnabled ? `<br>heading: ${Math.round(lastHeadingDeg)}°` : '')
     )
     .openPopup();
@@ -410,7 +393,6 @@ cameraInput.addEventListener('change', () => {
   panel.classList.remove('hidden');
 });
 
-/* 保存（B方式） */
 saveBtn.addEventListener('click', () => {
   if (!lastPhoto || !lastInfo) return;
 
@@ -424,6 +406,96 @@ saveBtn.addEventListener('click', () => {
   a2.href = URL.createObjectURL(metaBlob);
   a2.download = `${lastInfo.id}.json`;
   a2.click();
+});
+
+/* ===============================
+   7) GeoJSON Drag & Drop（ここが本題）
+   - .geojson / .json をドロップ → 即追加
+   - レイヤ一覧に追加（ON/OFF）
+   - URL共有には含めない（他人の端末で再現できないため）
+================================ */
+function isGeoJsonFile(file){
+  const name = (file.name || '').toLowerCase();
+  return name.endsWith('.geojson') || name.endsWith('.json');
+}
+
+function defaultGeoJsonStyle(){
+  return {
+    color: '#ff0088',
+    weight: 2,
+    fillOpacity: 0.2
+  };
+}
+
+function addGeoJsonToMap(geojson, layerName){
+  const lyr = L.geoJSON(geojson, {
+    style: defaultGeoJsonStyle(),
+    onEachFeature: (f, layer) => {
+      // プロパティを少しだけ表示（全部出すと重い）
+      const p = f.properties || {};
+      const keys = Object.keys(p).slice(0, 12);
+      const html = keys.length
+        ? keys.map(k => `<b>${k}</b>: ${String(p[k])}`).join('<br>')
+        : '属性なし';
+      layer.bindPopup(html);
+    }
+  });
+
+  // 追加＆初期ON
+  overlayLayers[layerName] = lyr;
+  lyr.addTo(map);
+  refreshLayerControl();
+
+  // 範囲にズーム
+  try{
+    const b = lyr.getBounds();
+    if (b.isValid()) map.fitBounds(b.pad(0.1));
+  }catch{}
+}
+
+async function readFileAsText(file){
+  return await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ''));
+    r.onerror = () => reject(r.error);
+    r.readAsText(file);
+  });
+}
+
+// ドロップ許可（ブラウザの既定動作を止める）
+window.addEventListener('dragover', (e) => {
+  e.preventDefault();
+}, { passive:false });
+
+window.addEventListener('drop', async (e) => {
+  e.preventDefault();
+
+  const files = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+  if (!files.length) return;
+
+  // 複数落とせる（全部処理）
+  for (const file of files) {
+    if (!isGeoJsonFile(file)) {
+      alert(`未対応ファイル: ${file.name}\n対応: .geojson / .json`);
+      continue;
+    }
+
+    try{
+      const text = await readFileAsText(file);
+      const geojson = JSON.parse(text);
+
+      // ざっくり妥当性
+      if (!geojson || (!geojson.type)) throw new Error('GeoJSONではありません');
+
+      const nameBase = file.name.replace(/\.(geojson|json)$/i, '');
+      const layerName = `追加: ${nameBase}`;
+
+      addGeoJsonToMap(geojson, layerName);
+
+    }catch(err){
+      alert(`読み込み失敗: ${file.name}\n${err.message || err}`);
+    }
+  }
 });
 </script>
 
