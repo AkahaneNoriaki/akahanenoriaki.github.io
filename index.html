@@ -16,7 +16,7 @@
     /* 左上UIを少し下へ（ノッチ回避） */
     .leaflet-top.leaflet-left { margin-top: 56px; }
 
-    /* ===== UIパネル ===== */
+    /* ===== UIパネル（PC/タブレット） ===== */
     .ui-panel{
       background: rgba(255,255,255,0.92);
       border: 1px solid #ccc;
@@ -26,7 +26,6 @@
       font-family: sans-serif;
       width: 148px;
     }
-
     .ui-panel button{
       width: 100%;
       background: white;
@@ -35,10 +34,12 @@
       padding: 6px 8px;
       cursor: pointer;
       display: block;
-      margin-bottom: 6px;
+      margin: 0 0 6px 0;
       font-size: 13px;
       text-align: left;
+      line-height: 1.1;
     }
+    .ui-panel button:last-child{ margin-bottom: 0; }
 
     .ui-section-title{
       font-size: 11px;
@@ -49,52 +50,14 @@
     .bg-switch{
       display: grid;
       gap: 4px;
+      margin-top: 2px;
       font-size: 12px;
     }
-
-    /* ===== スマホ用 ===== */
-    @media (max-width: 480px){
-      .ui-panel{
-        width: 64px;
-      }
-      .ui-panel button{
-        font-size: 18px;
-        text-align: center;
-        padding: 8px 0;
-      }
-      .ui-panel .lbl,
-      .ui-section-title,
-      .bg-item{
-        display: none;
-      }
-
-      .ui-panel.hidden-ui{
-        display: none;
-      }
-
-      .ui-toggle{
-        background: rgba(255,255,255,0.95);
-        border: 1px solid #ccc;
-        border-radius: 10px;
-        padding: 8px 10px;
-        font-size: 18px;
-        cursor: pointer;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.12);
-        user-select: none;
-        margin-bottom: 6px;
-      }
-
-      .bg-mini{
-        border: 1px solid #ccc;
-        border-radius: 8px;
-        padding: 8px 0;
-        text-align: center;
-        cursor: pointer;
-        font-size: 16px;
-      }
-      .bg-mini.active{
-        outline: 2px solid rgba(0,0,0,0.15);
-      }
+    .bg-item{
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      user-select: none;
     }
 
     /* 自分矢印 */
@@ -104,6 +67,62 @@
       border-right: 9px solid transparent;
       border-bottom: 18px solid #0066ff;
       transform-origin: 50% 75%;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35));
+    }
+
+    /* ===== スマホ時：左上UIを細い縦バー化 ===== */
+    @media (max-width: 480px){
+      .ui-panel{ width: 64px; padding: 6px; }
+
+      .ui-panel button{
+        padding: 8px 0;
+        font-size: 18px;
+        text-align: center;
+        margin-bottom: 8px;
+      }
+
+      /* 文字を隠す */
+      .ui-panel .lbl{ display:none; }
+      .ui-section-title{ display:none; }
+      .bg-item{ display:none; }
+
+      /* UIを隠す */
+      .ui-panel.hidden-ui{ display:none; }
+
+      /* ≡ボタン */
+      .ui-toggle{
+        background: rgba(255,255,255,0.95);
+        border: 1px solid #ccc;
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 18px;
+        line-height: 1;
+        cursor: pointer;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+        user-select: none;
+        margin-bottom: 6px;
+      }
+
+      /* 背景3ボタン */
+      .bg-switch{
+        display: grid;
+        gap: 8px;
+        margin-top: 2px;
+      }
+      .bg-mini{
+        width: 100%;
+        background: white;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        padding: 8px 0;
+        cursor: pointer;
+        text-align: center;
+        font-size: 16px;
+        line-height: 1;
+      }
+      .bg-mini.active{
+        outline: 2px solid rgba(0,0,0,0.15);
+      }
     }
   </style>
 </head>
@@ -111,86 +130,153 @@
 
 <div id="map"></div>
 
+<!-- カメラ入力（スマホでカメラ起動） -->
 <input id="cameraInput" type="file" accept="image/*" capture="environment" style="display:none">
 
 <script>
 /* ===============================
-   Map & Base
+   0) map
 ================================ */
 const map = L.map('map').setView([36.2, 138.0], 12);
 
+/* ===============================
+   1) 背景（地理院/CS）
+================================ */
 const gsiLayer = L.tileLayer(
-  'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png'
+  'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
+  { attribution: '© 地理院' }
 ).addTo(map);
 
 const csLayer = L.tileLayer(
   'https://tile.geospatial.jp/CS/VER2/{z}/{x}/{y}.png',
-  { opacity: 0.7, minZoom: 8, maxZoom: 18 }
+  { opacity: 0.7, minZoom: 8, maxZoom: 18, attribution: '© 長野県 CS立体図' }
 );
 
+/* URL復元（中心＋ズーム） */
+const p = new URLSearchParams(location.search);
+if (p.has('lat') && p.has('lng') && p.has('z')) {
+  map.setView(
+    [parseFloat(p.get('lat')), parseFloat(p.get('lng'))],
+    parseInt(p.get('z'), 10)
+  );
+}
+
 /* ===============================
-   現在地 + 矢印（方法A）
+   2) 現在地＋矢印回転（方法A）
 ================================ */
 let meMarker = null;
+let accCircle = null;
 let followMe = true;
 let lastLatLng = null;
 let headingEnabled = false;
+let lastHeadingDeg = 0;
 
 const meIcon = L.divIcon({
+  className: '',
   html: `<div id="meArrow" class="me-arrow"></div>`,
-  iconSize: [18,18],
-  iconAnchor: [9,9]
+  iconSize: [18, 18],
+  iconAnchor: [9, 9]
 });
 
 function setArrowRotation(deg){
+  lastHeadingDeg = deg;
   const el = document.getElementById('meArrow');
   if (el) el.style.transform = `rotate(${-deg}deg)`;
 }
 
-function bearing(from, to){
-  const y = Math.sin((to.lng-from.lng)*Math.PI/180)*Math.cos(to.lat*Math.PI/180);
-  const x = Math.cos(from.lat*Math.PI/180)*Math.sin(to.lat*Math.PI/180)
-          - Math.sin(from.lat*Math.PI/180)*Math.cos(to.lat*Math.PI/180)
-          * Math.cos((to.lng-from.lng)*Math.PI/180);
-  return (Math.atan2(y,x)*180/Math.PI+360)%360;
+function bearingDeg(from, to){
+  const lat1 = from.lat * Math.PI/180;
+  const lat2 = to.lat * Math.PI/180;
+  const dLon = (to.lng - from.lng) * Math.PI/180;
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLon);
+  let brng = Math.atan2(y, x) * 180/Math.PI;
+  return (brng + 360) % 360;
 }
 
-navigator.geolocation.watchPosition(pos=>{
-  const ll = L.latLng(pos.coords.latitude, pos.coords.longitude);
-
-  if(!meMarker){
-    meMarker = L.marker(ll,{icon:meIcon}).addTo(map);
-  }else{
-    meMarker.setLatLng(ll);
+/* ★ここが重要：watchPositionの第2引数は「エラー関数」 */
+function startWatchingLocation() {
+  if (!navigator.geolocation) {
+    alert('位置情報に対応していません');
+    return;
   }
 
-  if(followMe){
-    map.setView(ll, Math.max(map.getZoom(),16), {animate:true});
-  }
+  navigator.geolocation.watchPosition(
+    (pos) => {
+      const ll = L.latLng(pos.coords.latitude, pos.coords.longitude);
+      const acc = pos.coords.accuracy;
 
-  if(!headingEnabled && lastLatLng){
-    setArrowRotation(bearing(lastLatLng,ll));
-  }
-  lastLatLng = ll;
-},{},{enableHighAccuracy:true});
+      if (!meMarker) {
+        meMarker = L.marker(ll, { icon: meIcon, zIndexOffset: 1000 }).addTo(map);
+      } else {
+        meMarker.setLatLng(ll);
+      }
+
+      if (!accCircle) {
+        accCircle = L.circle(ll, {
+          radius: acc,
+          color: '#3399ff',
+          weight: 1,
+          fillColor: '#3399ff',
+          fillOpacity: 0.15
+        }).addTo(map);
+      } else {
+        accCircle.setLatLng(ll);
+        accCircle.setRadius(acc);
+      }
+
+      if (followMe) {
+        map.setView(ll, Math.max(map.getZoom(), 16), { animate: true });
+      }
+
+      if (!headingEnabled && lastLatLng) {
+        const deg = bearingDeg(lastLatLng, ll);
+        if (isFinite(deg)) setArrowRotation(deg);
+      }
+      lastLatLng = ll;
+    },
+    (err) => {
+      alert('現在地エラー: ' + err.message);
+    },
+    { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
+  );
+}
+startWatchingLocation();
+
+/* 地図を触ったら追従OFF */
+map.on('dragstart zoomstart', () => { followMe = false; updateFollowLabel(); });
+
+function updateFollowLabel(){
+  const b = document.getElementById('btnFollow');
+  if (!b) return;
+  b.innerHTML = followMe ? `🧲 <span class="lbl">追従ON</span>` : `🧲 <span class="lbl">追従OFF</span>`;
+}
 
 /* 方位 */
-function startHeading(){
-  window.addEventListener('deviceorientation', ev=>{
-    if(typeof ev.webkitCompassHeading === 'number'){
-      setArrowRotation(ev.webkitCompassHeading);
-    }
-  },{passive:true});
-  headingEnabled = true;
+let headingListenerStarted = false;
+function startHeadingListener(){
+  if (headingListenerStarted) return;
+  headingListenerStarted = true;
+
+  window.addEventListener('deviceorientation', (ev) => {
+    let heading = null;
+    if (typeof ev.webkitCompassHeading === 'number') heading = ev.webkitCompassHeading;
+    else if (typeof ev.alpha === 'number') heading = ev.alpha;
+    if (heading === null) return;
+    setArrowRotation(heading);
+  }, { passive: true });
 }
 
 /* ===============================
-   UIパネル
+   3) UIパネル（スマホは≡で隠す）
 ================================ */
-const ui = L.control({position:'topleft'});
-ui.onAdd = function(){
-  const box = L.DomUtil.create('div','ui-panel');
+const cameraInput = document.getElementById('cameraInput');
+
+const ui = L.control({ position: 'topleft' });
+ui.onAdd = function() {
+  const box = L.DomUtil.create('div', 'ui-panel');
   L.DomEvent.disableClickPropagation(box);
+  L.DomEvent.disableScrollPropagation(box);
 
   box.innerHTML = `
     <button id="btnFollow">🧲 <span class="lbl">追従ON</span></button>
@@ -200,66 +286,148 @@ ui.onAdd = function(){
 
     <div class="ui-section-title">背景</div>
     <div class="bg-switch">
-      <div class="bg-item"><input type="radio" name="bg" value="gsi" checked> 地理院</div>
-      <div class="bg-item"><input type="radio" name="bg" value="cs"> CS</div>
-      <div class="bg-item"><input type="radio" name="bg" value="both"> 重ねる</div>
+      <label class="bg-item"><input type="radio" name="bg" value="gsi" checked> <span class="lbl">地理院</span></label>
+      <label class="bg-item"><input type="radio" name="bg" value="cs"> <span class="lbl">CS</span></label>
+      <label class="bg-item"><input type="radio" name="bg" value="both"> <span class="lbl">重ねる</span></label>
     </div>
   `;
 
-  box.querySelector('#btnFollow').onclick=()=>{
-    followMe=!followMe;
-    box.querySelector('#btnFollow').innerHTML=
-      `🧲 <span class="lbl">${followMe?'追従ON':'追従OFF'}</span>`;
-  };
-
-  box.querySelector('#btnCompass').onclick=async()=>{
-    if(DeviceOrientationEvent?.requestPermission){
-      const r = await DeviceOrientationEvent.requestPermission();
-      if(r!=='granted') return;
-    }
-    startHeading();
-    box.querySelector('#btnCompass').innerHTML='🧭 <span class="lbl">方位ON</span>';
-  };
-
-  box.querySelector('#btnShare').onclick=()=>{
-    const c=map.getCenter(),z=map.getZoom();
-    const url=`${location.origin}${location.pathname}?lat=${c.lat}&lng=${c.lng}&z=${z}`;
-    navigator.clipboard.writeText(url);
-    alert('URLをコピーしました');
-  };
-
-  box.querySelector('#btnCamera').onclick=()=>{
-    document.getElementById('cameraInput').click();
-  };
-
-  box.querySelectorAll('input[name="bg"]').forEach(r=>{
-    r.onchange=()=>{
-      map.removeLayer(gsiLayer);
-      map.removeLayer(csLayer);
-      if(r.value==='gsi') gsiLayer.addTo(map);
-      if(r.value==='cs') csLayer.addTo(map);
-      if(r.value==='both'){ gsiLayer.addTo(map); csLayer.addTo(map); }
-    };
+  // 追従
+  box.querySelector('#btnFollow').addEventListener('click', (e)=>{
+    e.preventDefault();
+    followMe = !followMe;
+    updateFollowLabel();
   });
 
-  /* ===== スマホ用：≡トグル ===== */
-  if(window.matchMedia('(max-width:480px)').matches){
-    const toggle=L.DomUtil.create('div','ui-toggle');
-    toggle.textContent='≡';
-    setTimeout(()=>{
-      box.parentElement.parentElement.insertBefore(toggle, box.parentElement);
+  // 方位ON（iOS許可）
+  box.querySelector('#btnCompass').addEventListener('click', async (e)=>{
+    e.preventDefault();
+    try{
+      if (typeof DeviceOrientationEvent !== 'undefined' &&
+          typeof DeviceOrientationEvent.requestPermission === 'function') {
+        const res = await DeviceOrientationEvent.requestPermission();
+        if (res !== 'granted') { alert('方位の許可が必要です'); return; }
+      }
+      startHeadingListener();
+      headingEnabled = true;
+      box.querySelector('#btnCompass').innerHTML = '🧭 <span class="lbl">方位（有効）</span>';
+    }catch(err){
+      alert('方位の有効化に失敗: ' + (err.message || err));
+    }
+  });
+
+  // 共有（HTTPSでないとclipboardが失敗することがあるのでtry/catch）
+  box.querySelector('#btnShare').addEventListener('click', async (e)=>{
+    e.preventDefault();
+    const c = map.getCenter();
+    const z = map.getZoom();
+    const url = `${location.origin}${location.pathname}?lat=${c.lat.toFixed(6)}&lng=${c.lng.toFixed(6)}&z=${z}`;
+    try{
+      await navigator.clipboard.writeText(url);
+      alert('URLをコピーしました');
+    }catch{
+      prompt('このURLをコピーしてください', url);
+    }
+  });
+
+  // カメラ
+  box.querySelector('#btnCamera').addEventListener('click', (e)=>{
+    e.preventDefault();
+    cameraInput.value = '';
+    cameraInput.click();
+  });
+
+  // 背景（通常：ラジオ）
+  box.querySelectorAll('input[name="bg"]').forEach(r=>{
+    r.addEventListener('change', ()=>{
+      const v = box.querySelector('input[name="bg"]:checked').value;
+
+      if (map.hasLayer(gsiLayer)) map.removeLayer(gsiLayer);
+      if (map.hasLayer(csLayer)) map.removeLayer(csLayer);
+
+      if (v === 'gsi') gsiLayer.addTo(map);
+      else if (v === 'cs') csLayer.addTo(map);
+      else { gsiLayer.addTo(map); csLayer.addTo(map); }
+    });
+  });
+
+  // ===== スマホ時だけ：背景を3ボタン化（🗾 / 🛰️ / ➕）＋ ≡で隠す =====
+  if (window.matchMedia && window.matchMedia('(max-width: 480px)').matches) {
+
+    // 背景3ボタン
+    const bg = box.querySelector('.bg-switch');
+
+    const btnG = document.createElement('div');
+    btnG.className = 'bg-mini active';
+    btnG.textContent = '🗾';
+
+    const btnC = document.createElement('div');
+    btnC.className = 'bg-mini';
+    btnC.textContent = '🛰️';
+
+    const btnB = document.createElement('div');
+    btnB.className = 'bg-mini';
+    btnB.textContent = '➕';
+
+    bg.appendChild(btnG);
+    bg.appendChild(btnC);
+    bg.appendChild(btnB);
+
+    function setActive(which){
+      [btnG, btnC, btnB].forEach(b=>b.classList.remove('active'));
+      if (which==='gsi') btnG.classList.add('active');
+      if (which==='cs') btnC.classList.add('active');
+      if (which==='both') btnB.classList.add('active');
+    }
+
+    function applyBG(v){
+      if (map.hasLayer(gsiLayer)) map.removeLayer(gsiLayer);
+      if (map.hasLayer(csLayer)) map.removeLayer(csLayer);
+
+      if (v === 'gsi') gsiLayer.addTo(map);
+      else if (v === 'cs') csLayer.addTo(map);
+      else { gsiLayer.addTo(map); csLayer.addTo(map); }
+
+      setActive(v);
+    }
+
+    btnG.onclick = ()=>applyBG('gsi');
+    btnC.onclick = ()=>applyBG('cs');
+    btnB.onclick = ()=>applyBG('both');
+
+    // ≡トグル（パネルを隠す）
+    const toggle = document.createElement('div');
+    toggle.className = 'ui-toggle';
+    toggle.textContent = '≡';
+    toggle.title = 'メニュー';
+
+    // boxはleaflet-controlの中に入るので、その手前にトグルを差し込む
+    setTimeout(() => {
+      const ctrl = box.closest('.leaflet-control');
+      if (ctrl && ctrl.parentElement) {
+        ctrl.parentElement.insertBefore(toggle, ctrl);
+      }
+    }, 0);
+
+    let open = true;
+    function setOpen(v){
+      open = v;
+      box.classList.toggle('hidden-ui', !open);
+    }
+
+    toggle.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(!open);
     });
 
-    let open=true;
-    toggle.onclick=e=>{
-      e.stopPropagation();
-      open=!open;
-      box.classList.toggle('hidden-ui',!open);
-    };
-
-    map.on('click',()=>box.classList.add('hidden-ui'));
+    // 地図をタップしたら閉じる（好みで）
+    map.on('click', ()=>{
+      setOpen(false);
+    });
   }
 
+  updateFollowLabel();
   return box;
 };
 ui.addTo(map);
