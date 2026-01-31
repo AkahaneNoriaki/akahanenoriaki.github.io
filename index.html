@@ -2,15 +2,12 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>Field Map Viewer (Manifest v1)</title>
+  <title>CS立体図 現場確認マップ</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <!-- Vector tile (MVT) -->
-  <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js"></script>
 
   <style>
     html, body { height: 100%; margin: 0; }
@@ -19,7 +16,7 @@
     .leaflet-control button{
       background:white;
       border:1px solid #ccc;
-      border-radius:8px;
+      border-radius:6px;
       padding:6px 10px;
       cursor:pointer;
       display:block;
@@ -27,333 +24,239 @@
       font-size:14px;
     }
 
-    .manifest-info{
+    .photo-panel{
       position: fixed;
       left: 10px;
       bottom: 10px;
       z-index: 9999;
       background: rgba(255,255,255,0.95);
-      padding: 10px 12px;
-      border-radius: 10px;
-      font-family: sans-serif;
-      font-size: 12px;
-      max-width: 520px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-    }
-    .manifest-info .title{ font-weight:700; margin-bottom:6px; }
-    .manifest-info .small{ opacity:0.85; word-break: break-all; }
-
-    .photo-panel{
-      position: fixed;
-      right: 10px;
-      bottom: 10px;
-      z-index: 9999;
-      background: rgba(255,255,255,0.95);
       padding: 10px;
       border-radius: 10px;
+      max-width: 320px;
       font-family: sans-serif;
-      font-size: 12px;
-      display: none;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
     }
+
     .photo-panel img{
-      max-width: 240px;
+      max-width: 100%;
       border-radius: 8px;
       margin-top: 6px;
     }
+
+    .small{ font-size: 12px; opacity: 0.8; }
+    .hidden{ display:none; }
   </style>
 </head>
 <body>
 
 <div id="map"></div>
 
-<div id="info" class="manifest-info">
-  <div class="title">起動中…</div>
-  <div class="small" id="infoSmall"></div>
-</div>
+<!-- カメラ入力（スマホでカメラ起動） -->
+<input id="cameraInput" class="hidden" type="file" accept="image/*" capture="environment">
 
-<input id="cameraInput" type="file" accept="image/*" capture="environment" style="display:none">
-
-<div id="photoPanel" class="photo-panel">
-  <b id="photoTitle"></b><br>
-  <img id="photoPreview"><br>
-  <button id="savePhotoBtn">保存（写真＋JSON）</button>
+<div id="panel" class="photo-panel hidden">
+  <b>撮影記録</b>
+  <div id="meta" class="small"></div>
+  <img id="preview">
+  <button id="saveBtn">写真＋座標メモを保存</button>
 </div>
 
 <script>
-/* =====================================================
-   0) Map & Base
-===================================================== */
+/* ===============================
+   0) map
+================================ */
 const map = L.map('map').setView([36.2, 138.0], 12);
 
-const gsiBase = L.tileLayer(
+/* ===============================
+   1) ベース地図
+================================ */
+const gsiLayer = L.tileLayer(
   'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
   { attribution: '© 地理院' }
 ).addTo(map);
 
-/* =====================================================
-   1) Info UI helpers
-===================================================== */
-function setInfo(title, smallHtml){
-  document.querySelector('#info .title').textContent = title;
-  document.getElementById('infoSmall').innerHTML = smallHtml || '';
-}
-setInfo('起動中…', '');
-
-/* =====================================================
-   2) Security (allow host) + fetchJson
-===================================================== */
-const ALLOW_HOSTS = new Set([
-  'tile.geospatial.jp',
-  'cyberjapandata.gsi.go.jp',
-  'raw.githubusercontent.com',
-  location.host
-]);
-
-function hostAllowed(urlStr){
-  try{
-    const u = new URL(urlStr, location.href);
-    return ALLOW_HOSTS.has(u.host);
-  }catch{
-    return false;
+/* ===============================
+   2) CS立体図（公式タイル）
+================================ */
+const csLayer = L.tileLayer(
+  'https://tile.geospatial.jp/CS/VER2/{z}/{x}/{y}.png',
+  {
+    opacity: 0.7,
+    minZoom: 8,
+    maxZoom: 18,
+    attribution: '© 長野県 CS立体図'
   }
-}
+).addTo(map);
 
-async function fetchJson(url){
-  if(!hostAllowed(url)) throw new Error('許可されていないURL: ' + url);
-  const r = await fetch(url, { cache:'no-store' });
-  if(!r.ok) throw new Error(`読み込み失敗: ${r.status} ${url}`);
-  return await r.json();
-}
+L.control.layers(
+  { "地理院": gsiLayer },
+  { "CS立体図": csLayer },
+  { collapsed: false }
+).addTo(map);
 
-/* =====================================================
-   3) Layer builders (raster_xyz / vector_xyz)
-===================================================== */
-function makeRasterXYZ(def){
-  if(!def.url) throw new Error('raster_xyz: urlがありません');
-  const lyr = L.tileLayer(def.url, {
-    minZoom: def.minZoom ?? 0,
-    maxZoom: def.maxZoom ?? 22,
-    opacity: def.opacity ?? 1,
-    attribution: def.attribution || ''
-  });
-  lyr.setZIndex(def.zIndex || 0);
-  return lyr;
-}
-
-function makeVectorXYZ(def){
-  if(!def.url) throw new Error('vector_xyz: urlがありません');
-  const lyr = L.vectorGrid.protobuf(def.url, {
-    minZoom: def.minZoom ?? 0,
-    maxZoom: def.maxZoom ?? 22,
-    interactive: !!def.interactive,
-    rendererFactory: L.canvas.tile
-  });
-
-  if(def.interactive){
-    lyr.on('click', e=>{
-      const p = (e && e.layer && e.layer.properties) ? e.layer.properties : {};
-      const keys = Object.keys(p).slice(0,10);
-      const html = keys.length
-        ? keys.map(k=>`<b>${k}</b>: ${String(p[k])}`).join('<br>')
-        : '属性がありません';
-      L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
-    });
-  }
-
-  lyr.setZIndex(def.zIndex || 0);
-  return lyr;
-}
-
-/* =====================================================
-   4) Manifest loader
-===================================================== */
-let overlayLayers = {};
-let layerControl = null;
-
-function refreshLayerControl(){
-  if(layerControl) map.removeControl(layerControl);
-  layerControl = L.control.layers(
-    { "地理院": gsiBase },
-    overlayLayers,
-    { collapsed:false }
-  ).addTo(map);
-}
-
-async function loadCollection(url){
-  setInfo('読み込み中…', url);
-
-  const col = await fetchJson(url);
-
-  // 最低限チェック（落ちたら理由が出る）
-  if(!col || !Array.isArray(col.layers)){
-    throw new Error('collection.jsonの形式が不正（layers が配列ではありません）');
-  }
-
-  // 既存オーバーレイ削除
-  try{
-    for(const name of Object.keys(overlayLayers)){
-      const lyr = overlayLayers[name];
-      if(map.hasLayer(lyr)) map.removeLayer(lyr);
-    }
-  }catch{}
-
-  overlayLayers = {};
-
-  if(col.view && typeof col.view.lat === 'number' && typeof col.view.lng === 'number' && typeof col.view.z === 'number'){
-    map.setView([col.view.lat, col.view.lng], col.view.z);
-  }
-
-  for(const layerUrl of col.layers){
-    const def = await fetchJson(layerUrl);
-
-    let lyr = null;
-    if(def.type === 'raster_xyz') lyr = makeRasterXYZ(def);
-    else if(def.type === 'vector_xyz') lyr = makeVectorXYZ(def);
-    else throw new Error('未対応 type: ' + def.type + '（layer: ' + layerUrl + '）');
-
-    const name = def.name || def.id || layerUrl;
-    overlayLayers[name] = lyr;
-
-    if(def.defaultOn) lyr.addTo(map);
-  }
-
-  refreshLayerControl();
-  setInfo(col.name || '読み込み完了', `layers: ${col.layers.length}`);
-}
-
-/* =====================================================
-   5) URL boot (IMPORTANT: try/catch)
-===================================================== */
-(async()=>{
-  try{
-    const p = new URLSearchParams(location.search);
-    if(p.has('m')){
-      await loadCollection(decodeURIComponent(p.get('m')));
-    }else{
-      // default CS立体図（マニフェスト無しで動く保険）
-      const cs = makeRasterXYZ({
-        url:'https://tile.geospatial.jp/CS/VER2/{z}/{x}/{y}.png',
-        minZoom:8, maxZoom:18, opacity:0.7, zIndex:10
-      });
-      overlayLayers['CS立体図'] = cs;
-      cs.addTo(map);
-      refreshLayerControl();
-      setInfo('デフォルト表示','CS立体図');
-    }
-  }catch(err){
-    console.error(err);
-    setInfo('エラー', (err && err.message) ? err.message : String(err));
-    alert('起動エラー: ' + ((err && err.message) ? err.message : err));
-  }
-})();
-
-/* =====================================================
-   6) Current location (watch) + follow toggle
-===================================================== */
+/* ===============================
+   3) 現在地（リアルタイム追従）
+================================ */
+let watchId = null;
 let meMarker = null;
 let followMe = true;
 
-function startWatch(){
-  if(!navigator.geolocation){
-    console.warn('Geolocation not supported');
+function startWatchingLocation() {
+  if (!navigator.geolocation) {
+    alert('位置情報に対応していません');
     return;
   }
 
-  navigator.geolocation.watchPosition(
-    pos=>{
-      const ll = [pos.coords.latitude, pos.coords.longitude];
-      if(!meMarker){
-        meMarker = L.circleMarker(ll,{
-          radius:8, color:'#0066ff', fillColor:'#3399ff', fillOpacity:0.9
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const acc = pos.coords.accuracy;
+
+      if (!meMarker) {
+        meMarker = L.circleMarker([lat, lng], {
+          radius: 8,
+          color: '#0066ff',
+          fillColor: '#3399ff',
+          fillOpacity: 0.9
         }).addTo(map);
-      }else{
-        meMarker.setLatLng(ll);
+      } else {
+        meMarker.setLatLng([lat, lng]);
       }
-      if(followMe){
-        map.setView(ll, Math.max(map.getZoom(),16), {animate:true});
+
+      meMarker.bindPopup(`現在地（±${Math.round(acc)}m）`);
+
+      if (followMe) {
+        map.setView([lat, lng], Math.max(map.getZoom(), 16), { animate: true });
       }
     },
-    err=>{
-      console.warn('Geolocation error', err);
-      // 現場ではアラートがうるさい場合があるので console のみにしています
-    },
-    { enableHighAccuracy:true, maximumAge:1000, timeout:15000 }
+    (err) => alert('現在地エラー: ' + err.message),
+    { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
   );
 }
-startWatch();
 
-L.control({position:'topleft'}).onAdd = ()=>{
-  const b = L.DomUtil.create('button');
-  b.textContent='🧭 追従ON';
-  b.onclick=()=>{
-    followMe=!followMe;
-    b.textContent = followMe?'🧭 追従ON':'🧭 追従OFF';
-  };
-  return b;
-}.addTo(map);
+startWatchingLocation();
 
-/* =====================================================
-   7) Camera & photo pins (B方式：写真＋JSONをDL)
-===================================================== */
+/* 追従ON/OFF */
+const followBtn = L.control({ position: 'topleft' });
+followBtn.onAdd = function() {
+  const btn = L.DomUtil.create('button', '');
+  btn.textContent = '🧭 追従ON';
+  L.DomEvent.on(btn, 'click', (e) => {
+    L.DomEvent.stopPropagation(e);
+    followMe = !followMe;
+    btn.textContent = followMe ? '🧭 追従ON' : '🧭 追従OFF';
+  });
+  return btn;
+};
+followBtn.addTo(map);
+
+/* ===============================
+   4) 共有URL
+================================ */
+const shareBtn = L.control({ position: 'topleft' });
+shareBtn.onAdd = function() {
+  const btn = L.DomUtil.create('button', '');
+  btn.textContent = '🔗 共有';
+  L.DomEvent.on(btn, 'click', async (e) => {
+    L.DomEvent.stopPropagation(e);
+    const c = map.getCenter();
+    const z = map.getZoom();
+    const url = `${location.origin}${location.pathname}?lat=${c.lat.toFixed(6)}&lng=${c.lng.toFixed(6)}&z=${z}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      alert('URLをコピーしました');
+    } catch {
+      prompt('このURLをコピーしてください', url);
+    }
+  });
+  return btn;
+};
+shareBtn.addTo(map);
+
+/* URL復元 */
+const p = new URLSearchParams(location.search);
+if (p.has('lat') && p.has('lng') && p.has('z')) {
+  map.setView(
+    [parseFloat(p.get('lat')), parseFloat(p.get('lng'))],
+    parseInt(p.get('z'), 10)
+  );
+}
+
+/* ===============================
+   5) カメラ＋連番ピン
+================================ */
 const cameraInput = document.getElementById('cameraInput');
-const photoPanel = document.getElementById('photoPanel');
-const photoTitle = document.getElementById('photoTitle');
-const photoPreview = document.getElementById('photoPreview');
-const savePhotoBtn = document.getElementById('savePhotoBtn');
+const panel = document.getElementById('panel');
+const metaDiv = document.getElementById('meta');
+const preview = document.getElementById('preview');
+const saveBtn = document.getElementById('saveBtn');
 
 let photoCount = 0;
 let photoLayer = L.layerGroup().addTo(map);
-let lastPhotoFile = null;
-let lastPhotoMeta = null;
+let lastInfo = null;
+let lastPhoto = null;
 
-L.control({position:'topleft'}).onAdd = ()=>{
-  const b = L.DomUtil.create('button');
-  b.textContent='📷 カメラ';
-  b.onclick=()=>{
-    cameraInput.value='';
+const camBtn = L.control({ position: 'topleft' });
+camBtn.onAdd = function() {
+  const btn = L.DomUtil.create('button', '');
+  btn.textContent = '📷 カメラ';
+  L.DomEvent.on(btn, 'click', (e) => {
+    L.DomEvent.stopPropagation(e);
+    cameraInput.value = '';
     cameraInput.click();
+  });
+  return btn;
+};
+camBtn.addTo(map);
+
+cameraInput.addEventListener('change', () => {
+  const file = cameraInput.files[0];
+  if (!file || !meMarker) return;
+
+  photoCount += 1;
+  const id = `P${String(photoCount).padStart(3, '0')}`;
+  const latlng = meMarker.getLatLng();
+
+  lastInfo = {
+    id,
+    time: new Date().toISOString(),
+    lat: latlng.lat,
+    lng: latlng.lng,
+    zoom: map.getZoom()
   };
-  return b;
-}.addTo(map);
 
-cameraInput.addEventListener('change',()=>{
-  if(!cameraInput.files[0]) return;
-  if(!meMarker){
-    alert('現在地が取得できてから撮影してください（青い点が出たらOK）');
-    return;
-  }
+  lastPhoto = file;
+  preview.src = URL.createObjectURL(file);
 
-  photoCount++;
-  const id = `P${String(photoCount).padStart(3,'0')}`;
-  const ll = meMarker.getLatLng();
-
-  lastPhotoFile = cameraInput.files[0];
-  lastPhotoMeta = { id, time:new Date().toISOString(), lat:ll.lat, lng:ll.lng };
-
-  L.marker(ll).addTo(photoLayer)
-    .bindPopup(`<b>${id}</b><br>${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}`)
+  L.marker([latlng.lat, latlng.lng])
+    .addTo(photoLayer)
+    .bindPopup(`<b>${id}</b><br>${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`)
     .openPopup();
 
-  photoTitle.textContent=id;
-  photoPreview.src=URL.createObjectURL(lastPhotoFile);
-  photoPanel.style.display='block';
+  map.setView([latlng.lat, latlng.lng], Math.max(map.getZoom(), 16));
+
+  metaDiv.textContent =
+    `${id} / ${new Date(lastInfo.time).toLocaleString()} / ` +
+    `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`;
+
+  panel.classList.remove('hidden');
 });
 
-savePhotoBtn.onclick=()=>{
-  if(!lastPhotoFile || !lastPhotoMeta) return;
+/* 保存（B方式） */
+saveBtn.addEventListener('click', () => {
+  if (!lastPhoto || !lastInfo) return;
 
-  const a1=document.createElement('a');
-  a1.href=URL.createObjectURL(lastPhotoFile);
-  a1.download=`${lastPhotoMeta.id}.jpg`;
+  const a1 = document.createElement('a');
+  a1.href = URL.createObjectURL(lastPhoto);
+  a1.download = `${lastInfo.id}.jpg`;
   a1.click();
 
-  const blob=new Blob([JSON.stringify(lastPhotoMeta,null,2)],{type:'application/json'});
-  const a2=document.createElement('a');
-  a2.href=URL.createObjectURL(blob);
-  a2.download=`${lastPhotoMeta.id}.json`;
+  const metaBlob = new Blob([JSON.stringify(lastInfo, null, 2)], { type: 'application/json' });
+  const a2 = document.createElement('a');
+  a2.href = URL.createObjectURL(metaBlob);
+  a2.download = `${lastInfo.id}.json`;
   a2.click();
-};
+});
 </script>
 
 </body>
