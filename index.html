@@ -45,6 +45,22 @@
 
     .small{ font-size: 12px; opacity: 0.8; }
     .hidden{ display:none; }
+
+    /* 自分矢印（CSSで三角形） */
+    .me-arrow{
+      width: 0;
+      height: 0;
+      border-left: 9px solid transparent;
+      border-right: 9px solid transparent;
+      border-bottom: 18px solid #0066ff;
+      transform-origin: 50% 75%;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35));
+    }
+    /* 自分位置の精度円（オプションで使うなら） */
+    .me-acc{
+      color: #0066ff;
+      fill-color: #3399ff;
+    }
   </style>
 </head>
 <body>
@@ -95,80 +111,7 @@ L.control.layers(
 ).addTo(map);
 
 /* ===============================
-   3) 現在地（リアルタイム追従）
-================================ */
-let watchId = null;
-let meMarker = null;
-let followMe = true;
-
-function startWatchingLocation() {
-  if (!navigator.geolocation) {
-    alert('位置情報に対応していません');
-    return;
-  }
-
-  watchId = navigator.geolocation.watchPosition(
-    (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      const acc = pos.coords.accuracy;
-
-      if (!meMarker) {
-        meMarker = L.circleMarker([lat, lng], {
-          radius: 8,
-          color: '#0066ff',
-          fillColor: '#3399ff',
-          fillOpacity: 0.9
-        }).addTo(map);
-      } else {
-        meMarker.setLatLng([lat, lng]);
-      }
-
-      // popupは毎回開くと邪魔なので、情報として保持だけ
-      meMarker.bindPopup(`現在地（±${Math.round(acc)}m）`);
-
-      if (followMe) {
-        map.setView([lat, lng], Math.max(map.getZoom(), 16), { animate: true });
-      }
-    },
-    (err) => alert('現在地エラー: ' + err.message),
-    { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
-  );
-}
-
-startWatchingLocation();
-
-/* 追従ON/OFF */
-const followBtn = L.control({ position: 'topleft' });
-followBtn.onAdd = function() {
-  const btn = L.DomUtil.create('button', '');
-  btn.textContent = '🧭 追従ON';
-
-  L.DomEvent.on(btn, 'click', (e) => {
-    L.DomEvent.stopPropagation(e);
-    L.DomEvent.preventDefault(e);
-    followMe = !followMe;
-    btn.textContent = followMe ? '🧭 追従ON' : '🧭 追従OFF';
-  });
-
-  return btn;
-};
-followBtn.addTo(map);
-
-/* GoogleMapっぽく：手で地図を動かしたら追従OFF */
-map.on('dragstart zoomstart', () => {
-  if (followMe) {
-    followMe = false;
-    // ボタン表示も同期（DOMから探す簡易版）
-    const btns = document.querySelectorAll('.leaflet-control button');
-    btns.forEach(b => {
-      if (b.textContent.includes('追従')) b.textContent = '🧭 追従OFF';
-    });
-  }
-});
-
-/* ===============================
-   4) 共有URL（中心＋ズーム）
+   3) 共有URL（中心＋ズーム）
 ================================ */
 const shareBtn = L.control({ position: 'topleft' });
 shareBtn.onAdd = function() {
@@ -205,7 +148,190 @@ if (p.has('lat') && p.has('lng') && p.has('z')) {
 }
 
 /* ===============================
-   5) カメラ＋連番ピン
+   4) 現在地（リアルタイム追従）
+   + 方法A：自分矢印を回して「進行方向＝上」感
+================================ */
+let meMarker = null;     // 矢印マーカー
+let accCircle = null;    // 精度円（任意）
+let followMe = true;     // 追従
+let lastLatLng = null;   // 前回位置（方位が取れない時の補助）
+let headingEnabled = false;
+let lastHeadingDeg = 0;  // 直近の方位（度）
+
+// 自分矢印アイコン（DOMを回転させる）
+const meIcon = L.divIcon({
+  className: '',
+  html: `<div id="meArrow" class="me-arrow"></div>`,
+  iconSize: [18, 18],
+  iconAnchor: [9, 9]
+});
+
+function setArrowRotation(deg){
+  lastHeadingDeg = deg;
+  const el = document.getElementById('meArrow');
+  if (el) {
+    // 「進行方向＝上」に感じさせるため、矢印は逆回転（画面上を向ける）
+    el.style.transform = `rotate(${-deg}deg)`;
+  }
+}
+
+// 位置監視開始
+function startWatchingLocation() {
+  if (!navigator.geolocation) {
+    alert('位置情報に対応していません');
+    return;
+  }
+
+  navigator.geolocation.watchPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const acc = pos.coords.accuracy;
+
+      const ll = L.latLng(lat, lng);
+
+      // 矢印マーカー
+      if (!meMarker) {
+        meMarker = L.marker(ll, { icon: meIcon, zIndexOffset: 1000 }).addTo(map);
+      } else {
+        meMarker.setLatLng(ll);
+      }
+
+      // 精度円（任意：重いなら消してOK）
+      if (!accCircle) {
+        accCircle = L.circle(ll, {
+          radius: acc,
+          color: '#3399ff',
+          weight: 1,
+          fillColor: '#3399ff',
+          fillOpacity: 0.15
+        }).addTo(map);
+      } else {
+        accCircle.setLatLng(ll);
+        accCircle.setRadius(acc);
+      }
+
+      // 追従
+      if (followMe) {
+        map.setView([lat, lng], Math.max(map.getZoom(), 16), { animate: true });
+      }
+
+      // 方位が取れない環境向け：移動方向（前回→今回のベアリング）で補助
+      if (!headingEnabled && lastLatLng) {
+        const deg = bearingDeg(lastLatLng, ll);
+        if (isFinite(deg)) setArrowRotation(deg);
+      }
+
+      lastLatLng = ll;
+
+      // popupは必要な時だけ出す（邪魔なので自動では開かない）
+      meMarker.bindPopup(`現在地（±${Math.round(acc)}m）`);
+    },
+    (err) => alert('現在地エラー: ' + err.message),
+    { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
+  );
+}
+
+// 2点から方位角（北=0, 東=90）
+function bearingDeg(from, to){
+  const lat1 = from.lat * Math.PI/180;
+  const lat2 = to.lat * Math.PI/180;
+  const dLon = (to.lng - from.lng) * Math.PI/180;
+
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLon);
+  let brng = Math.atan2(y, x) * 180/Math.PI;
+  brng = (brng + 360) % 360;
+  return brng;
+}
+
+startWatchingLocation();
+
+/* 追従ON/OFF */
+const followBtn = L.control({ position: 'topleft' });
+followBtn.onAdd = function() {
+  const btn = L.DomUtil.create('button', '');
+  btn.textContent = '🧲 追従ON';
+
+  L.DomEvent.on(btn, 'click', (e) => {
+    L.DomEvent.stopPropagation(e);
+    L.DomEvent.preventDefault(e);
+    followMe = !followMe;
+    btn.textContent = followMe ? '🧲 追従ON' : '🧲 追従OFF';
+  });
+
+  return btn;
+};
+followBtn.addTo(map);
+
+/* GoogleMapっぽく：手で地図を動かしたら追従OFF */
+map.on('dragstart zoomstart', () => {
+  if (followMe) {
+    followMe = false;
+    // 追従ボタン表示を同期（雑に全ボタンから探す）
+    const btns = document.querySelectorAll('.leaflet-control button');
+    btns.forEach(b => { if (b.textContent.includes('追従')) b.textContent = '🧲 追従OFF'; });
+  }
+});
+
+/* ===============================
+   5) 🧭 方位ON（iOS許可が必要）
+   - 許可が取れたら headingEnabled=true
+   - 取得した方位で矢印を回転（方法A）
+================================ */
+const compassBtn = L.control({ position: 'topleft' });
+compassBtn.onAdd = function() {
+  const btn = L.DomUtil.create('button', '');
+  btn.textContent = '🧭 方位ON';
+
+  L.DomEvent.on(btn, 'click', async (e) => {
+    L.DomEvent.stopPropagation(e);
+    L.DomEvent.preventDefault(e);
+
+    try{
+      // iOS: 明示許可が必要
+      if (typeof DeviceOrientationEvent !== 'undefined' &&
+          typeof DeviceOrientationEvent.requestPermission === 'function') {
+        const res = await DeviceOrientationEvent.requestPermission();
+        if (res !== 'granted') {
+          alert('方位の許可が必要です');
+          return;
+        }
+      }
+      startHeadingListener();
+      headingEnabled = true;
+      btn.textContent = '🧭 方位ON（有効）';
+    }catch(err){
+      alert('方位の有効化に失敗: ' + (err.message || err));
+    }
+  });
+
+  return btn;
+};
+compassBtn.addTo(map);
+
+let headingListenerStarted = false;
+function startHeadingListener(){
+  if (headingListenerStarted) return;
+  headingListenerStarted = true;
+
+  window.addEventListener('deviceorientation', (ev) => {
+    // iOS（北=0°のことが多い）
+    let heading = null;
+    if (typeof ev.webkitCompassHeading === 'number') {
+      heading = ev.webkitCompassHeading;
+    } else if (typeof ev.alpha === 'number') {
+      // Android等：alphaの基準が端末で揺れることがある（簡易対応）
+      heading = ev.alpha;
+    }
+    if (heading === null) return;
+
+    setArrowRotation(heading);
+  }, { passive: true });
+}
+
+/* ===============================
+   6) カメラ＋連番ピン
 ================================ */
 const cameraInput = document.getElementById('cameraInput');
 const panel = document.getElementById('panel');
@@ -228,7 +354,7 @@ camBtn.onAdd = function() {
     L.DomEvent.preventDefault(e);
 
     if (!meMarker) {
-      alert('現在地を取得中です。青い点が出てから撮影してください。');
+      alert('現在地を取得中です。青い矢印が出てから撮影してください。');
       return;
     }
     cameraInput.value = '';
@@ -257,22 +383,29 @@ cameraInput.addEventListener('change', () => {
     time: new Date().toISOString(),
     lat: latlng.lat,
     lng: latlng.lng,
-    zoom: map.getZoom()
+    zoom: map.getZoom(),
+    heading_deg: headingEnabled ? lastHeadingDeg : null
   };
 
   lastPhoto = file;
   preview.src = URL.createObjectURL(file);
 
+  // 写真地点ピン
   L.marker([latlng.lat, latlng.lng])
     .addTo(photoLayer)
-    .bindPopup(`<b>${id}</b><br>${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`)
+    .bindPopup(
+      `<b>${id}</b><br>` +
+      `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}` +
+      (headingEnabled ? `<br>heading: ${Math.round(lastHeadingDeg)}°` : '')
+    )
     .openPopup();
 
   map.setView([latlng.lat, latlng.lng], Math.max(map.getZoom(), 16));
 
   metaDiv.textContent =
     `${id} / ${new Date(lastInfo.time).toLocaleString()} / ` +
-    `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`;
+    `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}` +
+    (headingEnabled ? ` / heading ${Math.round(lastHeadingDeg)}°` : '');
 
   panel.classList.remove('hidden');
 });
