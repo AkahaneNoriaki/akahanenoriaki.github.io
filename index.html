@@ -13,17 +13,64 @@
     html, body { height: 100%; margin: 0; }
     #map { height: 100vh; width: 100vw; }
 
-    .leaflet-control button{
-      background:white;
-      border:1px solid #ccc;
-      border-radius:6px;
-      padding:6px 10px;
-      cursor:pointer;
-      display:block;
-      margin-bottom:6px;
-      font-size:14px;
+    /* 左上UIを全体的に少し下へ（ノッチ/ステータスバー回避） */
+    .leaflet-top.leaflet-left { margin-top: 60px; }
+
+    /* 自作コントロールパネル */
+    .ui-panel{
+      background: rgba(255,255,255,0.95);
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+      font-family: sans-serif;
+      width: 170px;
+    }
+    .ui-panel button{
+      width: 100%;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 8px 10px;
+      cursor: pointer;
+      display: block;
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      text-align: left;
+    }
+    .ui-panel button:last-child{ margin-bottom: 0; }
+
+    .ui-section-title{
+      font-size: 12px;
+      opacity: 0.75;
+      margin: 6px 0 6px 2px;
     }
 
+    /* 背景切替（ラジオ） */
+    .bg-switch{
+      display: grid;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .bg-item{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      user-select: none;
+    }
+
+    /* 自分矢印 */
+    .me-arrow{
+      width: 0; height: 0;
+      border-left: 9px solid transparent;
+      border-right: 9px solid transparent;
+      border-bottom: 18px solid #0066ff;
+      transform-origin: 50% 75%;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35));
+    }
+
+    /* 写真パネル */
     .photo-panel{
       position: fixed;
       left: 10px;
@@ -36,54 +83,18 @@
       font-family: sans-serif;
       box-shadow: 0 2px 10px rgba(0,0,0,0.15);
     }
-
     .photo-panel img{
       max-width: 100%;
       border-radius: 8px;
       margin-top: 6px;
     }
-
     .small{ font-size: 12px; opacity: 0.8; }
     .hidden{ display:none; }
-
-    /* 自分矢印 */
-    .me-arrow{
-      width: 0;
-      height: 0;
-      border-left: 9px solid transparent;
-      border-right: 9px solid transparent;
-      border-bottom: 18px solid #0066ff;
-      transform-origin: 50% 75%;
-      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35));
-    }
-
-    /* ドロップガイド */
-    #dropHint{
-      position: fixed;
-      right: 10px;
-      top: 10px;
-      z-index: 9999;
-      background: rgba(255,255,255,0.92);
-      padding: 8px 10px;
-      border-radius: 10px;
-      font-family: sans-serif;
-      font-size: 12px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-    }
-    #dropHint strong{ display:block; margin-bottom:4px; }
-    #dropHint .ok{ color:#0a7; }
-    #dropHint .ng{ color:#c00; }
   </style>
 </head>
 <body>
 
 <div id="map"></div>
-
-<div id="dropHint">
-  <strong>GeoJSONをドロップ</strong>
-  <div class="small">PC: ファイルをこの画面へドロップ</div>
-  <div class="small">対応: <span class="ok">.geojson / .json</span></div>
-</div>
 
 <!-- カメラ入力（スマホでカメラ起動） -->
 <input id="cameraInput" class="hidden" type="file" accept="image/*" capture="environment">
@@ -102,77 +113,25 @@
 const map = L.map('map').setView([36.2, 138.0], 12);
 
 /* ===============================
-   1) ベース地図
+   1) 背景レイヤ（地理院 / CS）
+   - “切替”するため baseLayers として扱う
 ================================ */
 const gsiLayer = L.tileLayer(
   'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
   { attribution: '© 地理院' }
-).addTo(map);
+);
 
-/* ===============================
-   2) CS立体図（公式タイル）
-================================ */
 const csLayer = L.tileLayer(
   'https://tile.geospatial.jp/CS/VER2/{z}/{x}/{y}.png',
-  {
-    opacity: 0.7,
-    minZoom: 8,
-    maxZoom: 18,
-    attribution: '© 長野県 CS立体図'
-  }
-).addTo(map);
+  { opacity: 0.7, minZoom: 8, maxZoom: 18, attribution: '© 長野県 CS立体図' }
+);
+
+// 初期表示：両方ONでもいいが、切替要望なので「地理院のみ」から開始
+gsiLayer.addTo(map);
 
 /* ===============================
-   3) レイヤコントロール（DnDで増える）
+   2) URL復元（中心＋ズーム）
 ================================ */
-let overlayLayers = {
-  "CS立体図": csLayer
-};
-
-let layerControl = L.control.layers(
-  { "地理院": gsiLayer },
-  overlayLayers,
-  { collapsed: false }
-).addTo(map);
-
-function refreshLayerControl(){
-  map.removeControl(layerControl);
-  layerControl = L.control.layers(
-    { "地理院": gsiLayer },
-    overlayLayers,
-    { collapsed: false }
-  ).addTo(map);
-}
-
-/* ===============================
-   4) 共有URL（中心＋ズーム）
-================================ */
-const shareBtn = L.control({ position: 'topleft' });
-shareBtn.onAdd = function() {
-  const btn = L.DomUtil.create('button', '');
-  btn.textContent = '🔗 共有';
-
-  L.DomEvent.on(btn, 'click', async (e) => {
-    L.DomEvent.stopPropagation(e);
-    L.DomEvent.preventDefault(e);
-
-    const c = map.getCenter();
-    const z = map.getZoom();
-    const url = `${location.origin}${location.pathname}?lat=${c.lat.toFixed(6)}&lng=${c.lng.toFixed(6)}&z=${z}`;
-
-    try {
-      await navigator.clipboard.writeText(url);
-      alert('URLをコピーしました');
-    } catch {
-      prompt('このURLをコピーしてください', url);
-    }
-  });
-
-  return btn;
-};
-shareBtn.addTo(map);
-
-/* URL復元 */
 const p = new URLSearchParams(location.search);
 if (p.has('lat') && p.has('lng') && p.has('z')) {
   map.setView(
@@ -182,7 +141,7 @@ if (p.has('lat') && p.has('lng') && p.has('z')) {
 }
 
 /* ===============================
-   5) 現在地（リアルタイム追従）＋矢印回転（方法A）
+   3) 現在地（追従）＋矢印回転（方法A）
 ================================ */
 let meMarker = null;
 let accCircle = null;
@@ -201,7 +160,7 @@ const meIcon = L.divIcon({
 function setArrowRotation(deg){
   lastHeadingDeg = deg;
   const el = document.getElementById('meArrow');
-  if (el) el.style.transform = `rotate(${-deg}deg)`; // “進行方向=上”感
+  if (el) el.style.transform = `rotate(${-deg}deg)`;
 }
 
 function bearingDeg(from, to){
@@ -247,7 +206,6 @@ function startWatchingLocation() {
 
       if (followMe) map.setView(ll, Math.max(map.getZoom(), 16), { animate: true });
 
-      // 方位が無いときは移動方向で補助
       if (!headingEnabled && lastLatLng) {
         const deg = bearingDeg(lastLatLng, ll);
         if (isFinite(deg)) setArrowRotation(deg);
@@ -260,56 +218,15 @@ function startWatchingLocation() {
 }
 startWatchingLocation();
 
-/* 追従ON/OFF */
-const followBtn = L.control({ position: 'topleft' });
-followBtn.onAdd = function() {
-  const btn = L.DomUtil.create('button', '');
-  btn.textContent = '🧲 追従ON';
-  L.DomEvent.on(btn, 'click', (e) => {
-    L.DomEvent.stopPropagation(e);
-    L.DomEvent.preventDefault(e);
-    followMe = !followMe;
-    btn.textContent = followMe ? '🧲 追従ON' : '🧲 追従OFF';
-  });
-  return btn;
-};
-followBtn.addTo(map);
+/* 手で地図を動かしたら追従OFF */
+map.on('dragstart zoomstart', () => { followMe = false; updateFollowLabel(); });
 
-/* 手で動かしたら追従OFF */
-map.on('dragstart zoomstart', () => {
-  if (followMe) {
-    followMe = false;
-    const btns = document.querySelectorAll('.leaflet-control button');
-    btns.forEach(b => { if (b.textContent.includes('追従')) b.textContent = '🧲 追従OFF'; });
-  }
-});
+function updateFollowLabel(){
+  const b = document.getElementById('btnFollow');
+  if (b) b.textContent = followMe ? '🧲 追従ON' : '🧲 追従OFF';
+}
 
-/* 🧭 方位ON（iPhone許可） */
-const compassBtn = L.control({ position: 'topleft' });
-compassBtn.onAdd = function() {
-  const btn = L.DomUtil.create('button', '');
-  btn.textContent = '🧭 方位ON';
-  L.DomEvent.on(btn, 'click', async (e) => {
-    L.DomEvent.stopPropagation(e);
-    L.DomEvent.preventDefault(e);
-
-    try{
-      if (typeof DeviceOrientationEvent !== 'undefined' &&
-          typeof DeviceOrientationEvent.requestPermission === 'function') {
-        const res = await DeviceOrientationEvent.requestPermission();
-        if (res !== 'granted') { alert('方位の許可が必要です'); return; }
-      }
-      startHeadingListener();
-      headingEnabled = true;
-      btn.textContent = '🧭 方位ON（有効）';
-    }catch(err){
-      alert('方位の有効化に失敗: ' + (err.message || err));
-    }
-  });
-  return btn;
-};
-compassBtn.addTo(map);
-
+/* 方位リスナ */
 let headingListenerStarted = false;
 function startHeadingListener(){
   if (headingListenerStarted) return;
@@ -325,7 +242,7 @@ function startHeadingListener(){
 }
 
 /* ===============================
-   6) カメラ＋連番ピン（写真＋JSON保存）
+   4) カメラ＋連番ピン（写真＋JSON保存）
 ================================ */
 const cameraInput = document.getElementById('cameraInput');
 const panel = document.getElementById('panel');
@@ -338,26 +255,14 @@ let photoLayer = L.layerGroup().addTo(map);
 let lastInfo = null;
 let lastPhoto = null;
 
-const camBtn = L.control({ position: 'topleft' });
-camBtn.onAdd = function() {
-  const btn = L.DomUtil.create('button', '');
-  btn.textContent = '📷 カメラ';
-  L.DomEvent.on(btn, 'click', (e) => {
-    L.DomEvent.stopPropagation(e);
-    L.DomEvent.preventDefault(e);
-
-    if (!meMarker) { alert('現在地取得中です。青い矢印が出てから撮影してください。'); return; }
-    cameraInput.value = '';
-    cameraInput.click();
-  });
-  return btn;
-};
-camBtn.addTo(map);
-
 cameraInput.addEventListener('change', () => {
   const file = cameraInput.files[0];
   if (!file) return;
-  if (!meMarker) { alert('現在地が未取得です。少し待ってからもう一度撮影してください。'); return; }
+
+  if (!meMarker) {
+    alert('現在地取得中です。青い矢印が出てから撮影してください。');
+    return;
+  }
 
   photoCount += 1;
   const id = `P${String(photoCount).padStart(3, '0')}`;
@@ -409,94 +314,113 @@ saveBtn.addEventListener('click', () => {
 });
 
 /* ===============================
-   7) GeoJSON Drag & Drop（ここが本題）
-   - .geojson / .json をドロップ → 即追加
-   - レイヤ一覧に追加（ON/OFF）
-   - URL共有には含めない（他人の端末で再現できないため）
+   5) 左上 UIパネル（まとめて下げ + 背景切替を下へ）
 ================================ */
-function isGeoJsonFile(file){
-  const name = (file.name || '').toLowerCase();
-  return name.endsWith('.geojson') || name.endsWith('.json');
-}
+const ui = L.control({ position: 'topleft' });
+ui.onAdd = function() {
+  const box = L.DomUtil.create('div', 'ui-panel');
 
-function defaultGeoJsonStyle(){
-  return {
-    color: '#ff0088',
-    weight: 2,
-    fillOpacity: 0.2
-  };
-}
+  // Leafletの地図操作を邪魔しない（スクロール/ドラッグ）
+  L.DomEvent.disableClickPropagation(box);
+  L.DomEvent.disableScrollPropagation(box);
 
-function addGeoJsonToMap(geojson, layerName){
-  const lyr = L.geoJSON(geojson, {
-    style: defaultGeoJsonStyle(),
-    onEachFeature: (f, layer) => {
-      // プロパティを少しだけ表示（全部出すと重い）
-      const p = f.properties || {};
-      const keys = Object.keys(p).slice(0, 12);
-      const html = keys.length
-        ? keys.map(k => `<b>${k}</b>: ${String(p[k])}`).join('<br>')
-        : '属性なし';
-      layer.bindPopup(html);
-    }
+  // --- ボタン群 ---
+  box.innerHTML = `
+    <button id="btnFollow">🧲 追従ON</button>
+    <button id="btnCompass">🧭 方位ON</button>
+    <button id="btnShare">🔗 共有</button>
+    <button id="btnCamera">📷 カメラ</button>
+
+    <div class="ui-section-title">背景</div>
+    <div class="bg-switch">
+      <label class="bg-item">
+        <input type="radio" name="bg" value="gsi" checked>
+        地理院
+      </label>
+      <label class="bg-item">
+        <input type="radio" name="bg" value="cs">
+        CS立体図
+      </label>
+      <label class="bg-item">
+        <input type="radio" name="bg" value="both">
+        重ねる
+      </label>
+    </div>
+  `;
+
+  // 追従
+  box.querySelector('#btnFollow').addEventListener('click', (e)=>{
+    e.preventDefault();
+    followMe = !followMe;
+    updateFollowLabel();
   });
 
-  // 追加＆初期ON
-  overlayLayers[layerName] = lyr;
-  lyr.addTo(map);
-  refreshLayerControl();
-
-  // 範囲にズーム
-  try{
-    const b = lyr.getBounds();
-    if (b.isValid()) map.fitBounds(b.pad(0.1));
-  }catch{}
-}
-
-async function readFileAsText(file){
-  return await new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result || ''));
-    r.onerror = () => reject(r.error);
-    r.readAsText(file);
-  });
-}
-
-// ドロップ許可（ブラウザの既定動作を止める）
-window.addEventListener('dragover', (e) => {
-  e.preventDefault();
-}, { passive:false });
-
-window.addEventListener('drop', async (e) => {
-  e.preventDefault();
-
-  const files = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
-  if (!files.length) return;
-
-  // 複数落とせる（全部処理）
-  for (const file of files) {
-    if (!isGeoJsonFile(file)) {
-      alert(`未対応ファイル: ${file.name}\n対応: .geojson / .json`);
-      continue;
-    }
-
+  // 方位ON（iOS許可）
+  box.querySelector('#btnCompass').addEventListener('click', async (e)=>{
+    e.preventDefault();
     try{
-      const text = await readFileAsText(file);
-      const geojson = JSON.parse(text);
-
-      // ざっくり妥当性
-      if (!geojson || (!geojson.type)) throw new Error('GeoJSONではありません');
-
-      const nameBase = file.name.replace(/\.(geojson|json)$/i, '');
-      const layerName = `追加: ${nameBase}`;
-
-      addGeoJsonToMap(geojson, layerName);
-
+      if (typeof DeviceOrientationEvent !== 'undefined' &&
+          typeof DeviceOrientationEvent.requestPermission === 'function') {
+        const res = await DeviceOrientationEvent.requestPermission();
+        if (res !== 'granted') { alert('方位の許可が必要です'); return; }
+      }
+      startHeadingListener();
+      headingEnabled = true;
+      box.querySelector('#btnCompass').textContent = '🧭 方位ON（有効）';
     }catch(err){
-      alert(`読み込み失敗: ${file.name}\n${err.message || err}`);
+      alert('方位の有効化に失敗: ' + (err.message || err));
     }
-  }
-});
+  });
+
+  // 共有
+  box.querySelector('#btnShare').addEventListener('click', async (e)=>{
+    e.preventDefault();
+    const c = map.getCenter();
+    const z = map.getZoom();
+    const url = `${location.origin}${location.pathname}?lat=${c.lat.toFixed(6)}&lng=${c.lng.toFixed(6)}&z=${z}`;
+    try{
+      await navigator.clipboard.writeText(url);
+      alert('URLをコピーしました');
+    }catch{
+      prompt('このURLをコピーしてください', url);
+    }
+  });
+
+  // カメラ
+  box.querySelector('#btnCamera').addEventListener('click', (e)=>{
+    e.preventDefault();
+    if (!meMarker) { alert('現在地取得中です。青い矢印が出てから撮影してください。'); return; }
+    cameraInput.value = '';
+    cameraInput.click();
+  });
+
+  // 背景切替
+  const radios = box.querySelectorAll('input[name="bg"]');
+  radios.forEach(r=>{
+    r.addEventListener('change', ()=>{
+      const v = box.querySelector('input[name="bg"]:checked').value;
+
+      // 一旦全部外す
+      if (map.hasLayer(gsiLayer)) map.removeLayer(gsiLayer);
+      if (map.hasLayer(csLayer)) map.removeLayer(csLayer);
+
+      if (v === 'gsi') {
+        gsiLayer.addTo(map);
+      } else if (v === 'cs') {
+        csLayer.addTo(map);
+      } else if (v === 'both') {
+        gsiLayer.addTo(map);
+        csLayer.addTo(map);
+      }
+    });
+  });
+
+  // 初期状態の整合
+  updateFollowLabel();
+
+  return box;
+};
+ui.addTo(map);
 </script>
 
 </body>
