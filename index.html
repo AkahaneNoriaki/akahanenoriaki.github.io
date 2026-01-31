@@ -37,11 +37,11 @@
       border-radius: 10px;
       font-family: sans-serif;
       font-size: 12px;
-      max-width: 420px;
+      max-width: 520px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.15);
     }
     .manifest-info .title{ font-weight:700; margin-bottom:6px; }
-    .manifest-info .small{ opacity:0.75; }
+    .manifest-info .small{ opacity:0.85; word-break: break-all; }
 
     .photo-panel{
       position: fixed;
@@ -54,6 +54,7 @@
       font-family: sans-serif;
       font-size: 12px;
       display: none;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
     }
     .photo-panel img{
       max-width: 240px;
@@ -91,7 +92,16 @@ const gsiBase = L.tileLayer(
 ).addTo(map);
 
 /* =====================================================
-   1) Security (allow host)
+   1) Info UI helpers
+===================================================== */
+function setInfo(title, smallHtml){
+  document.querySelector('#info .title').textContent = title;
+  document.getElementById('infoSmall').innerHTML = smallHtml || '';
+}
+setInfo('起動中…', '');
+
+/* =====================================================
+   2) Security (allow host) + fetchJson
 ===================================================== */
 const ALLOW_HOSTS = new Set([
   'tile.geospatial.jp',
@@ -112,17 +122,18 @@ function hostAllowed(urlStr){
 async function fetchJson(url){
   if(!hostAllowed(url)) throw new Error('許可されていないURL: ' + url);
   const r = await fetch(url, { cache:'no-store' });
-  if(!r.ok) throw new Error('読み込み失敗: ' + url);
+  if(!r.ok) throw new Error(`読み込み失敗: ${r.status} ${url}`);
   return await r.json();
 }
 
 /* =====================================================
-   2) Layer builders
+   3) Layer builders (raster_xyz / vector_xyz)
 ===================================================== */
 function makeRasterXYZ(def){
+  if(!def.url) throw new Error('raster_xyz: urlがありません');
   const lyr = L.tileLayer(def.url, {
-    minZoom: def.minZoom,
-    maxZoom: def.maxZoom,
+    minZoom: def.minZoom ?? 0,
+    maxZoom: def.maxZoom ?? 22,
     opacity: def.opacity ?? 1,
     attribution: def.attribution || ''
   });
@@ -131,18 +142,21 @@ function makeRasterXYZ(def){
 }
 
 function makeVectorXYZ(def){
+  if(!def.url) throw new Error('vector_xyz: urlがありません');
   const lyr = L.vectorGrid.protobuf(def.url, {
-    minZoom: def.minZoom,
-    maxZoom: def.maxZoom,
+    minZoom: def.minZoom ?? 0,
+    maxZoom: def.maxZoom ?? 22,
     interactive: !!def.interactive,
     rendererFactory: L.canvas.tile
   });
 
   if(def.interactive){
     lyr.on('click', e=>{
-      const p = e.layer.properties || {};
-      const html = Object.keys(p).slice(0,10)
-        .map(k=>`<b>${k}</b>: ${p[k]}`).join('<br>');
+      const p = (e && e.layer && e.layer.properties) ? e.layer.properties : {};
+      const keys = Object.keys(p).slice(0,10);
+      const html = keys.length
+        ? keys.map(k=>`<b>${k}</b>: ${String(p[k])}`).join('<br>')
+        : '属性がありません';
       L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
     });
   }
@@ -152,7 +166,7 @@ function makeVectorXYZ(def){
 }
 
 /* =====================================================
-   3) Manifest loader
+   4) Manifest loader
 ===================================================== */
 let overlayLayers = {};
 let layerControl = null;
@@ -166,77 +180,109 @@ function refreshLayerControl(){
   ).addTo(map);
 }
 
-function setInfo(title, small){
-  document.querySelector('#info .title').textContent = title;
-  document.getElementById('infoSmall').innerHTML = small || '';
-}
-
 async function loadCollection(url){
   setInfo('読み込み中…', url);
+
   const col = await fetchJson(url);
+
+  // 最低限チェック（落ちたら理由が出る）
+  if(!col || !Array.isArray(col.layers)){
+    throw new Error('collection.jsonの形式が不正（layers が配列ではありません）');
+  }
+
+  // 既存オーバーレイ削除
+  try{
+    for(const name of Object.keys(overlayLayers)){
+      const lyr = overlayLayers[name];
+      if(map.hasLayer(lyr)) map.removeLayer(lyr);
+    }
+  }catch{}
 
   overlayLayers = {};
 
-  if(col.view){
+  if(col.view && typeof col.view.lat === 'number' && typeof col.view.lng === 'number' && typeof col.view.z === 'number'){
     map.setView([col.view.lat, col.view.lng], col.view.z);
   }
 
   for(const layerUrl of col.layers){
     const def = await fetchJson(layerUrl);
+
     let lyr = null;
-
     if(def.type === 'raster_xyz') lyr = makeRasterXYZ(def);
-    if(def.type === 'vector_xyz') lyr = makeVectorXYZ(def);
+    else if(def.type === 'vector_xyz') lyr = makeVectorXYZ(def);
+    else throw new Error('未対応 type: ' + def.type + '（layer: ' + layerUrl + '）');
 
-    overlayLayers[def.name] = lyr;
+    const name = def.name || def.id || layerUrl;
+    overlayLayers[name] = lyr;
+
     if(def.defaultOn) lyr.addTo(map);
   }
 
   refreshLayerControl();
-  setInfo(col.name, `layers: ${col.layers.length}`);
+  setInfo(col.name || '読み込み完了', `layers: ${col.layers.length}`);
 }
 
 /* =====================================================
-   4) URL boot
+   5) URL boot (IMPORTANT: try/catch)
 ===================================================== */
 (async()=>{
-  const p = new URLSearchParams(location.search);
-  if(p.has('m')){
-    await loadCollection(decodeURIComponent(p.get('m')));
-  }else{
-    // default CS立体図
-    const cs = makeRasterXYZ({
-      url:'https://tile.geospatial.jp/CS/VER2/{z}/{x}/{y}.png',
-      minZoom:8, maxZoom:18, opacity:0.7, zIndex:10
-    });
-    overlayLayers['CS立体図'] = cs;
-    cs.addTo(map);
-    refreshLayerControl();
-    setInfo('デフォルト表示','CS立体図');
+  try{
+    const p = new URLSearchParams(location.search);
+    if(p.has('m')){
+      await loadCollection(decodeURIComponent(p.get('m')));
+    }else{
+      // default CS立体図（マニフェスト無しで動く保険）
+      const cs = makeRasterXYZ({
+        url:'https://tile.geospatial.jp/CS/VER2/{z}/{x}/{y}.png',
+        minZoom:8, maxZoom:18, opacity:0.7, zIndex:10
+      });
+      overlayLayers['CS立体図'] = cs;
+      cs.addTo(map);
+      refreshLayerControl();
+      setInfo('デフォルト表示','CS立体図');
+    }
+  }catch(err){
+    console.error(err);
+    setInfo('エラー', (err && err.message) ? err.message : String(err));
+    alert('起動エラー: ' + ((err && err.message) ? err.message : err));
   }
 })();
 
 /* =====================================================
-   5) Current location (watch)
+   6) Current location (watch) + follow toggle
 ===================================================== */
 let meMarker = null;
 let followMe = true;
 
-navigator.geolocation.watchPosition(pos=>{
-  const ll = [pos.coords.latitude, pos.coords.longitude];
-  if(!meMarker){
-    meMarker = L.circleMarker(ll,{
-      radius:8,color:'#0066ff',fillColor:'#3399ff',fillOpacity:0.9
-    }).addTo(map);
-  }else{
-    meMarker.setLatLng(ll);
+function startWatch(){
+  if(!navigator.geolocation){
+    console.warn('Geolocation not supported');
+    return;
   }
-  if(followMe){
-    map.setView(ll, Math.max(map.getZoom(),16), {animate:true});
-  }
-});
 
-/* follow toggle */
+  navigator.geolocation.watchPosition(
+    pos=>{
+      const ll = [pos.coords.latitude, pos.coords.longitude];
+      if(!meMarker){
+        meMarker = L.circleMarker(ll,{
+          radius:8, color:'#0066ff', fillColor:'#3399ff', fillOpacity:0.9
+        }).addTo(map);
+      }else{
+        meMarker.setLatLng(ll);
+      }
+      if(followMe){
+        map.setView(ll, Math.max(map.getZoom(),16), {animate:true});
+      }
+    },
+    err=>{
+      console.warn('Geolocation error', err);
+      // 現場ではアラートがうるさい場合があるので console のみにしています
+    },
+    { enableHighAccuracy:true, maximumAge:1000, timeout:15000 }
+  );
+}
+startWatch();
+
 L.control({position:'topleft'}).onAdd = ()=>{
   const b = L.DomUtil.create('button');
   b.textContent='🧭 追従ON';
@@ -248,7 +294,7 @@ L.control({position:'topleft'}).onAdd = ()=>{
 }.addTo(map);
 
 /* =====================================================
-   6) Camera & photo pins
+   7) Camera & photo pins (B方式：写真＋JSONをDL)
 ===================================================== */
 const cameraInput = document.getElementById('cameraInput');
 const photoPanel = document.getElementById('photoPanel');
@@ -261,7 +307,6 @@ let photoLayer = L.layerGroup().addTo(map);
 let lastPhotoFile = null;
 let lastPhotoMeta = null;
 
-/* camera button */
 L.control({position:'topleft'}).onAdd = ()=>{
   const b = L.DomUtil.create('button');
   b.textContent='📷 カメラ';
@@ -273,7 +318,12 @@ L.control({position:'topleft'}).onAdd = ()=>{
 }.addTo(map);
 
 cameraInput.addEventListener('change',()=>{
-  if(!cameraInput.files[0] || !meMarker) return;
+  if(!cameraInput.files[0]) return;
+  if(!meMarker){
+    alert('現在地が取得できてから撮影してください（青い点が出たらOK）');
+    return;
+  }
+
   photoCount++;
   const id = `P${String(photoCount).padStart(3,'0')}`;
   const ll = meMarker.getLatLng();
@@ -290,7 +340,6 @@ cameraInput.addEventListener('change',()=>{
   photoPanel.style.display='block';
 });
 
-/* save */
 savePhotoBtn.onclick=()=>{
   if(!lastPhotoFile || !lastPhotoMeta) return;
 
