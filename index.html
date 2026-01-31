@@ -13,52 +13,53 @@
     html, body { height: 100%; margin: 0; }
     #map { height: 100vh; width: 100vw; }
 
-    /* 左上UIを全体的に少し下へ（ノッチ/ステータスバー回避） */
-    .leaflet-top.leaflet-left { margin-top: 60px; }
+    /* 左上UIを少し下へ（ノッチ回避） */
+    .leaflet-top.leaflet-left { margin-top: 56px; }
 
-    /* 自作コントロールパネル */
+    /* 小さめUIパネル */
     .ui-panel{
-      background: rgba(255,255,255,0.95);
+      background: rgba(255,255,255,0.92);
       border: 1px solid #ccc;
       border-radius: 10px;
-      padding: 8px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+      padding: 6px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
       font-family: sans-serif;
-      width: 170px;
+      width: 148px;               /* 小さめ */
     }
     .ui-panel button{
       width: 100%;
       background: white;
       border: 1px solid #ccc;
       border-radius: 8px;
-      padding: 8px 10px;
+      padding: 6px 8px;           /* 小さめ */
       cursor: pointer;
       display: block;
-      margin: 0 0 8px 0;
-      font-size: 14px;
+      margin: 0 0 6px 0;
+      font-size: 13px;            /* 小さめ */
       text-align: left;
+      line-height: 1.1;
     }
     .ui-panel button:last-child{ margin-bottom: 0; }
 
     .ui-section-title{
-      font-size: 12px;
-      opacity: 0.75;
+      font-size: 11px;
+      opacity: 0.7;
       margin: 6px 0 6px 2px;
     }
 
-    /* 背景切替（ラジオ） */
     .bg-switch{
       display: grid;
-      gap: 6px;
-      margin-top: 4px;
+      gap: 4px;
+      margin-top: 2px;
+      font-size: 12px;
     }
     .bg-item{
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 13px;
+      gap: 6px;
       user-select: none;
     }
+    .bg-item input{ transform: scale(0.95); }
 
     /* 自分矢印 */
     .me-arrow{
@@ -90,20 +91,77 @@
     }
     .small{ font-size: 12px; opacity: 0.8; }
     .hidden{ display:none; }
+
+    /* 右下：GeoJSONドロップ */
+    .dropbox{
+      position: fixed;
+      right: 10px;
+      bottom: 10px;
+      z-index: 9999;
+      width: 190px;
+      background: rgba(255,255,255,0.92);
+      border: 1px dashed #888;
+      border-radius: 12px;
+      padding: 10px;
+      font-family: sans-serif;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+    }
+    .dropbox .title{
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .dropbox .hint{
+      font-size: 11px;
+      opacity: 0.75;
+      line-height: 1.25;
+    }
+    .dropbox .btnrow{
+      margin-top: 8px;
+      display: flex;
+      gap: 6px;
+    }
+    .dropbox button{
+      flex: 1;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 6px 8px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .dropbox.dragover{
+      border-color: #0a7;
+      box-shadow: 0 0 0 3px rgba(0,170,120,0.15);
+    }
   </style>
 </head>
 <body>
 
 <div id="map"></div>
 
-<!-- カメラ入力（スマホでカメラ起動） -->
+<!-- カメラ入力 -->
 <input id="cameraInput" class="hidden" type="file" accept="image/*" capture="environment">
 
+<!-- GeoJSON入力（スマホ用に「選択」も用意） -->
+<input id="geojsonInput" class="hidden" type="file" accept=".geojson,.json,application/geo+json,application/json">
+
+<!-- 写真パネル -->
 <div id="panel" class="photo-panel hidden">
   <b>撮影記録</b>
   <div id="meta" class="small"></div>
   <img id="preview" alt="preview">
   <button id="saveBtn">写真＋座標メモを保存</button>
+</div>
+
+<!-- 右下ドロップ -->
+<div id="dropbox" class="dropbox">
+  <div class="title">📄 GeoJSON 追加</div>
+  <div class="hint">PC: ここにドロップ<br>スマホ: 「選択」</div>
+  <div class="btnrow">
+    <button id="pickGeojsonBtn">選択</button>
+    <button id="clearGeojsonBtn">クリア</button>
+  </div>
 </div>
 
 <script>
@@ -113,8 +171,7 @@
 const map = L.map('map').setView([36.2, 138.0], 12);
 
 /* ===============================
-   1) 背景レイヤ（地理院 / CS）
-   - “切替”するため baseLayers として扱う
+   1) 背景（地理院/CS）
 ================================ */
 const gsiLayer = L.tileLayer(
   'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
@@ -126,22 +183,17 @@ const csLayer = L.tileLayer(
   { opacity: 0.7, minZoom: 8, maxZoom: 18, attribution: '© 長野県 CS立体図' }
 );
 
-// 初期表示：両方ONでもいいが、切替要望なので「地理院のみ」から開始
+// 初期：地理院
 gsiLayer.addTo(map);
 
-/* ===============================
-   2) URL復元（中心＋ズーム）
-================================ */
+/* URL復元（中心＋ズーム） */
 const p = new URLSearchParams(location.search);
 if (p.has('lat') && p.has('lng') && p.has('z')) {
-  map.setView(
-    [parseFloat(p.get('lat')), parseFloat(p.get('lng'))],
-    parseInt(p.get('z'), 10)
-  );
+  map.setView([parseFloat(p.get('lat')), parseFloat(p.get('lng'))], parseInt(p.get('z'), 10));
 }
 
 /* ===============================
-   3) 現在地（追従）＋矢印回転（方法A）
+   2) 現在地＋矢印回転（方法A）
 ================================ */
 let meMarker = null;
 let accCircle = null;
@@ -180,24 +232,16 @@ function startWatchingLocation() {
   }
   navigator.geolocation.watchPosition(
     (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
+      const ll = L.latLng(pos.coords.latitude, pos.coords.longitude);
       const acc = pos.coords.accuracy;
-      const ll = L.latLng(lat, lng);
 
-      if (!meMarker) {
-        meMarker = L.marker(ll, { icon: meIcon, zIndexOffset: 1000 }).addTo(map);
-      } else {
-        meMarker.setLatLng(ll);
-      }
+      if (!meMarker) meMarker = L.marker(ll, { icon: meIcon, zIndexOffset: 1000 }).addTo(map);
+      else meMarker.setLatLng(ll);
 
       if (!accCircle) {
         accCircle = L.circle(ll, {
-          radius: acc,
-          color: '#3399ff',
-          weight: 1,
-          fillColor: '#3399ff',
-          fillOpacity: 0.15
+          radius: acc, color: '#3399ff', weight: 1,
+          fillColor: '#3399ff', fillOpacity: 0.15
         }).addTo(map);
       } else {
         accCircle.setLatLng(ll);
@@ -218,7 +262,6 @@ function startWatchingLocation() {
 }
 startWatchingLocation();
 
-/* 手で地図を動かしたら追従OFF */
 map.on('dragstart zoomstart', () => { followMe = false; updateFollowLabel(); });
 
 function updateFollowLabel(){
@@ -226,12 +269,11 @@ function updateFollowLabel(){
   if (b) b.textContent = followMe ? '🧲 追従ON' : '🧲 追従OFF';
 }
 
-/* 方位リスナ */
+/* 方位 */
 let headingListenerStarted = false;
 function startHeadingListener(){
   if (headingListenerStarted) return;
   headingListenerStarted = true;
-
   window.addEventListener('deviceorientation', (ev) => {
     let heading = null;
     if (typeof ev.webkitCompassHeading === 'number') heading = ev.webkitCompassHeading;
@@ -242,7 +284,7 @@ function startHeadingListener(){
 }
 
 /* ===============================
-   4) カメラ＋連番ピン（写真＋JSON保存）
+   3) 写真（B方式保存）
 ================================ */
 const cameraInput = document.getElementById('cameraInput');
 const panel = document.getElementById('panel');
@@ -258,43 +300,24 @@ let lastPhoto = null;
 cameraInput.addEventListener('change', () => {
   const file = cameraInput.files[0];
   if (!file) return;
+  if (!meMarker) { alert('現在地取得中です。青い矢印が出てから撮影してください。'); return; }
 
-  if (!meMarker) {
-    alert('現在地取得中です。青い矢印が出てから撮影してください。');
-    return;
-  }
-
-  photoCount += 1;
-  const id = `P${String(photoCount).padStart(3, '0')}`;
-  const latlng = meMarker.getLatLng();
+  photoCount++;
+  const id = `P${String(photoCount).padStart(3,'0')}`;
+  const ll = meMarker.getLatLng();
 
   lastInfo = {
-    id,
-    time: new Date().toISOString(),
-    lat: latlng.lat,
-    lng: latlng.lng,
-    zoom: map.getZoom(),
+    id, time: new Date().toISOString(),
+    lat: ll.lat, lng: ll.lng, zoom: map.getZoom(),
     heading_deg: headingEnabled ? lastHeadingDeg : null
   };
-
   lastPhoto = file;
   preview.src = URL.createObjectURL(file);
 
-  L.marker([latlng.lat, latlng.lng])
-    .addTo(photoLayer)
-    .bindPopup(
-      `<b>${id}</b><br>${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}` +
-      (headingEnabled ? `<br>heading: ${Math.round(lastHeadingDeg)}°` : '')
-    )
-    .openPopup();
+  L.marker(ll).addTo(photoLayer)
+    .bindPopup(`<b>${id}</b><br>${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}`).openPopup();
 
-  map.setView([latlng.lat, latlng.lng], Math.max(map.getZoom(), 16));
-
-  metaDiv.textContent =
-    `${id} / ${new Date(lastInfo.time).toLocaleString()} / ` +
-    `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}` +
-    (headingEnabled ? ` / heading ${Math.round(lastHeadingDeg)}°` : '');
-
+  metaDiv.textContent = `${id} / ${new Date(lastInfo.time).toLocaleString()} / ${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}`;
   panel.classList.remove('hidden');
 });
 
@@ -314,17 +337,14 @@ saveBtn.addEventListener('click', () => {
 });
 
 /* ===============================
-   5) 左上 UIパネル（まとめて下げ + 背景切替を下へ）
+   4) 左上 小さめUIパネル
 ================================ */
 const ui = L.control({ position: 'topleft' });
 ui.onAdd = function() {
   const box = L.DomUtil.create('div', 'ui-panel');
-
-  // Leafletの地図操作を邪魔しない（スクロール/ドラッグ）
   L.DomEvent.disableClickPropagation(box);
   L.DomEvent.disableScrollPropagation(box);
 
-  // --- ボタン群 ---
   box.innerHTML = `
     <button id="btnFollow">🧲 追従ON</button>
     <button id="btnCompass">🧭 方位ON</button>
@@ -333,18 +353,9 @@ ui.onAdd = function() {
 
     <div class="ui-section-title">背景</div>
     <div class="bg-switch">
-      <label class="bg-item">
-        <input type="radio" name="bg" value="gsi" checked>
-        地理院
-      </label>
-      <label class="bg-item">
-        <input type="radio" name="bg" value="cs">
-        CS立体図
-      </label>
-      <label class="bg-item">
-        <input type="radio" name="bg" value="both">
-        重ねる
-      </label>
+      <label class="bg-item"><input type="radio" name="bg" value="gsi" checked> 地理院</label>
+      <label class="bg-item"><input type="radio" name="bg" value="cs"> CS</label>
+      <label class="bg-item"><input type="radio" name="bg" value="both"> 重ねる</label>
     </div>
   `;
 
@@ -366,7 +377,7 @@ ui.onAdd = function() {
       }
       startHeadingListener();
       headingEnabled = true;
-      box.querySelector('#btnCompass').textContent = '🧭 方位ON（有効）';
+      box.querySelector('#btnCompass').textContent = '🧭 方位（有効）';
     }catch(err){
       alert('方位の有効化に失敗: ' + (err.message || err));
     }
@@ -378,12 +389,8 @@ ui.onAdd = function() {
     const c = map.getCenter();
     const z = map.getZoom();
     const url = `${location.origin}${location.pathname}?lat=${c.lat.toFixed(6)}&lng=${c.lng.toFixed(6)}&z=${z}`;
-    try{
-      await navigator.clipboard.writeText(url);
-      alert('URLをコピーしました');
-    }catch{
-      prompt('このURLをコピーしてください', url);
-    }
+    try{ await navigator.clipboard.writeText(url); alert('URLをコピーしました'); }
+    catch{ prompt('このURLをコピーしてください', url); }
   });
 
   // カメラ
@@ -395,32 +402,122 @@ ui.onAdd = function() {
   });
 
   // 背景切替
-  const radios = box.querySelectorAll('input[name="bg"]');
-  radios.forEach(r=>{
+  box.querySelectorAll('input[name="bg"]').forEach(r=>{
     r.addEventListener('change', ()=>{
       const v = box.querySelector('input[name="bg"]:checked').value;
 
-      // 一旦全部外す
       if (map.hasLayer(gsiLayer)) map.removeLayer(gsiLayer);
       if (map.hasLayer(csLayer)) map.removeLayer(csLayer);
 
-      if (v === 'gsi') {
-        gsiLayer.addTo(map);
-      } else if (v === 'cs') {
-        csLayer.addTo(map);
-      } else if (v === 'both') {
-        gsiLayer.addTo(map);
-        csLayer.addTo(map);
-      }
+      if (v === 'gsi') gsiLayer.addTo(map);
+      else if (v === 'cs') csLayer.addTo(map);
+      else { gsiLayer.addTo(map); csLayer.addTo(map); }
     });
   });
 
-  // 初期状態の整合
   updateFollowLabel();
-
   return box;
 };
 ui.addTo(map);
+
+/* ===============================
+   5) GeoJSON（右下ドロップ + 選択）
+================================ */
+const dropbox = document.getElementById('dropbox');
+const geojsonInput = document.getElementById('geojsonInput');
+const pickGeojsonBtn = document.getElementById('pickGeojsonBtn');
+const clearGeojsonBtn = document.getElementById('clearGeojsonBtn');
+
+let addedGeoJsonLayers = []; // 追加したレイヤを管理
+
+function isGeoJsonFile(file){
+  const name = (file.name || '').toLowerCase();
+  return name.endsWith('.geojson') || name.endsWith('.json');
+}
+
+function defaultGeoJsonStyle(){
+  return { color:'#ff0088', weight:2, fillOpacity:0.2 };
+}
+
+function addGeoJsonToMap(geojson, layerName){
+  const lyr = L.geoJSON(geojson, {
+    style: defaultGeoJsonStyle(),
+    onEachFeature: (f, layer) => {
+      const p = f.properties || {};
+      const keys = Object.keys(p).slice(0, 12);
+      const html = keys.length ? keys.map(k=>`<b>${k}</b>: ${String(p[k])}`).join('<br>') : '属性なし';
+      layer.bindPopup(html);
+    }
+  }).addTo(map);
+
+  addedGeoJsonLayers.push({ name: layerName, layer: lyr });
+
+  try{
+    const b = lyr.getBounds();
+    if (b && b.isValid && b.isValid()) map.fitBounds(b.pad(0.1));
+  }catch{}
+}
+
+async function readFileAsText(file){
+  return await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ''));
+    r.onerror = () => reject(r.error);
+    r.readAsText(file);
+  });
+}
+
+async function handleGeojsonFiles(files){
+  for(const file of files){
+    if(!isGeoJsonFile(file)){
+      alert(`未対応ファイル: ${file.name}\n対応: .geojson / .json`);
+      continue;
+    }
+    try{
+      const text = await readFileAsText(file);
+      const geojson = JSON.parse(text);
+      if(!geojson || !geojson.type) throw new Error('GeoJSONではありません');
+      const nameBase = file.name.replace(/\.(geojson|json)$/i, '');
+      addGeoJsonToMap(geojson, `追加: ${nameBase}`);
+    }catch(err){
+      alert(`読み込み失敗: ${file.name}\n${err.message || err}`);
+    }
+  }
+}
+
+/* PC: ドロップ */
+dropbox.addEventListener('dragover', (e)=>{
+  e.preventDefault();
+  dropbox.classList.add('dragover');
+});
+dropbox.addEventListener('dragleave', ()=>{
+  dropbox.classList.remove('dragover');
+});
+dropbox.addEventListener('drop', async (e)=>{
+  e.preventDefault();
+  dropbox.classList.remove('dragover');
+  const files = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+  if(files.length) await handleGeojsonFiles(files);
+});
+
+/* スマホ: 選択 */
+pickGeojsonBtn.addEventListener('click', ()=>{
+  geojsonInput.value = '';
+  geojsonInput.click();
+});
+geojsonInput.addEventListener('change', async ()=>{
+  const files = geojsonInput.files ? Array.from(geojsonInput.files) : [];
+  if(files.length) await handleGeojsonFiles(files);
+});
+
+/* クリア（追加したGeoJSONを全部消す） */
+clearGeojsonBtn.addEventListener('click', ()=>{
+  addedGeoJsonLayers.forEach(obj=>{
+    try{ map.removeLayer(obj.layer); }catch{}
+  });
+  addedGeoJsonLayers = [];
+  alert('追加したGeoJSONを削除しました');
+});
 </script>
 
 </body>
