@@ -16,7 +16,7 @@
     /* 左上UIを少し下へ（ノッチ回避） */
     .leaflet-top.leaflet-left { margin-top: 56px; }
 
-    /* 小さめUIパネル */
+    /* ===== 小さめUIパネル（PC/タブレット） ===== */
     .ui-panel{
       background: rgba(255,255,255,0.92);
       border: 1px solid #ccc;
@@ -24,18 +24,18 @@
       padding: 6px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.12);
       font-family: sans-serif;
-      width: 148px;               /* 小さめ */
+      width: 148px;
     }
     .ui-panel button{
       width: 100%;
       background: white;
       border: 1px solid #ccc;
       border-radius: 8px;
-      padding: 6px 8px;           /* 小さめ */
+      padding: 6px 8px;
       cursor: pointer;
       display: block;
       margin: 0 0 6px 0;
-      font-size: 13px;            /* 小さめ */
+      font-size: 13px;
       text-align: left;
       line-height: 1.1;
     }
@@ -133,6 +133,50 @@
     .dropbox.dragover{
       border-color: #0a7;
       box-shadow: 0 0 0 3px rgba(0,170,120,0.15);
+    }
+
+    /* ===== スマホ時：左上UIを細い縦バー化 ===== */
+    @media (max-width: 480px){
+      .leaflet-top.leaflet-left { margin-top: 56px; }
+
+      .ui-panel{
+        width: 64px;          /* ← 黒線くらい */
+        padding: 6px;
+      }
+
+      .ui-panel button{
+        padding: 8px 0;
+        font-size: 18px;      /* アイコンを見やすく */
+        text-align: center;
+        margin-bottom: 8px;
+      }
+
+      /* 文字を隠す */
+      .ui-panel .lbl{ display:none; }
+      .ui-section-title{ display:none; }
+      .bg-item{ display:none; }
+
+      /* 背景を“3つの小ボタン”にする */
+      .bg-switch{
+        display: grid;
+        gap: 8px;
+        margin-top: 2px;
+      }
+
+      .bg-mini{
+        width: 100%;
+        background: white;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        padding: 8px 0;
+        cursor: pointer;
+        text-align: center;
+        font-size: 16px;
+        line-height: 1;
+      }
+      .bg-mini.active{
+        outline: 2px solid rgba(0,0,0,0.15);
+      }
     }
   </style>
 </head>
@@ -266,7 +310,8 @@ map.on('dragstart zoomstart', () => { followMe = false; updateFollowLabel(); });
 
 function updateFollowLabel(){
   const b = document.getElementById('btnFollow');
-  if (b) b.textContent = followMe ? '🧲 追従ON' : '🧲 追従OFF';
+  if (!b) return;
+  b.innerHTML = followMe ? `🧲 <span class="lbl">追従ON</span>` : `🧲 <span class="lbl">追従OFF</span>`;
 }
 
 /* 方位 */
@@ -337,7 +382,7 @@ saveBtn.addEventListener('click', () => {
 });
 
 /* ===============================
-   4) 左上 小さめUIパネル
+   4) 左上 UIパネル（スマホは縦バー）
 ================================ */
 const ui = L.control({ position: 'topleft' });
 ui.onAdd = function() {
@@ -346,16 +391,16 @@ ui.onAdd = function() {
   L.DomEvent.disableScrollPropagation(box);
 
   box.innerHTML = `
-    <button id="btnFollow">🧲 追従ON</button>
-    <button id="btnCompass">🧭 方位ON</button>
-    <button id="btnShare">🔗 共有</button>
-    <button id="btnCamera">📷 カメラ</button>
+    <button id="btnFollow">🧲 <span class="lbl">追従ON</span></button>
+    <button id="btnCompass">🧭 <span class="lbl">方位ON</span></button>
+    <button id="btnShare">🔗 <span class="lbl">共有</span></button>
+    <button id="btnCamera">📷 <span class="lbl">カメラ</span></button>
 
     <div class="ui-section-title">背景</div>
     <div class="bg-switch">
-      <label class="bg-item"><input type="radio" name="bg" value="gsi" checked> 地理院</label>
-      <label class="bg-item"><input type="radio" name="bg" value="cs"> CS</label>
-      <label class="bg-item"><input type="radio" name="bg" value="both"> 重ねる</label>
+      <label class="bg-item"><input type="radio" name="bg" value="gsi" checked> <span class="lbl">地理院</span></label>
+      <label class="bg-item"><input type="radio" name="bg" value="cs"> <span class="lbl">CS</span></label>
+      <label class="bg-item"><input type="radio" name="bg" value="both"> <span class="lbl">重ねる</span></label>
     </div>
   `;
 
@@ -377,7 +422,7 @@ ui.onAdd = function() {
       }
       startHeadingListener();
       headingEnabled = true;
-      box.querySelector('#btnCompass').textContent = '🧭 方位（有効）';
+      box.querySelector('#btnCompass').innerHTML = '🧭 <span class="lbl">方位（有効）</span>';
     }catch(err){
       alert('方位の有効化に失敗: ' + (err.message || err));
     }
@@ -401,19 +446,58 @@ ui.onAdd = function() {
     cameraInput.click();
   });
 
-  // 背景切替
+  // 背景切替（通常UI）
   box.querySelectorAll('input[name="bg"]').forEach(r=>{
     r.addEventListener('change', ()=>{
       const v = box.querySelector('input[name="bg"]:checked').value;
-
       if (map.hasLayer(gsiLayer)) map.removeLayer(gsiLayer);
       if (map.hasLayer(csLayer)) map.removeLayer(csLayer);
-
       if (v === 'gsi') gsiLayer.addTo(map);
       else if (v === 'cs') csLayer.addTo(map);
       else { gsiLayer.addTo(map); csLayer.addTo(map); }
     });
   });
+
+  // スマホ時だけ：背景を3ボタン化（🗾 / 🛰️ / ➕）
+  if (window.matchMedia && window.matchMedia('(max-width: 480px)').matches) {
+    const bg = box.querySelector('.bg-switch');
+
+    const btnG = document.createElement('div');
+    btnG.className = 'bg-mini active';
+    btnG.textContent = '🗾';
+
+    const btnC = document.createElement('div');
+    btnC.className = 'bg-mini';
+    btnC.textContent = '🛰️';
+
+    const btnB = document.createElement('div');
+    btnB.className = 'bg-mini';
+    btnB.textContent = '➕';
+
+    bg.appendChild(btnG);
+    bg.appendChild(btnC);
+    bg.appendChild(btnB);
+
+    function setActive(which){
+      [btnG, btnC, btnB].forEach(b=>b.classList.remove('active'));
+      if (which==='gsi') btnG.classList.add('active');
+      if (which==='cs') btnC.classList.add('active');
+      if (which==='both') btnB.classList.add('active');
+    }
+
+    function applyBG(v){
+      if (map.hasLayer(gsiLayer)) map.removeLayer(gsiLayer);
+      if (map.hasLayer(csLayer)) map.removeLayer(csLayer);
+      if (v === 'gsi') gsiLayer.addTo(map);
+      else if (v === 'cs') csLayer.addTo(map);
+      else { gsiLayer.addTo(map); csLayer.addTo(map); }
+      setActive(v);
+    }
+
+    btnG.onclick = ()=>applyBG('gsi');
+    btnC.onclick = ()=>applyBG('cs');
+    btnB.onclick = ()=>applyBG('both');
+  }
 
   updateFollowLabel();
   return box;
