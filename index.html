@@ -62,7 +62,7 @@
       right: 10px;
       bottom: 10px;
       z-index: 9999;
-      width: 220px;
+      width: 240px;
       background: rgba(255,255,255,0.92);
       border: 1px dashed #888;
       border-radius: 12px;
@@ -84,6 +84,7 @@
       margin-top: 8px;
       display: flex;
       gap: 6px;
+      flex-wrap: wrap;
     }
     .gj-panel-web button{
       flex: 1;
@@ -93,6 +94,7 @@
       padding: 6px 8px;
       cursor: pointer;
       font-size: 12px;
+      min-width: 70px;
     }
     .gj-panel-web.dragover{
       border-color: #0a7;
@@ -111,10 +113,8 @@
 
     /* ===== スマホ ===== */
     @media (max-width: 480px){
-      /* PC用のLeaflet左上メニューは使わず、スマホは固定配置にする */
-      .leaflet-control-container .leaflet-top.leaflet-left .ui-panel{
-        display: none;
-      }
+      /* PC用のLeaflet左上メニューはスマホでは非表示 */
+      .leaflet-control-container .leaflet-top.leaflet-left .ui-panel{ display: none; }
 
       /* スマホ左メニュー：左下配置 */
       .ui-mobile{
@@ -130,7 +130,6 @@
         box-shadow: 0 2px 10px rgba(0,0,0,0.12);
         font-family: sans-serif;
       }
-
       .ui-mobile button{
         width: 100%;
         background: white;
@@ -145,15 +144,8 @@
         line-height: 1;
       }
       .ui-mobile button:last-child{ margin-bottom: 0; }
-
-      /* 折りたたみ（最小） */
-      .ui-mobile.folded{
-        width: auto;
-        padding: 6px;
-      }
-      .ui-mobile.folded .menu-body{
-        display: none;
-      }
+      .ui-mobile.folded .menu-body{ display: none; }
+      .ui-mobile.folded{ width:auto; padding:6px; }
 
       /* スマホGeoJSON：右下トグル式 */
       .gj-panel-web{ display:none; }
@@ -178,7 +170,7 @@
         right: 10px;
         bottom: 54px;
         z-index: 9999;
-        width: 220px;
+        width: 240px;
         background: rgba(255,255,255,0.92);
         border: 1px dashed #888;
         border-radius: 12px;
@@ -187,20 +179,13 @@
         box-shadow: 0 2px 10px rgba(0,0,0,0.12);
         display: none;
       }
-      .gj-panel-mobile .title{
-        font-size: 12px;
-        font-weight: 700;
-        margin-bottom: 6px;
-      }
-      .gj-panel-mobile .hint{
-        font-size: 11px;
-        opacity: 0.75;
-        line-height: 1.25;
-      }
+      .gj-panel-mobile .title{ font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+      .gj-panel-mobile .hint{ font-size: 11px; opacity: 0.75; line-height: 1.25; }
       .gj-panel-mobile .btnrow{
         margin-top: 8px;
         display: flex;
         gap: 6px;
+        flex-wrap: wrap;
       }
       .gj-panel-mobile button{
         flex: 1;
@@ -210,6 +195,7 @@
         padding: 6px 8px;
         cursor: pointer;
         font-size: 12px;
+        min-width: 70px;
       }
     }
   </style>
@@ -223,10 +209,11 @@
 
 <!-- PC/Web：右下常設 GeoJSON -->
 <div id="gjWeb" class="gj-panel-web">
-  <div class="title">📄 GeoJSON 追加</div>
-  <div class="hint">PC: ここにドロップ<br>または「選択」</div>
+  <div class="title">📄 GeoJSON</div>
+  <div class="hint">PC: ここにドロップ（ページが開かないよう対策済み）<br>または「選択」</div>
   <div class="btnrow">
     <button id="pickGeojsonBtnWeb">選択</button>
+    <button id="jumpGeojsonBtnWeb">ジャンプ</button>
     <button id="clearGeojsonBtnWeb">クリア</button>
   </div>
 </div>
@@ -246,23 +233,31 @@
 <!-- スマホ：右下 GeoJSON（開閉） -->
 <div id="gjToggle" class="gj-toggle" style="display:none;">＋</div>
 <div id="gjMobile" class="gj-panel-mobile">
-  <div class="title">📄 GeoJSON 追加</div>
+  <div class="title">📄 GeoJSON</div>
   <div class="hint">スマホ: 「選択」</div>
   <div class="btnrow">
     <button id="pickGeojsonBtnMobile">選択</button>
+    <button id="jumpGeojsonBtnMobile">ジャンプ</button>
     <button id="clearGeojsonBtnMobile">クリア</button>
   </div>
 </div>
 
 <script>
-/* ===============================
+/* =====================================================
+   A) 重要：ブラウザの「ファイルを開く」動作を止める
+   - Web版でドロップ時にバイナリが表示される原因を潰す
+===================================================== */
+window.addEventListener('dragover', (e)=>{ e.preventDefault(); }, { passive:false });
+window.addEventListener('drop', (e)=>{ e.preventDefault(); }, { passive:false });
+
+/* =====================================================
    0) map
-================================ */
+===================================================== */
 const map = L.map('map').setView([36.2, 138.0], 12);
 
-/* ===============================
+/* =====================================================
    1) 背景（地理院/CS）
-================================ */
+===================================================== */
 const gsiLayer = L.tileLayer(
   'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
   { attribution: '© 地理院' }
@@ -273,7 +268,7 @@ const csLayer = L.tileLayer(
   { opacity: 0.7, minZoom: 8, maxZoom: 18, attribution: '© 長野県 CS立体図' }
 );
 
-let bgMode = 'gsi'; // gsi / cs / both
+let bgMode = 'gsi';
 function applyBG(mode){
   bgMode = mode;
   if (map.hasLayer(gsiLayer)) map.removeLayer(gsiLayer);
@@ -290,9 +285,9 @@ if (p.has('lat') && p.has('lng') && p.has('z')) {
   map.setView([parseFloat(p.get('lat')), parseFloat(p.get('lng'))], parseInt(p.get('z'), 10));
 }
 
-/* ===============================
+/* =====================================================
    2) 現在地＋矢印回転（方法A）
-================================ */
+===================================================== */
 let meMarker = null;
 let accCircle = null;
 let followMe = true;
@@ -305,12 +300,10 @@ const meIcon = L.divIcon({
   iconSize: [18, 18],
   iconAnchor: [9, 9]
 });
-
 function setArrowRotation(deg){
   const el = document.getElementById('meArrow');
   if (el) el.style.transform = `rotate(${-deg}deg)`;
 }
-
 function bearingDeg(from, to){
   const lat1 = from.lat * Math.PI/180;
   const lat2 = to.lat * Math.PI/180;
@@ -320,10 +313,8 @@ function bearingDeg(from, to){
   let brng = Math.atan2(y, x) * 180/Math.PI;
   return (brng + 360) % 360;
 }
-
 function startWatchingLocation() {
   if (!navigator.geolocation) return;
-
   navigator.geolocation.watchPosition(
     (pos) => {
       const ll = L.latLng(pos.coords.latitude, pos.coords.longitude);
@@ -373,9 +364,9 @@ function startHeadingListener(){
   }, { passive: true });
 }
 
-/* ===============================
+/* =====================================================
    3) PC/Web：左上メニュー（Leaflet control）
-================================ */
+===================================================== */
 const cameraInput = document.getElementById('cameraInput');
 const isMobile = window.matchMedia && window.matchMedia('(max-width: 480px)').matches;
 
@@ -387,16 +378,16 @@ if (!isMobile){
     L.DomEvent.disableScrollPropagation(box);
 
     box.innerHTML = `
-      <button id="btnFollow">🧲 <span class="lbl">追従</span></button>
-      <button id="btnCompass">🧭 <span class="lbl">方位ON</span></button>
-      <button id="btnShare">🔗 <span class="lbl">共有</span></button>
-      <button id="btnCamera">📷 <span class="lbl">カメラ</span></button>
+      <button id="btnFollow">🧲 追従</button>
+      <button id="btnCompass">🧭 方位ON</button>
+      <button id="btnShare">🔗 共有</button>
+      <button id="btnCamera">📷 カメラ</button>
 
       <div class="ui-section-title">背景</div>
       <div class="bg-switch">
-        <label class="bg-item"><input type="radio" name="bg" value="gsi" checked> <span class="lbl">地理院</span></label>
-        <label class="bg-item"><input type="radio" name="bg" value="cs"> <span class="lbl">CS</span></label>
-        <label class="bg-item"><input type="radio" name="bg" value="both"> <span class="lbl">重ねる</span></label>
+        <label class="bg-item"><input type="radio" name="bg" value="gsi" checked> 地理院</label>
+        <label class="bg-item"><input type="radio" name="bg" value="cs"> CS</label>
+        <label class="bg-item"><input type="radio" name="bg" value="both"> 重ねる</label>
       </div>
     `;
 
@@ -411,7 +402,7 @@ if (!isMobile){
         }
         startHeadingListener();
         headingEnabled = true;
-        box.querySelector('#btnCompass').innerHTML = '🧭 <span class="lbl">方位（有効）</span>';
+        box.querySelector('#btnCompass').textContent = '🧭 方位（有効）';
       }catch(err){
         alert('方位の有効化に失敗: ' + (err.message || err));
       }
@@ -445,16 +436,15 @@ if (!isMobile){
   ui.addTo(map);
 }
 
-/* ===============================
+/* =====================================================
    4) スマホ：左下メニュー（固定＋折りたたみ）
-================================ */
+===================================================== */
 if (isMobile){
   const uiMobile = document.getElementById('uiMobile');
   uiMobile.style.display = 'block';
 
   let folded = false;
   const mFold = document.getElementById('mFold');
-  const menuBody = uiMobile.querySelector('.menu-body');
 
   function setFold(v){
     folded = v;
@@ -496,23 +486,21 @@ if (isMobile){
     cameraInput.click();
   };
 
-  // 背景切替：gsi -> cs -> both -> gsi ...
   document.getElementById('mBG').onclick=()=>{
     const next = (bgMode === 'gsi') ? 'cs' : (bgMode === 'cs') ? 'both' : 'gsi';
     applyBG(next);
   };
 
-  mFold.onclick=(e)=>{
-    e.stopPropagation();
-    setFold(!folded);
-  };
+  mFold.onclick=(e)=>{ e.stopPropagation(); setFold(!folded); };
 }
 
-/* ===============================
-   5) GeoJSON（PC/Web＋スマホ）
-================================ */
+/* =====================================================
+   5) GeoJSON：追加/クリア/ジャンプ
+===================================================== */
 const geojsonInput = document.getElementById('geojsonInput');
-let addedGeoJsonLayers = [];
+
+/* 追加したGeoJSONは全部ここへまとめる（ジャンプ用） */
+const gjGroup = L.featureGroup().addTo(map);
 
 function isGeoJsonFile(file){
   const name = (file.name || '').toLowerCase();
@@ -521,6 +509,19 @@ function isGeoJsonFile(file){
 function defaultGeoJsonStyle(){
   return { color:'#ff0088', weight:2, fillOpacity:0.2 };
 }
+
+/* 読み込み（BOM/空白対策） */
+async function readFileAsJson(file){
+  const text = await new Promise((resolve, reject)=>{
+    const r = new FileReader();
+    r.onload = ()=> resolve(String(r.result || ''));
+    r.onerror = ()=> reject(r.error);
+    r.readAsText(file);
+  });
+  const cleaned = text.replace(/^\uFEFF/, '').trim(); // BOM除去 + trim
+  return JSON.parse(cleaned);
+}
+
 function addGeoJsonToMap(geojson, layerName){
   const lyr = L.geoJSON(geojson, {
     style: defaultGeoJsonStyle(),
@@ -528,25 +529,19 @@ function addGeoJsonToMap(geojson, layerName){
       const p = f.properties || {};
       const keys = Object.keys(p).slice(0, 12);
       const html = keys.length ? keys.map(k=>`<b>${k}</b>: ${String(p[k])}`).join('<br>') : '属性なし';
-      layer.bindPopup(html);
+      layer.bindPopup(`<b>${layerName}</b><br>${html}`);
     }
-  }).addTo(map);
-
-  addedGeoJsonLayers.push({ name: layerName, layer: lyr });
-
-  try{
-    const b = lyr.getBounds();
-    if (b && b.isValid && b.isValid()) map.fitBounds(b.pad(0.1));
-  }catch{}
-}
-async function readFileAsText(file){
-  return await new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result || ''));
-    r.onerror = () => reject(r.error);
-    r.readAsText(file);
   });
+
+  /* featureGroupへ追加（ジャンプ対象） */
+  gjGroup.addLayer(lyr);
+
+  /* 読み込み直後にジャンプ */
+  jumpToGeojson();
+
+  return lyr;
 }
+
 async function handleGeojsonFiles(files){
   for(const file of files){
     if(!isGeoJsonFile(file)){
@@ -554,8 +549,7 @@ async function handleGeojsonFiles(files){
       continue;
     }
     try{
-      const text = await readFileAsText(file);
-      const geojson = JSON.parse(text);
+      const geojson = await readFileAsJson(file);
       if(!geojson || !geojson.type) throw new Error('GeoJSONではありません');
       const nameBase = file.name.replace(/\.(geojson|json)$/i, '');
       addGeoJsonToMap(geojson, `追加: ${nameBase}`);
@@ -564,37 +558,51 @@ async function handleGeojsonFiles(files){
     }
   }
 }
+
 function clearAddedGeojson(){
-  addedGeoJsonLayers.forEach(obj=>{
-    try{ map.removeLayer(obj.layer); }catch{}
-  });
-  addedGeoJsonLayers = [];
+  gjGroup.clearLayers();
   alert('追加したGeoJSONを削除しました');
 }
 
-/* PC/Web：右下常設 */
+function jumpToGeojson(){
+  if (gjGroup.getLayers().length === 0){
+    alert('GeoJSONがまだありません');
+    return;
+  }
+  const b = gjGroup.getBounds();
+  if (b && b.isValid && b.isValid()){
+    map.fitBounds(b.pad(0.15));
+  }
+}
+
+/* ===== PC/Web：右下常設（選択/ジャンプ/クリア + ドロップ） ===== */
 const gjWeb = document.getElementById('gjWeb');
 document.getElementById('pickGeojsonBtnWeb').onclick=()=>{
   geojsonInput.value='';
   geojsonInput.click();
 };
+document.getElementById('jumpGeojsonBtnWeb').onclick=jumpToGeojson;
 document.getElementById('clearGeojsonBtnWeb').onclick=clearAddedGeojson;
 
+/* “ここにドロップ”で確実に受け取る */
 gjWeb.addEventListener('dragover', (e)=>{
   e.preventDefault();
+  e.stopPropagation();
   gjWeb.classList.add('dragover');
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
 });
 gjWeb.addEventListener('dragleave', ()=>{
   gjWeb.classList.remove('dragover');
 });
 gjWeb.addEventListener('drop', async (e)=>{
   e.preventDefault();
+  e.stopPropagation();
   gjWeb.classList.remove('dragover');
   const files = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
   if(files.length) await handleGeojsonFiles(files);
 });
 
-/* スマホ：右下開閉 */
+/* ===== スマホ：右下開閉（＋/×） ===== */
 const gjToggle = document.getElementById('gjToggle');
 const gjMobile = document.getElementById('gjMobile');
 
@@ -618,10 +626,11 @@ if (isMobile){
     geojsonInput.value='';
     geojsonInput.click();
   };
+  document.getElementById('jumpGeojsonBtnMobile').onclick=jumpToGeojson;
   document.getElementById('clearGeojsonBtnMobile').onclick=clearAddedGeojson;
 }
 
-/* 共通：ファイル選択 */
+/* 共通：ファイル選択結果 */
 geojsonInput.addEventListener('change', async ()=>{
   const files = geojsonInput.files ? Array.from(geojsonInput.files) : [];
   if(files.length) await handleGeojsonFiles(files);
