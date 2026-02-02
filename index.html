@@ -13,7 +13,7 @@
 html, body { height:100%; margin:0; }
 #map { height:100vh; width:100vw; }
 
-/* ================= 共通UI ================= */
+/* ===== 共通UI ===== */
 .ui-panel{
   background: rgba(255,255,255,0.92);
   border: 1px solid #ccc;
@@ -41,67 +41,70 @@ html, body { height:100%; margin:0; }
   margin:6px 0 4px 2px;
 }
 
-/* ================= PC ================= */
-.ui-pc{
-  width:160px;
+/* ===== 左下メニュー（PC/スマホ共通思想） ===== */
+.ui-left{
+  position: fixed;
+  left: 10px;
+  bottom: 10px;
+  z-index: 9999;
+  width: 160px;
 }
 
-/* ================= スマホ ================= */
+/* スマホは小さく */
 @media (max-width:480px){
-  .ui-pc{ display:none; }
-
-  .ui-mobile{
-    position:fixed;
-    left:10px;
-    bottom:10px;
-    z-index:9999;
-    width:64px;
+  .ui-left{
+    width: 64px;
   }
-
-  .ui-mobile button{
+  .ui-left button{
     font-size:18px;
     padding:8px 0;
     text-align:center;
   }
-
-  .ui-mobile.folded .body{ display:none; }
+  .ui-left.folded .body{ display:none; }
 }
 
-/* ================= GeoJSON ================= */
+/* ===== GeoJSON（右下） ===== */
 .geojson-panel{
-  position:fixed;
-  right:10px;
-  bottom:10px;
-  z-index:9999;
-  width:240px;
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  z-index: 9999;
+  width: 240px;
 }
 
 @media (max-width:480px){
-  .geojson-panel{
-    bottom:60px;
-    display:none;
-  }
+  .geojson-panel{ display:none; }
 }
 
-.geojson-toggle{
-  position:fixed;
-  right:10px;
-  bottom:10px;
-  z-index:9999;
-  padding:10px;
-  font-size:18px;
-  border-radius:12px;
-  border:1px solid #ccc;
-  background:white;
-  cursor:pointer;
+/* ===== CS透過度：PC（GeoJSONの上） ===== */
+.cs-opacity-pc{
+  position: fixed;
+  right: 10px;
+  bottom: 270px;
+  z-index: 9999;
+  width: 240px;
+}
+
+@media (max-width:480px){
+  .cs-opacity-pc{ display:none; }
+}
+
+/* ===== CS透過度：スマホ（中央下） ===== */
+.cs-opacity-mobile{
+  position: fixed;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  width: 240px;
   display:none;
 }
 
 @media (max-width:480px){
-  .geojson-toggle{ display:block; }
+  .cs-opacity-mobile{ display:block; }
 }
 
-/* ================= トースト ================= */
+/* ===== トースト ===== */
 #toast{
   position:fixed;
   left:50%;
@@ -124,42 +127,38 @@ html, body { height:100%; margin:0; }
 
 <input id="geojsonInput" type="file" accept=".geojson,.json" style="display:none">
 
-<!-- PC 左上 -->
-<div class="ui-panel ui-pc leaflet-control leaflet-top leaflet-left">
-  <button id="btnFollow">自分を中央</button>
-  <button id="btnShare">共有</button>
-
-  <div class="ui-title">背景</div>
-  <button onclick="setBG('gsi')">地理院</button>
-  <button onclick="setBG('cs')">CS立体図</button>
-  <button onclick="setBG('both')">重ねる</button>
-
-  <div class="ui-title">CS立体図 透過度</div>
-  <input id="csOpacity" type="range" min="0" max="100" value="100" style="width:100%;">
-</div>
-
-<!-- スマホ 左下 -->
-<div id="uiMobile" class="ui-panel ui-mobile folded">
+<!-- ===== 左下メニュー（今まで通り＋追従） ===== -->
+<div id="uiLeft" class="ui-panel ui-left folded">
   <div class="body">
-    <button id="mFollow">🧍</button>
-    <button id="mShare">🔗</button>
+    <button id="btnFollow">🧍</button>
+    <button id="btnShare">🔗</button>
     <button onclick="cycleBG()">🗺️</button>
-    <input id="csOpacityMobile" type="range" min="0" max="100" value="100">
   </div>
-  <button id="mFold">⬆</button>
+  <button id="btnFold">⬆</button>
 </div>
 
-<!-- GeoJSON -->
-<div id="geojsonPanel" class="ui-panel geojson-panel">
+<!-- ===== PC：CS透過度（GeoJSONの上） ===== -->
+<div class="ui-panel cs-opacity-pc">
+  <div class="ui-title">CS立体図 透過度</div>
+  <input id="csOpacityPC" type="range" min="0" max="100" value="100" style="width:100%;">
+</div>
+
+<!-- ===== スマホ：CS透過度（中央下） ===== -->
+<div class="ui-panel cs-opacity-mobile">
+  <div class="ui-title">CS立体図 透過度</div>
+  <input id="csOpacityMobile" type="range" min="0" max="100" value="100" style="width:100%;">
+</div>
+
+<!-- ===== GeoJSON（右下） ===== -->
+<div class="ui-panel geojson-panel">
   <div class="ui-title">GeoJSON</div>
   <button onclick="pickGeojson()">選択</button>
   <button onclick="jumpGeojson()">ジャンプ</button>
   <button onclick="clearGeojson()">クリア</button>
 </div>
-<div id="geojsonToggle" class="geojson-toggle">＋</div>
 
 <script>
-/* ================= util ================= */
+/* ===== util ===== */
 function toast(msg, ms=2000){
   const t=document.getElementById('toast');
   t.textContent=msg;
@@ -168,10 +167,10 @@ function toast(msg, ms=2000){
   t._t=setTimeout(()=>t.style.display='none',ms);
 }
 
-/* ================= map ================= */
+/* ===== map ===== */
 const map=L.map('map').setView([36.2,138.0],12);
 
-/* ================= layers ================= */
+/* ===== layers ===== */
 const gsiLayer=L.tileLayer(
   'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png'
 ).addTo(map);
@@ -194,15 +193,16 @@ function cycleBG(){
   setBG(bgMode==='gsi'?'cs':bgMode==='cs'?'both':'gsi');
 }
 
-/* ================= opacity ================= */
-document.getElementById('csOpacity').oninput=e=>{
-  csLayer.setOpacity(e.target.value/100);
-};
-document.getElementById('csOpacityMobile').oninput=e=>{
-  csLayer.setOpacity(e.target.value/100);
-};
+/* ===== CS透過度（共通） ===== */
+function bindOpacity(id){
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.addEventListener('input',()=>csLayer.setOpacity(el.value/100));
+}
+bindOpacity('csOpacityPC');
+bindOpacity('csOpacityMobile');
 
-/* ================= location ================= */
+/* ===== 現在地＋追従 ===== */
 let follow=true;
 let me=null;
 
@@ -217,11 +217,8 @@ document.getElementById('btnFollow').onclick=()=>{
   follow=!follow;
   toast(follow?'自分を中央 ON':'自分を中央 OFF');
 };
-document.getElementById('mFollow').onclick=()=>{
-  follow=!follow;
-};
 
-/* ================= share ================= */
+/* ===== 共有 ===== */
 function share(){
   const c=map.getCenter(),z=map.getZoom();
   const url=`${location.origin}${location.pathname}?lat=${c.lat}&lng=${c.lng}&z=${z}`;
@@ -229,9 +226,14 @@ function share(){
   toast('URLコピー');
 }
 document.getElementById('btnShare').onclick=share;
-document.getElementById('mShare').onclick=share;
 
-/* ================= GeoJSON ================= */
+/* ===== 左下 折りたたみ ===== */
+const uiLeft=document.getElementById('uiLeft');
+document.getElementById('btnFold').onclick=()=>{
+  uiLeft.classList.toggle('folded');
+};
+
+/* ===== GeoJSON ===== */
 const gjGroup=L.featureGroup().addTo(map);
 
 function pickGeojson(){
@@ -260,21 +262,6 @@ function jumpGeojson(){
 function clearGeojson(){
   gjGroup.clearLayers();
   toast('GeoJSON クリア');
-}
-
-/* ================= mobile UI ================= */
-const uiM=document.getElementById('uiMobile');
-document.getElementById('mFold').onclick=()=>{
-  uiM.classList.toggle('folded');
-};
-
-const gjToggle=document.getElementById('geojsonToggle');
-const gjPanel=document.getElementById('geojsonPanel');
-if(window.innerWidth<480){
-  gjToggle.onclick=()=>{
-    gjPanel.style.display=gjPanel.style.display==='block'?'none':'block';
-    gjToggle.textContent=gjPanel.style.display==='block'?'×':'＋';
-  };
 }
 </script>
 </body>
