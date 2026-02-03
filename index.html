@@ -52,7 +52,7 @@ html, body { height:100%; margin:0; }
 @media (max-width:480px){
   .ui-left{
     width: 64px;
-    left: 52px;  /* ←スマホ：縦スライダーの右に配置 */
+    left: 52px;   /* スマホ：縦スライダーの右 */
     bottom: 10px;
   }
   .ui-left button{
@@ -65,7 +65,7 @@ html, body { height:100%; margin:0; }
 /* ===== スマホ：CS透過度 縦スライダー（最左下） ===== */
 .cs-opacity-vertical{
   position: fixed;
-  left: 12px;   /* ←スマホ：いちばん左 */
+  left: 12px;    /* スマホ：いちばん左 */
   bottom: 10px;
   z-index: 9998;
   height: 180px;
@@ -199,7 +199,9 @@ html, body { height:100%; margin:0; }
 </div>
 
 <script>
-/* ===== util ===== */
+/* =========================
+   util
+========================= */
 function toast(msg, ms=2000){
   const t=document.getElementById('toast');
   t.textContent=msg;
@@ -208,10 +210,33 @@ function toast(msg, ms=2000){
   t._t=setTimeout(()=>t.style.display='none',ms);
 }
 
-/* ===== map ===== */
+function propsToHtml(props){
+  if(!props) return '属性なし';
+  const keys = Object.keys(props);
+  if(keys.length === 0) return '属性なし';
+
+  // 長すぎ防止（最大30項目）
+  return keys.slice(0, 30).map(k=>{
+    const v = props[k];
+    const vv = (v === null || v === undefined) ? '' : String(v);
+    return `<div><b>${k}</b>: ${escapeHtml(vv)}</div>`;
+  }).join('');
+}
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, (c)=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+/* =========================
+   map
+========================= */
 const map = L.map('map').setView([36.2, 138.0], 12);
 
-/* ===== layers ===== */
+/* =========================
+   layers
+========================= */
 const gsiLayer = L.tileLayer(
   'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
   { attribution:'© 地理院' }
@@ -238,7 +263,9 @@ function cycleBG(){
 }
 document.getElementById('btnBG').onclick = cycleBG;
 
-/* ===== opacity ===== */
+/* =========================
+   opacity
+========================= */
 function bindOpacity(id){
   const el = document.getElementById(id);
   if(!el) return;
@@ -249,32 +276,42 @@ function bindOpacity(id){
 bindOpacity('csOpacityPC');
 bindOpacity('csOpacityMobile');
 
-/* ===== location + follow ===== */
+/* =========================
+   location + follow
+========================= */
 let follow = true;
 let me = null;
 
-navigator.geolocation.watchPosition(
-  pos=>{
-    const ll = [pos.coords.latitude, pos.coords.longitude];
-    if(!me){
-      me = L.circleMarker(ll, { radius:8, color:'#0066ff', fillColor:'#3399ff', fillOpacity:0.9 }).addTo(map);
-    }else{
-      me.setLatLng(ll);
-    }
-    if(follow){
-      map.setView(ll, Math.max(map.getZoom(), 16), { animate:true });
-    }
-  },
-  err=>toast('現在地エラー: ' + err.message, 2500),
-  { enableHighAccuracy:true, maximumAge:1000, timeout:15000 }
-);
+if (navigator.geolocation){
+  navigator.geolocation.watchPosition(
+    pos=>{
+      const ll = [pos.coords.latitude, pos.coords.longitude];
+      if(!me){
+        me = L.circleMarker(ll, {
+          radius:8, color:'#0066ff', fillColor:'#3399ff', fillOpacity:0.9
+        }).addTo(map);
+      }else{
+        me.setLatLng(ll);
+      }
+      if(follow){
+        map.setView(ll, Math.max(map.getZoom(), 16), { animate:true });
+      }
+    },
+    err=>toast('現在地エラー: ' + err.message, 2500),
+    { enableHighAccuracy:true, maximumAge:1000, timeout:15000 }
+  );
+}else{
+  toast('位置情報に対応していません');
+}
 
 document.getElementById('btnFollow').onclick = ()=>{
   follow = !follow;
   toast(follow ? '自分を中央 ON' : '自分を中央 OFF');
 };
 
-/* ===== share ===== */
+/* =========================
+   share
+========================= */
 document.getElementById('btnShare').onclick = async ()=>{
   const c = map.getCenter();
   const z = map.getZoom();
@@ -287,19 +324,61 @@ document.getElementById('btnShare').onclick = async ()=>{
   }
 };
 
-/* ===== fold ===== */
+/* =========================
+   fold
+========================= */
 const uiLeft = document.getElementById('uiLeft');
 document.getElementById('btnFold').onclick = ()=>{
   uiLeft.classList.toggle('folded');
 };
 
-/* ===== GeoJSON ===== */
+/* =========================
+   GeoJSON
+========================= */
 const geojsonInput = document.getElementById('geojsonInput');
 const gjGroup = L.featureGroup().addTo(map);
+
+let currentHighlighted = null;
+function clearHighlight(){
+  if(currentHighlighted && currentHighlighted._origStyle){
+    currentHighlighted.setStyle(currentHighlighted._origStyle);
+  }
+  currentHighlighted = null;
+}
 
 function pickGeojson(){
   geojsonInput.value = '';
   geojsonInput.click();
+}
+
+function makeGeoJsonLayer(geojson){
+  return L.geoJSON(geojson, {
+    style: (feature) => ({
+      color:'#ff0066',
+      weight:2,
+      fillOpacity:0.2
+    }),
+    onEachFeature: (feature, layer) => {
+      // クリックで属性表示（ポップアップ）
+      layer.on('click', (e) => {
+        // ハイライト（線・ポリゴンのみ）
+        try{
+          if(layer.setStyle){
+            clearHighlight();
+            layer._origStyle = { color:'#ff0066', weight:2, fillOpacity:0.2 };
+            layer.setStyle({ color:'#00aaff', weight:4, fillOpacity:0.25 });
+            currentHighlighted = layer;
+          }
+        }catch{}
+
+        const html = propsToHtml(feature.properties);
+        L.popup({ maxWidth: 360 })
+          .setLatLng(e.latlng)
+          .setContent(html)
+          .openOn(map);
+      });
+    }
+  });
 }
 
 geojsonInput.onchange = ()=>{
@@ -310,10 +389,12 @@ geojsonInput.onchange = ()=>{
   r.onload = ()=>{
     try{
       const g = JSON.parse(r.result);
-      const l = L.geoJSON(g, { style:{ color:'#ff0066', weight:2, fillOpacity:0.2 }});
-      gjGroup.addLayer(l);
+
+      const layer = makeGeoJsonLayer(g);
+      gjGroup.addLayer(layer);
+
       jumpGeojson();
-      toast('GeoJSON 読み込み');
+      toast('GeoJSON 読み込み（タップで属性表示）');
     }catch(e){
       toast('GeoJSONの読み込みに失敗しました');
     }
@@ -328,10 +409,14 @@ function jumpGeojson(){
 
 function clearGeojson(){
   gjGroup.clearLayers();
+  clearHighlight();
+  map.closePopup();
   toast('GeoJSON クリア');
 }
 
-/* ===== mobile geojson toggle ===== */
+/* =========================
+   mobile geojson toggle
+========================= */
 (function(){
   const isMobile = window.matchMedia && window.matchMedia('(max-width:480px)').matches;
   if(!isMobile) return;
