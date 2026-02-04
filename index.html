@@ -73,14 +73,12 @@ html, body { height:100%; margin:0; }
   display:none;
   padding: 6px 4px;
 }
-
 .cs-opacity-vertical input{
   writing-mode: bt-lr;
   -webkit-appearance: slider-vertical;
   width: 24px;
   height: 168px;
 }
-
 @media (max-width:480px){
   .cs-opacity-vertical{ display:block; }
 }
@@ -123,7 +121,6 @@ html, body { height:100%; margin:0; }
   cursor: pointer;
   display:none;
 }
-
 .geojson-panel-mobile{
   position: fixed;
   right: 10px;
@@ -132,7 +129,6 @@ html, body { height:100%; margin:0; }
   width: 240px;
   display:none;
 }
-
 @media (max-width:480px){
   .geojson-toggle{ display:block; }
 }
@@ -218,7 +214,7 @@ function propsToHtml(props){
   if(!props) return '属性なし';
   const keys = Object.keys(props);
   if(keys.length === 0) return '属性なし';
-  return keys.slice(0, 30).map(k=>{
+  return keys.slice(0, 40).map(k=>{
     const v = props[k];
     const vv = (v === null || v === undefined) ? '' : String(v);
     return `<div><b>${escapeHtml(k)}</b>: ${escapeHtml(vv)}</div>`;
@@ -227,8 +223,11 @@ function propsToHtml(props){
 
 /* =========================
    map
+   ★重要：Leaflet標準の「地図クリックでポップアップを閉じる」を無効化
 ========================= */
-const map = L.map('map').setView([36.2, 138.0], 12);
+const map = L.map('map', {
+  closePopupOnClick: false,   // ←これが効く（勝手に閉じない）
+}).setView([36.2, 138.0], 12);
 
 /* =========================
    layers
@@ -253,7 +252,7 @@ const csLayer = L.tileLayer(
    photo: 航空写真
    cs   : 地理院標準 + CS立体図（スライダー表示）
 */
-let bgMode = 'cs'; // 初期
+let bgMode = 'cs';
 
 const csOpacityWrapPC = document.getElementById('csOpacityWrapPC');
 const csOpacityWrapMobile = document.getElementById('csOpacityWrapMobile');
@@ -262,7 +261,6 @@ function setCsSliderVisible(visible){
   csOpacityWrapPC.style.display = visible ? '' : 'none';
   csOpacityWrapMobile.style.display = visible ? '' : 'none';
 }
-
 function applyBG(){
   map.removeLayer(gsiStd);
   map.removeLayer(gsiPhoto);
@@ -282,13 +280,11 @@ function applyBG(){
     setCsSliderVisible(true);
   }
 }
-
 function cycleBG(){
   bgMode = (bgMode === 'cs') ? 'photo' : (bgMode === 'photo' ? 'map' : 'cs');
   applyBG();
   toast(bgMode==='cs'?'背景：CS立体図':bgMode==='photo'?'背景：航空写真':'背景：地理院');
 }
-
 document.getElementById('btnBG').onclick = cycleBG;
 applyBG();
 
@@ -332,7 +328,6 @@ if (navigator.geolocation){
 }else{
   toast('位置情報に対応していません');
 }
-
 document.getElementById('btnFollow').onclick = ()=>{
   follow = !follow;
   toast(follow ? '自分を中央 ON' : '自分を中央 OFF');
@@ -362,12 +357,12 @@ document.getElementById('btnFold').onclick = ()=>{
 };
 
 /* =========================
-   GeoJSON（修正版）
-   - クリックで属性表示
-   - 同じ地物をもう一度クリックすると解除
-   - 空白クリックで解除
-   - ポップアップ×で解除
-   ★重要：地物クリックのイベント伝播を止める
+   GeoJSON（確実版）
+   - 地物タップ：属性表示＋ハイライト
+   - 同じ地物再タップ：解除
+   - 空白タップ：解除
+   - ポップアップ×：解除
+   ★重要：preclickでも止める（スマホで効く）
 ========================= */
 const geojsonInput = document.getElementById('geojsonInput');
 const gjGroup = L.featureGroup().addTo(map);
@@ -394,24 +389,32 @@ function pickGeojson(){
   geojsonInput.click();
 }
 
+function stopAll(e){
+  // Leafletイベント -> DOMイベント両対応
+  if(e && e.originalEvent){
+    L.DomEvent.stop(e.originalEvent);
+  }
+}
+
 function makeGeoJsonLayer(geojson){
   return L.geoJSON(geojson, {
     style: () => ({...NORMAL_STYLE}),
     onEachFeature: (feature, layer) => {
-      layer.on('click', (e) => {
-        // ★これがないと map.on('click') が反応して即解除される
-        if(e && e.originalEvent){
-          L.DomEvent.stopPropagation(e.originalEvent);
-        }
 
-        // 同じ地物を再クリック → 解除
+      // Leafletはpopupの自動処理にpreclickを使うので、ここでも止める
+      layer.on('preclick', (e) => stopAll(e));
+
+      layer.on('click', (e) => {
+        stopAll(e);
+
+        // 同じ地物を再タップ → 解除
         if(currentPopupLayer === layer){
           clearHighlight();
           closeFeaturePopup();
           return;
         }
 
-        // 別の地物 → 既存解除 → 新規ハイライト＋表示
+        // 別の地物 → 切替
         clearHighlight();
         if(layer.setStyle){
           layer.setStyle(HILITE_STYLE);
@@ -419,7 +422,11 @@ function makeGeoJsonLayer(geojson){
         }
 
         const html = propsToHtml(feature.properties);
-        L.popup({ maxWidth: 360, autoPan: true })
+        L.popup({
+          maxWidth: 360,
+          autoPan: true,
+          closeButton: true
+        })
           .setLatLng(e.latlng)
           .setContent(html)
           .openOn(map);
@@ -430,13 +437,13 @@ function makeGeoJsonLayer(geojson){
   });
 }
 
-// 空白クリックで解除
+// 空白タップで解除（GeoJSONクリック時は stopAll でここに来ない）
 map.on('click', () => {
   clearHighlight();
   closeFeaturePopup();
 });
 
-// ポップアップ×で解除
+// × で閉じた場合も解除
 map.on('popupclose', () => {
   clearHighlight();
   currentPopupLayer = null;
@@ -452,9 +459,8 @@ geojsonInput.onchange = ()=>{
       const g = JSON.parse(r.result);
       const layer = makeGeoJsonLayer(g);
       gjGroup.addLayer(layer);
-
       jumpGeojson();
-      toast('GeoJSON 読み込み（タップで属性 / 再タップで解除）');
+      toast('GeoJSON 読み込み（タップで属性）');
     }catch(e){
       toast('GeoJSONの読み込みに失敗しました');
     }
