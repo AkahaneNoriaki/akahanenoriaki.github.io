@@ -161,7 +161,7 @@ html, body { height:100%; margin:0; }
 <input id="geojsonInput" type="file" accept=".geojson,.json" style="display:none">
 
 <!-- スマホ：縦スライダー（最左下） -->
-<div class="ui-panel cs-opacity-vertical" title="CS立体図 透過度">
+<div id="csOpacityWrapMobile" class="ui-panel cs-opacity-vertical" title="CS立体図 透過度">
   <input id="csOpacityMobile" type="range" min="0" max="100" value="100">
 </div>
 
@@ -176,7 +176,7 @@ html, body { height:100%; margin:0; }
 </div>
 
 <!-- PC：CS透過度（GeoJSONの上） -->
-<div class="ui-panel cs-opacity-pc">
+<div id="csOpacityWrapPC" class="ui-panel cs-opacity-pc">
   <div class="ui-title">CS立体図 透過度</div>
   <input id="csOpacityPC" type="range" min="0" max="100" value="100" style="width:100%;">
 </div>
@@ -209,24 +209,20 @@ function toast(msg, ms=2000){
   clearTimeout(t._t);
   t._t=setTimeout(()=>t.style.display='none',ms);
 }
-
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, (c)=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
 function propsToHtml(props){
   if(!props) return '属性なし';
   const keys = Object.keys(props);
   if(keys.length === 0) return '属性なし';
-
-  // 長すぎ防止（最大30項目）
   return keys.slice(0, 30).map(k=>{
     const v = props[k];
     const vv = (v === null || v === undefined) ? '' : String(v);
-    return `<div><b>${k}</b>: ${escapeHtml(vv)}</div>`;
+    return `<div><b>${escapeHtml(k)}</b>: ${escapeHtml(vv)}</div>`;
   }).join('');
-}
-
-function escapeHtml(s){
-  return s.replace(/[&<>"']/g, (c)=>({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
 }
 
 /* =========================
@@ -236,35 +232,76 @@ const map = L.map('map').setView([36.2, 138.0], 12);
 
 /* =========================
    layers
+   - 地理院地図（標準）
+   - 地理院 航空写真（シームレス）
+   - CS立体図（長野）
 ========================= */
-const gsiLayer = L.tileLayer(
+const gsiStd = L.tileLayer(
   'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
   { attribution:'© 地理院' }
-).addTo(map);
+);
+
+const gsiPhoto = L.tileLayer(
+  'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',
+  { attribution:'© 地理院（航空写真）' }
+);
 
 const csLayer = L.tileLayer(
   'https://tile.geospatial.jp/CS/VER2/{z}/{x}/{y}.png',
   { opacity: 1.0, minZoom: 8, maxZoom: 18, attribution:'© 長野県 CS立体図' }
-).addTo(map);
-
-/* 背景モード：gsi / cs / both */
-let bgMode = 'both';
-function applyBG(){
-  map.removeLayer(gsiLayer);
-  map.removeLayer(csLayer);
-  if(bgMode==='gsi') gsiLayer.addTo(map);
-  if(bgMode==='cs') csLayer.addTo(map);
-  if(bgMode==='both'){ gsiLayer.addTo(map); csLayer.addTo(map); }
-}
-function cycleBG(){
-  bgMode = bgMode==='gsi' ? 'cs' : (bgMode==='cs' ? 'both' : 'gsi');
-  applyBG();
-  toast(bgMode==='gsi'?'背景：地理院':bgMode==='cs'?'背景：CS立体図':'背景：重ねる');
-}
-document.getElementById('btnBG').onclick = cycleBG;
+);
 
 /* =========================
-   opacity
+   背景モード
+   - map  : 地理院標準のみ
+   - photo: 航空写真のみ
+   - cs   : 地理院標準 + CS立体図（透過スライダー表示）
+========================= */
+let bgMode = 'cs'; // 初期：CS立体図モード（好みなら 'map' / 'photo' に変更OK）
+
+const csOpacityWrapPC = document.getElementById('csOpacityWrapPC');
+const csOpacityWrapMobile = document.getElementById('csOpacityWrapMobile');
+
+function setCsSliderVisible(visible){
+  csOpacityWrapPC.style.display = visible ? '' : 'none';
+  csOpacityWrapMobile.style.display = visible ? '' : 'none';
+}
+
+function applyBG(){
+  // 全部外してから付け直す
+  map.removeLayer(gsiStd);
+  map.removeLayer(gsiPhoto);
+  map.removeLayer(csLayer);
+
+  if(bgMode === 'map'){
+    gsiStd.addTo(map);
+    setCsSliderVisible(false);
+  }
+  if(bgMode === 'photo'){
+    gsiPhoto.addTo(map);
+    setCsSliderVisible(false);
+  }
+  if(bgMode === 'cs'){
+    gsiStd.addTo(map);
+    csLayer.addTo(map);
+    setCsSliderVisible(true);
+  }
+}
+
+function cycleBG(){
+  // cs -> photo -> map -> cs
+  bgMode = (bgMode === 'cs') ? 'photo' : (bgMode === 'photo' ? 'map' : 'cs');
+  applyBG();
+  toast(bgMode==='cs'?'背景：CS立体図':bgMode==='photo'?'背景：航空写真':'背景：地理院');
+}
+
+document.getElementById('btnBG').onclick = cycleBG;
+
+// 初期適用
+applyBG();
+
+/* =========================
+   opacity (CS立体図)
 ========================= */
 function bindOpacity(id){
   const el = document.getElementById(id);
@@ -334,16 +371,28 @@ document.getElementById('btnFold').onclick = ()=>{
 
 /* =========================
    GeoJSON
+   - クリックで属性表示
+   - 同じ地物をもう一度クリックすると元に戻す（ハイライト解除 + ポップアップ閉）
 ========================= */
 const geojsonInput = document.getElementById('geojsonInput');
 const gjGroup = L.featureGroup().addTo(map);
 
 let currentHighlighted = null;
+let currentPopupLayer = null; // 直近で開いた地物（トグル用）
+
+const NORMAL_STYLE = { color:'#ff0066', weight:2, fillOpacity:0.2 };
+const HILITE_STYLE  = { color:'#00aaff', weight:4, fillOpacity:0.25 };
+
 function clearHighlight(){
-  if(currentHighlighted && currentHighlighted._origStyle){
-    currentHighlighted.setStyle(currentHighlighted._origStyle);
+  if(currentHighlighted && currentHighlighted.setStyle){
+    currentHighlighted.setStyle(NORMAL_STYLE);
   }
   currentHighlighted = null;
+}
+
+function closeFeaturePopup(){
+  map.closePopup();
+  currentPopupLayer = null;
 }
 
 function pickGeojson(){
@@ -353,33 +402,40 @@ function pickGeojson(){
 
 function makeGeoJsonLayer(geojson){
   return L.geoJSON(geojson, {
-    style: (feature) => ({
-      color:'#ff0066',
-      weight:2,
-      fillOpacity:0.2
-    }),
+    style: () => ({...NORMAL_STYLE}),
     onEachFeature: (feature, layer) => {
-      // クリックで属性表示（ポップアップ）
       layer.on('click', (e) => {
-        // ハイライト（線・ポリゴンのみ）
-        try{
-          if(layer.setStyle){
-            clearHighlight();
-            layer._origStyle = { color:'#ff0066', weight:2, fillOpacity:0.2 };
-            layer.setStyle({ color:'#00aaff', weight:4, fillOpacity:0.25 });
-            currentHighlighted = layer;
-          }
-        }catch{}
+        // もう一度同じ地物を押したら「元に戻す」
+        if(currentPopupLayer === layer){
+          clearHighlight();
+          closeFeaturePopup();
+          return;
+        }
+
+        // 別の地物を押した：ハイライト切替＋属性表示
+        clearHighlight();
+        if(layer.setStyle){
+          layer.setStyle(HILITE_STYLE);
+          currentHighlighted = layer;
+        }
 
         const html = propsToHtml(feature.properties);
         L.popup({ maxWidth: 360 })
           .setLatLng(e.latlng)
           .setContent(html)
           .openOn(map);
+
+        currentPopupLayer = layer;
       });
     }
   });
 }
+
+// 地物以外（地図の空白）をタップしたら、ハイライト/ポップアップを解除
+map.on('click', () => {
+  clearHighlight();
+  closeFeaturePopup();
+});
 
 geojsonInput.onchange = ()=>{
   const f = geojsonInput.files[0];
@@ -389,12 +445,10 @@ geojsonInput.onchange = ()=>{
   r.onload = ()=>{
     try{
       const g = JSON.parse(r.result);
-
       const layer = makeGeoJsonLayer(g);
       gjGroup.addLayer(layer);
-
       jumpGeojson();
-      toast('GeoJSON 読み込み（タップで属性表示）');
+      toast('GeoJSON 読み込み（タップで属性 / 再タップで戻る）');
     }catch(e){
       toast('GeoJSONの読み込みに失敗しました');
     }
@@ -410,7 +464,7 @@ function jumpGeojson(){
 function clearGeojson(){
   gjGroup.clearLayers();
   clearHighlight();
-  map.closePopup();
+  closeFeaturePopup();
   toast('GeoJSON クリア');
 }
 
