@@ -165,7 +165,7 @@ html, body { height:100%; margin:0; }
   <input id="csOpacityMobile" type="range" min="0" max="100" value="100">
 </div>
 
-<!-- 左下 折りたたみメニュー（追従・共有・背景） -->
+<!-- 左下 折りたたみメニュー -->
 <div id="uiLeft" class="ui-panel ui-left folded">
   <div class="body">
     <button id="btnFollow" title="自分を中央（追従）">🧍</button>
@@ -232,9 +232,6 @@ const map = L.map('map').setView([36.2, 138.0], 12);
 
 /* =========================
    layers
-   - 地理院地図（標準）
-   - 地理院 航空写真（シームレス）
-   - CS立体図（長野）
 ========================= */
 const gsiStd = L.tileLayer(
   'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
@@ -251,13 +248,12 @@ const csLayer = L.tileLayer(
   { opacity: 1.0, minZoom: 8, maxZoom: 18, attribution:'© 長野県 CS立体図' }
 );
 
-/* =========================
-   背景モード
-   - map  : 地理院標準のみ
-   - photo: 航空写真のみ
-   - cs   : 地理院標準 + CS立体図（透過スライダー表示）
-========================= */
-let bgMode = 'cs'; // 初期：CS立体図モード（好みなら 'map' / 'photo' に変更OK）
+/* 背景モード：
+   map  : 地理院標準
+   photo: 航空写真
+   cs   : 地理院標準 + CS立体図（スライダー表示）
+*/
+let bgMode = 'cs'; // 初期
 
 const csOpacityWrapPC = document.getElementById('csOpacityWrapPC');
 const csOpacityWrapMobile = document.getElementById('csOpacityWrapMobile');
@@ -268,7 +264,6 @@ function setCsSliderVisible(visible){
 }
 
 function applyBG(){
-  // 全部外してから付け直す
   map.removeLayer(gsiStd);
   map.removeLayer(gsiPhoto);
   map.removeLayer(csLayer);
@@ -289,19 +284,16 @@ function applyBG(){
 }
 
 function cycleBG(){
-  // cs -> photo -> map -> cs
   bgMode = (bgMode === 'cs') ? 'photo' : (bgMode === 'photo' ? 'map' : 'cs');
   applyBG();
   toast(bgMode==='cs'?'背景：CS立体図':bgMode==='photo'?'背景：航空写真':'背景：地理院');
 }
 
 document.getElementById('btnBG').onclick = cycleBG;
-
-// 初期適用
 applyBG();
 
 /* =========================
-   opacity (CS立体図)
+   opacity
 ========================= */
 function bindOpacity(id){
   const el = document.getElementById(id);
@@ -370,15 +362,18 @@ document.getElementById('btnFold').onclick = ()=>{
 };
 
 /* =========================
-   GeoJSON
+   GeoJSON（修正版）
    - クリックで属性表示
-   - 同じ地物をもう一度クリックすると元に戻す（ハイライト解除 + ポップアップ閉）
+   - 同じ地物をもう一度クリックすると解除
+   - 空白クリックで解除
+   - ポップアップ×で解除
+   ★重要：地物クリックのイベント伝播を止める
 ========================= */
 const geojsonInput = document.getElementById('geojsonInput');
 const gjGroup = L.featureGroup().addTo(map);
 
 let currentHighlighted = null;
-let currentPopupLayer = null; // 直近で開いた地物（トグル用）
+let currentPopupLayer = null;
 
 const NORMAL_STYLE = { color:'#ff0066', weight:2, fillOpacity:0.2 };
 const HILITE_STYLE  = { color:'#00aaff', weight:4, fillOpacity:0.25 };
@@ -389,7 +384,6 @@ function clearHighlight(){
   }
   currentHighlighted = null;
 }
-
 function closeFeaturePopup(){
   map.closePopup();
   currentPopupLayer = null;
@@ -405,14 +399,19 @@ function makeGeoJsonLayer(geojson){
     style: () => ({...NORMAL_STYLE}),
     onEachFeature: (feature, layer) => {
       layer.on('click', (e) => {
-        // もう一度同じ地物を押したら「元に戻す」
+        // ★これがないと map.on('click') が反応して即解除される
+        if(e && e.originalEvent){
+          L.DomEvent.stopPropagation(e.originalEvent);
+        }
+
+        // 同じ地物を再クリック → 解除
         if(currentPopupLayer === layer){
           clearHighlight();
           closeFeaturePopup();
           return;
         }
 
-        // 別の地物を押した：ハイライト切替＋属性表示
+        // 別の地物 → 既存解除 → 新規ハイライト＋表示
         clearHighlight();
         if(layer.setStyle){
           layer.setStyle(HILITE_STYLE);
@@ -420,7 +419,7 @@ function makeGeoJsonLayer(geojson){
         }
 
         const html = propsToHtml(feature.properties);
-        L.popup({ maxWidth: 360 })
+        L.popup({ maxWidth: 360, autoPan: true })
           .setLatLng(e.latlng)
           .setContent(html)
           .openOn(map);
@@ -431,10 +430,16 @@ function makeGeoJsonLayer(geojson){
   });
 }
 
-// 地物以外（地図の空白）をタップしたら、ハイライト/ポップアップを解除
+// 空白クリックで解除
 map.on('click', () => {
   clearHighlight();
   closeFeaturePopup();
+});
+
+// ポップアップ×で解除
+map.on('popupclose', () => {
+  clearHighlight();
+  currentPopupLayer = null;
 });
 
 geojsonInput.onchange = ()=>{
@@ -447,8 +452,9 @@ geojsonInput.onchange = ()=>{
       const g = JSON.parse(r.result);
       const layer = makeGeoJsonLayer(g);
       gjGroup.addLayer(layer);
+
       jumpGeojson();
-      toast('GeoJSON 読み込み（タップで属性 / 再タップで戻る）');
+      toast('GeoJSON 読み込み（タップで属性 / 再タップで解除）');
     }catch(e){
       toast('GeoJSONの読み込みに失敗しました');
     }
