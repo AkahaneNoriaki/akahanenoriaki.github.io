@@ -238,8 +238,10 @@ function propsToHtml(props){
   }).join('');
 }
 
+/* ① 最大ズームを22に拡張 */
 const map = L.map('map', { maxZoom: 22 }).setView([36.2, 138.0], 12);
 
+/* ① maxNativeZoom:18, maxZoom:22 でオーバーズーム許可 */
 const gsiStd = L.tileLayer(
   'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
   { maxNativeZoom: 18, maxZoom: 22, attribution:'© 地理院' }
@@ -353,6 +355,7 @@ function clearGeojson(){ gjGroup.clearLayers(); map.closePopup(); toast('GeoJSON
   t.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); setOpen(!open); });
 })();
 
+/* ② カメラ：写真ピン＋保存ボタン */
 const cameraInput = document.getElementById('cameraInput');
 const photoLayer = L.layerGroup().addTo(map);
 document.getElementById('btnCamera').onclick = ()=>{ cameraInput.value=''; cameraInput.click(); };
@@ -378,6 +381,7 @@ cameraInput.addEventListener('change', ()=>{
   toast('写真ピンを追加（ポップアップから保存できます）', 2500);
 });
 
+/* ③ 軌跡記録・表示・GPXエクスポート */
 let recording = false;
 let trackPoints = [];
 let trackLine = null;
@@ -428,7 +432,7 @@ ${trkpts}
   const url = URL.createObjectURL(blob);
   const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
   const a = document.createElement('a');
-  a.href = url; a.download = `track_${ts}.gpx`; a.click();
+  a.href=url; a.download=`track_${ts}.gpx`; a.click();
   setTimeout(()=>URL.revokeObjectURL(url), 10000);
   toast('GPXをダウンロードしました', 2000);
 }
