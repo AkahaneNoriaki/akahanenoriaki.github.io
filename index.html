@@ -15,7 +15,6 @@
 html, body { height:100%; margin:0; }
 #map { height:100vh; width:100vw; }
 
-/* ===== Bottom Sheet ===== */
 #bottomSheet {
   position: fixed;
   left: 0; right: 0; bottom: 0;
@@ -30,9 +29,8 @@ html, body { height:100%; margin:0; }
   max-height: 80vh;
   font-family: sans-serif;
 }
-#bottomSheet.open {
-  transform: translateY(0);
-}
+#bottomSheet.open { transform: translateY(0); }
+
 #sheetHandle {
   height: 44px;
   display: flex;
@@ -47,27 +45,17 @@ html, body { height:100%; margin:0; }
   background: #d0d0d0;
   border-radius: 2px;
 }
+
 #sheetContent {
   overflow-y: auto;
   padding: 0 16px 40px;
   -webkit-overflow-scrolling: touch;
 }
 
-/* ===== セクション ===== */
 .s-section { margin-bottom: 18px; }
-.s-title {
-  font-size: 11px;
-  color: #aaa;
-  letter-spacing: 0.5px;
-  margin: 0 0 8px 2px;
-}
-.s-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
+.s-title { font-size:11px; color:#aaa; letter-spacing:0.5px; margin:0 0 8px 2px; }
+.s-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
 
-/* ===== ボタン ===== */
 .s-btn {
   background: #f5f5f5;
   border: 1px solid #e8e8e8;
@@ -80,68 +68,32 @@ html, body { height:100%; margin:0; }
   transition: background 0.12s, border-color 0.12s;
   -webkit-tap-highlight-color: transparent;
 }
-.s-btn .ico { font-size: 24px; display: block; margin-bottom: 2px; }
-.s-btn:active { background: #e5e5e5; }
+.s-btn .ico { font-size:24px; display:block; margin-bottom:2px; }
+.s-btn:active { background:#e5e5e5; }
+.s-btn.on { background:#fff0f0; border-color:#ffaaaa; color:#cc0000; }
+.s-btn.hi { background:#eef4ff; border-color:#99bbff; color:#0044cc; }
 
-.s-btn.on {
-  background: #fff0f0;
-  border-color: #ffaaaa;
-  color: #cc0000;
-}
-.s-btn.hi {
-  background: #eef4ff;
-  border-color: #99bbff;
-  color: #0044cc;
-}
+.s-slider-row { margin-top:10px; display:none; }
+.s-slider-row input { width:100%; }
 
-/* CS透過度スライダー */
-.s-slider-row {
-  margin-top: 10px;
-  display: none;
-}
-.s-slider-row input { width: 100%; }
-
-/* ===== 記録中インジケーター ===== */
 #recBadge {
-  position: fixed;
-  top: 12px; left: 50%;
-  transform: translateX(-50%);
-  background: rgba(200,0,0,0.85);
-  color: white;
-  padding: 5px 14px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-family: sans-serif;
-  z-index: 9998;
-  display: none;
-  pointer-events: none;
+  position:fixed; top:12px; left:50%; transform:translateX(-50%);
+  background:rgba(200,0,0,0.85); color:white;
+  padding:5px 14px; border-radius:20px;
+  font-size:12px; font-family:sans-serif;
+  z-index:9998; display:none; pointer-events:none;
 }
-
-/* ===== キャッシュ進捗 ===== */
 #cacheBar {
-  position: fixed;
-  top: 0; left: 0;
-  height: 4px;
-  background: #0066ff;
-  z-index: 99999;
-  display: none;
-  width: 0%;
-  transition: width 0.2s;
+  position:fixed; top:0; left:0;
+  height:4px; background:#0066ff;
+  z-index:99999; display:none; width:0%;
+  transition:width 0.2s;
 }
-
-/* ===== トースト ===== */
 #toast {
-  position: fixed;
-  left: 50%; bottom: 60px;
-  transform: translateX(-50%);
-  background: rgba(0,0,0,0.75);
-  color: white;
-  padding: 8px 14px;
-  border-radius: 10px;
-  font-size: 12px;
-  z-index: 10000;
-  display: none;
-  white-space: nowrap;
+  position:fixed; left:50%; bottom:60px; transform:translateX(-50%);
+  background:rgba(0,0,0,0.75); color:white;
+  padding:8px 14px; border-radius:10px;
+  font-size:12px; z-index:10000; display:none; white-space:nowrap;
 }
 </style>
 </head>
@@ -153,10 +105,10 @@ html, body { height:100%; margin:0; }
 <div id="recBadge">● REC</div>
 
 <input id="geojsonInput" type="file" accept=".geojson,.json" style="display:none">
+<input id="gpkgInput"    type="file" accept=".gpkg"          style="display:none">
 <input id="cameraInput"  type="file" accept="image/*" capture="environment" style="display:none">
 <input id="geotiffInput" type="file" accept=".tif,.tiff,.geotiff" style="display:none">
 
-<!-- ===== Bottom Sheet ===== -->
 <div id="bottomSheet">
   <div id="sheetHandle"></div>
   <div id="sheetContent">
@@ -200,23 +152,26 @@ html, body { height:100%; margin:0; }
       </div>
     </div>
 
-    <!-- GeoJSON -->
+    <!-- ベクタデータ -->
     <div class="s-section">
-      <div class="s-title">GeoJSON</div>
+      <div class="s-title">ベクタデータ</div>
       <div class="s-grid">
         <button class="s-btn" id="btnPickGeojson">
-          <span class="ico">📂</span>選択
+          <span class="ico">📂</span>GeoJSON
         </button>
-        <button class="s-btn" id="btnJumpGeojson">
+        <button class="s-btn" id="btnPickGpkg">
+          <span class="ico">📦</span>GPKG
+        </button>
+        <button class="s-btn" id="btnJumpVector">
           <span class="ico">🎯</span>ジャンプ
         </button>
-        <button class="s-btn" id="btnClearGeojson">
+        <button class="s-btn" id="btnClearVector">
           <span class="ico">🗑️</span>クリア
         </button>
       </div>
     </div>
 
-    <!-- GeoTIFF -->
+    <!-- GeoTIFF・オフライン -->
     <div class="s-section">
       <div class="s-title">GeoTIFF・オフライン</div>
       <div class="s-grid">
@@ -271,15 +226,13 @@ const sheet=document.getElementById('bottomSheet');
 let sheetOpen=false;
 function openSheet(){ sheetOpen=true; sheet.classList.add('open'); }
 function closeSheet(){ sheetOpen=false; sheet.classList.remove('open'); }
-
-document.getElementById('sheetHandle').addEventListener('click',()=>{ sheetOpen?closeSheet():openSheet(); });
+document.getElementById('sheetHandle').addEventListener('click',()=>sheetOpen?closeSheet():openSheet());
 document.getElementById('map').addEventListener('click',()=>{ if(sheetOpen) closeSheet(); });
 
 /* =========================
    Map
 ========================= */
 const map=L.map('map',{maxZoom:22}).setView([36.2,138.0],12);
-
 const gsiStd=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
   {maxNativeZoom:18,maxZoom:22,attribution:'© 地理院'});
 const gsiPhoto=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',
@@ -377,24 +330,20 @@ function updateTrackUI(){
   const btn=document.getElementById('btnRecord');
   if(recording){
     btn.innerHTML='<span class="ico">⏹️</span>記録停止';
-    btn.classList.add('on');
-    recBadge.style.display='block';
+    btn.classList.add('on'); recBadge.style.display='block';
   } else {
     btn.innerHTML='<span class="ico">🔴</span>記録開始';
-    btn.classList.remove('on');
-    recBadge.style.display='none';
+    btn.classList.remove('on'); recBadge.style.display='none';
   }
   document.getElementById('btnExportTrack').style.display=has?'':'none';
   document.getElementById('btnClearTrack').style.display=has?'':'none';
 }
-
 function addTrackPoint(lat,lng){
   trackPoints.push({lat,lng,time:new Date().toISOString()});
   const ll=trackPoints.map(p=>[p.lat,p.lng]);
   if(!trackLine){ trackLine=L.polyline(ll,{color:'#ff6600',weight:4,opacity:0.85}).addTo(map); }
   else { trackLine.setLatLngs(ll); }
 }
-
 document.getElementById('btnRecord').onclick=()=>{
   recording=!recording;
   toast(recording?'軌跡記録を開始しました':'軌跡記録を停止しました',2000);
@@ -423,37 +372,193 @@ document.getElementById('btnClearTrack').onclick=()=>{
 updateTrackUI();
 
 /* =========================
-   GeoJSON
+   ベクタレイヤー共通（GeoJSON / GPKG）
 ========================= */
-const geojsonInput=document.getElementById('geojsonInput');
 const gjGroup=L.featureGroup().addTo(map);
 
+function makeVectorLayer(geojson){
+  return L.geoJSON(geojson,{
+    style:()=>({color:'#ff0066',weight:2,fillOpacity:0.2}),
+    onEachFeature:(ft,l)=>l.on('click',e=>{
+      L.popup({maxWidth:360,autoPan:true}).setLatLng(e.latlng).setContent(propsToHtml(ft.properties)).openOn(map);
+    })
+  });
+}
+
+document.getElementById('btnJumpVector').onclick=()=>{
+  if(!gjGroup.getLayers().length){ toast('データなし'); return; }
+  map.fitBounds(gjGroup.getBounds().pad(0.1)); closeSheet();
+};
+document.getElementById('btnClearVector').onclick=()=>{
+  gjGroup.clearLayers(); map.closePopup(); toast('ベクタデータをクリア'); closeSheet();
+};
+
+/* --- GeoJSON --- */
+const geojsonInput=document.getElementById('geojsonInput');
 document.getElementById('btnPickGeojson').onclick=()=>{ geojsonInput.value=''; geojsonInput.click(); closeSheet(); };
-document.getElementById('btnJumpGeojson').onclick=()=>{
-  if(!gjGroup.getLayers().length){ toast('GeoJSONなし'); return; }
-  map.fitBounds(gjGroup.getBounds().pad(0.15)); closeSheet();
-};
-document.getElementById('btnClearGeojson').onclick=()=>{
-  gjGroup.clearLayers(); map.closePopup(); toast('GeoJSON クリア'); closeSheet();
-};
 geojsonInput.onchange=()=>{
   const f=geojsonInput.files[0]; if(!f) return;
   const r=new FileReader();
   r.onload=()=>{
     try{
-      const layer=L.geoJSON(JSON.parse(r.result),{
-        style:()=>({color:'#ff0066',weight:2,fillOpacity:0.2}),
-        onEachFeature:(ft,l)=>l.on('click',e=>{
-          L.popup({maxWidth:360,autoPan:true}).setLatLng(e.latlng).setContent(propsToHtml(ft.properties)).openOn(map);
-        })
-      });
-      gjGroup.addLayer(layer);
-      map.fitBounds(gjGroup.getBounds().pad(0.15));
+      gjGroup.addLayer(makeVectorLayer(JSON.parse(r.result)));
+      map.fitBounds(gjGroup.getBounds().pad(0.1));
       toast('GeoJSON 読み込み完了');
     } catch{ toast('GeoJSONの読み込みに失敗しました'); }
   };
   r.readAsText(f);
 };
+
+/* =========================
+   GPKG（GeoPackage）読み込み
+   sql.js は初回使用時に遅延ロード
+========================= */
+const SQLJS_CDN='https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/';
+let _SQL=null;
+
+async function getSqlJs(){
+  if(_SQL) return _SQL;
+  await new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src=SQLJS_CDN+'sql-wasm.js';
+    s.onload=res; s.onerror=rej;
+    document.head.appendChild(s);
+  });
+  _SQL=await initSqlJs({ locateFile:f=>SQLJS_CDN+f });
+  return _SQL;
+}
+
+/* GeoPackage WKB ヘッダーをスキップして標準WKBを返す */
+function gpkgGeomToWKB(u8){
+  if(u8[0]!==0x47||u8[1]!==0x50) return u8; // magic "GP" なければそのまま
+  const flags=u8[3];
+  const isEmpty=(flags>>4)&1;
+  if(isEmpty) return null;
+  const envType=(flags>>1)&7;
+  const envBytes=[0,32,48,48,64][envType]||0;
+  return u8.subarray(8+envBytes); // WKB開始位置
+}
+
+/* WKBパーサー（Point/LineString/Polygon/Multi系対応） */
+function parseWKB(u8, off=0){
+  const v=new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const le=v.getUint8(off)===1; off++;
+  const rawType=v.getUint32(off,le); off+=4;
+
+  // Z/M付きタイプ (1001-1007, 2001-2007, 3001-3007) を基本タイプに正規化
+  const base=rawType%1000 || rawType;
+  // 座標がXYZかどうか（Z付きの場合は8バイト余分）
+  const hasZ=(rawType>1000&&rawType<4000)||((rawType&0x80000000)!==0);
+  const ptBytes=hasZ?24:16;
+
+  function readPt(){
+    const x=v.getFloat64(off,le), y=v.getFloat64(off+8,le);
+    off+=ptBytes; return [x,y];
+  }
+  function readPts(n){ const a=[]; for(let i=0;i<n;i++) a.push(readPt()); return a; }
+  function readRing(){ const n=v.getUint32(off,le); off+=4; return readPts(n); }
+
+  switch(base){
+    case 1:{
+      const c=readPt();
+      return {geom:{type:'Point',coordinates:c}, off};
+    }
+    case 2:{
+      const n=v.getUint32(off,le); off+=4;
+      return {geom:{type:'LineString',coordinates:readPts(n)}, off};
+    }
+    case 3:{
+      const rc=v.getUint32(off,le); off+=4;
+      const rings=[]; for(let r=0;r<rc;r++) rings.push(readRing());
+      return {geom:{type:'Polygon',coordinates:rings}, off};
+    }
+    case 4: case 5: case 6:{
+      const tnames={4:'MultiPoint',5:'MultiLineString',6:'MultiPolygon'};
+      const gc=v.getUint32(off,le); off+=4;
+      const geoms=[];
+      for(let i=0;i<gc;i++){
+        const r=parseWKB(u8,off); if(!r) break;
+        geoms.push(r.geom); off=r.off;
+      }
+      return {geom:{type:tnames[base],geometries:geoms}, off};
+    }
+    case 7:{
+      const gc=v.getUint32(off,le); off+=4;
+      const geoms=[];
+      for(let i=0;i<gc;i++){
+        const r=parseWKB(u8,off); if(!r) break;
+        geoms.push(r.geom); off=r.off;
+      }
+      return {geom:{type:'GeometryCollection',geometries:geoms}, off};
+    }
+    default: return null;
+  }
+}
+
+async function loadGPKG(file){
+  toast('GPKG読み込み中（初回はsql.jsをDL）...', 20000);
+  try{
+    const SQL=await getSqlJs();
+    const buf=await file.arrayBuffer();
+    const db=new SQL.Database(new Uint8Array(buf));
+
+    // フィーチャーテーブル一覧
+    const res=db.exec("SELECT table_name FROM gpkg_contents WHERE data_type='features'");
+    if(!res.length||!res[0].values.length){
+      toast('フィーチャーテーブルが見つかりません'); db.close(); return;
+    }
+
+    let total=0;
+    for(const [tbl] of res[0].values){
+      // ジオメトリ列名
+      const gc=db.exec(`SELECT column_name FROM gpkg_geometry_columns WHERE table_name='${tbl}'`);
+      if(!gc.length) continue;
+      const geomCol=gc[0].values[0][0];
+
+      // 全フィーチャー取得
+      const rows=db.exec(`SELECT * FROM "${tbl}"`);
+      if(!rows.length) continue;
+      const {columns,values}=rows[0];
+      const gi=columns.indexOf(geomCol);
+
+      const features=[];
+      for(const row of values){
+        const raw=row[gi];
+        if(!raw) continue;
+        const wkb=gpkgGeomToWKB(raw instanceof Uint8Array?raw:new Uint8Array(raw));
+        if(!wkb) continue;
+        let geom;
+        try{ const r=parseWKB(wkb,0); geom=r&&r.geom; } catch{ continue; }
+        if(!geom) continue;
+        const props={};
+        columns.forEach((c,i)=>{ if(i!==gi) props[c]=row[i]; });
+        features.push({type:'Feature',geometry:geom,properties:props});
+      }
+
+      if(features.length){
+        gjGroup.addLayer(makeVectorLayer({type:'FeatureCollection',features}));
+        total+=features.length;
+      }
+    }
+    db.close();
+
+    if(total){
+      map.fitBounds(gjGroup.getBounds().pad(0.1));
+      toast(`GPKG読込完了（${total}フィーチャー）`,3000);
+    } else {
+      toast('フィーチャーが見つかりませんでした');
+    }
+  } catch(e){
+    toast('GPKG読み込み失敗',3000); console.error(e);
+  }
+}
+
+const gpkgInput=document.getElementById('gpkgInput');
+document.getElementById('btnPickGpkg').onclick=()=>{ gpkgInput.value=''; gpkgInput.click(); closeSheet(); };
+gpkgInput.addEventListener('change',()=>{
+  const f=gpkgInput.files[0]; if(!f) return;
+  loadGPKG(f);
+});
 
 /* =========================
    GeoTIFF
@@ -464,7 +569,7 @@ let geotiffLayer=null, geotiffBounds=null;
 document.getElementById('btnPickGeotiff').onclick=()=>{ geotiffInput.value=''; geotiffInput.click(); closeSheet(); };
 geotiffInput.addEventListener('change',async()=>{
   const file=geotiffInput.files[0]; if(!file) return;
-  toast('GeoTIFF 読み込み中...',15000);
+  toast('GeoTIFF読み込み中...',15000);
   try{
     const georaster=await parseGeoraster(await file.arrayBuffer());
     if(geotiffLayer) map.removeLayer(geotiffLayer);
@@ -472,16 +577,14 @@ geotiffInput.addEventListener('change',async()=>{
     geotiffLayer.addTo(map);
     geotiffBounds=geotiffLayer.getBounds();
     map.fitBounds(geotiffBounds);
-    toast(`GeoTIFF 表示完了（${file.name}）`,3000);
-  } catch(e){
-    toast('GeoTIFF 読み込み失敗',3000); console.error(e);
-  }
+    toast(`GeoTIFF表示完了（${file.name}）`,3000);
+  } catch(e){ toast('GeoTIFF読み込み失敗',3000); console.error(e); }
   updateGeotiffUI();
 });
 document.getElementById('btnClearGeotiff').onclick=()=>{
   if(geotiffLayer){ map.removeLayer(geotiffLayer); geotiffLayer=null; }
   geotiffBounds=null; updateGeotiffUI();
-  toast('GeoTIFF クリア'); closeSheet();
+  toast('GeoTIFFクリア'); closeSheet();
 };
 function updateGeotiffUI(){
   const has=!!geotiffBounds;
@@ -500,30 +603,13 @@ const TILE_TPLS=[
   'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',
   'https://tile.geospatial.jp/CS/VER2/{z}/{x}/{y}.png',
 ];
-
-function toTile(lat,lng,z){
-  const n=1<<z;
-  return {x:Math.floor((lng+180)/360*n), y:Math.floor((1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n)};
-}
-function tileCount(b){
-  let n=0;
-  for(let z=CACHE_MIN_Z;z<=CACHE_MAX_Z;z++){
-    const sw=toTile(b.getSouth(),b.getWest(),z), ne=toTile(b.getNorth(),b.getEast(),z);
-    n+=(ne.x-sw.x+1)*(sw.y-ne.y+1);
-  }
-  return n*TILE_TPLS.length;
-}
-function* tileUrls(b){
-  for(let z=CACHE_MIN_Z;z<=CACHE_MAX_Z;z++){
-    const sw=toTile(b.getSouth(),b.getWest(),z), ne=toTile(b.getNorth(),b.getEast(),z);
-    for(let x=sw.x;x<=ne.x;x++) for(let y=ne.y;y<=sw.y;y++) for(const t of TILE_TPLS)
-      yield t.replace('{z}',z).replace('{x}',x).replace('{y}',y);
-  }
-}
+function toTile(lat,lng,z){ const n=1<<z; return {x:Math.floor((lng+180)/360*n),y:Math.floor((1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n)}; }
+function tileCount(b){ let n=0; for(let z=CACHE_MIN_Z;z<=CACHE_MAX_Z;z++){ const sw=toTile(b.getSouth(),b.getWest(),z),ne=toTile(b.getNorth(),b.getEast(),z); n+=(ne.x-sw.x+1)*(sw.y-ne.y+1); } return n*TILE_TPLS.length; }
+function* tileUrls(b){ for(let z=CACHE_MIN_Z;z<=CACHE_MAX_Z;z++){ const sw=toTile(b.getSouth(),b.getWest(),z),ne=toTile(b.getNorth(),b.getEast(),z); for(let x=sw.x;x<=ne.x;x++) for(let y=ne.y;y<=sw.y;y++) for(const t of TILE_TPLS) yield t.replace('{z}',z).replace('{x}',x).replace('{y}',y); } }
 
 document.getElementById('btnCacheArea').onclick=async()=>{
   if(!geotiffBounds){ toast('まずGeoTIFFを読み込んでください'); return; }
-  if(!('caches' in window)){ toast('このブラウザはキャッシュAPIに非対応です'); return; }
+  if(!('caches' in window)){ toast('このブラウザはキャッシュAPIに非対応'); return; }
   const total=tileCount(geotiffBounds);
   if(!confirm(`約${total}枚のタイルをキャッシュします\n（約${Math.round(total*35/1024)}MB想定）\n続行しますか？`)) return;
   closeSheet();
