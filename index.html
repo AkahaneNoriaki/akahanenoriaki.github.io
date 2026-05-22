@@ -95,6 +95,14 @@ html, body { height:100%; margin:0; }
   padding:8px 14px; border-radius:10px;
   font-size:12px; z-index:10000; display:none; white-space:nowrap;
 }
+#measureBadge {
+  position:fixed; top:12px; left:50%; transform:translateX(-50%);
+  background:rgba(0,68,204,0.88); color:white;
+  padding:6px 18px; border-radius:20px;
+  font-size:13px; font-family:sans-serif; font-weight:bold;
+  z-index:9998; display:none; pointer-events:none;
+  white-space:nowrap;
+}
 </style>
 </head>
 
@@ -103,6 +111,7 @@ html, body { height:100%; margin:0; }
 <div id="toast"></div>
 <div id="cacheBar"></div>
 <div id="recBadge">● REC</div>
+<div id="measureBadge"></div>
 
 <input id="geojsonInput" type="file" accept=".geojson,.json" style="display:none">
 <input id="gpkgInput"    type="file" accept=".gpkg"          style="display:none">
@@ -171,6 +180,22 @@ html, body { height:100%; margin:0; }
       </div>
     </div>
 
+    <!-- 計測 -->
+    <div class="s-section">
+      <div class="s-title">計測</div>
+      <div class="s-grid">
+        <button class="s-btn" id="btnMeasure">
+          <span class="ico">📐</span>面積計測
+        </button>
+        <button class="s-btn hi" id="btnMeasureConfirm" style="display:none">
+          <span class="ico">✅</span>確定
+        </button>
+        <button class="s-btn" id="btnMeasureClear" style="display:none">
+          <span class="ico">🗑️</span>計測クリア
+        </button>
+      </div>
+    </div>
+
     <!-- GeoTIFF・オフライン -->
     <div class="s-section">
       <div class="s-title">GeoTIFF・オフライン</div>
@@ -223,11 +248,11 @@ function propsToHtml(props){
    Bottom Sheet
 ========================= */
 const sheet=document.getElementById('bottomSheet');
-let sheetOpen=false;
+let sheetOpen=false, measuring=false;
 function openSheet(){ sheetOpen=true; sheet.classList.add('open'); }
 function closeSheet(){ sheetOpen=false; sheet.classList.remove('open'); }
 document.getElementById('sheetHandle').addEventListener('click',()=>sheetOpen?closeSheet():openSheet());
-document.getElementById('map').addEventListener('click',()=>{ if(sheetOpen) closeSheet(); });
+document.getElementById('map').addEventListener('click',()=>{ if(measuring) return; if(sheetOpen) closeSheet(); });
 
 /* =========================
    Map
@@ -633,6 +658,110 @@ document.getElementById('btnClearCache').onclick=async()=>{
   await caches.delete(TILE_CACHE);
   toast('タイルキャッシュをクリアしました'); closeSheet();
 };
+
+/* =========================
+   面積計測
+========================= */
+let measurePts=[];
+const measureGroup=L.layerGroup().addTo(map);
+let measurePoly=null;
+const measureBadge=document.getElementById('measureBadge');
+
+function sphericalArea(pts){
+  const R=6378137, n=pts.length;
+  if(n<3) return 0;
+  let s=0;
+  for(let i=0;i<n;i++){
+    const a=pts[i], b=pts[(i+1)%n];
+    s+=(b.lng-a.lng)*Math.PI/180*(2+Math.sin(a.lat*Math.PI/180)+Math.sin(b.lat*Math.PI/180));
+  }
+  return Math.abs(s*R*R/2);
+}
+
+function fmtArea(m2){
+  if(m2>=1000000) return `${(m2/1000000).toFixed(3)} km²`;
+  if(m2>=10000) return `${(m2/10000).toFixed(2)} ha`;
+  return `${Math.round(m2).toLocaleString()} m²`;
+}
+
+function redrawMeasure(){
+  if(measurePoly){ measureGroup.removeLayer(measurePoly); measurePoly=null; }
+  if(measurePts.length<2) return;
+  if(measurePts.length>=3){
+    measurePoly=L.polygon(measurePts,{color:'#0044cc',weight:2,fillColor:'#4488ff',fillOpacity:0.18}).addTo(measureGroup);
+  } else {
+    measurePoly=L.polyline(measurePts,{color:'#0044cc',weight:2}).addTo(measureGroup);
+  }
+}
+
+function updateMeasureUI(){
+  const btn=document.getElementById('btnMeasure');
+  const has=measurePts.length>0;
+  const canConfirm=measuring&&measurePts.length>=3;
+  btn.innerHTML=`<span class="ico">${measuring?'⏹️':'📐'}</span>${measuring?'計測終了':'面積計測'}`;
+  btn.classList.toggle('on',measuring);
+  document.getElementById('btnMeasureConfirm').style.display=canConfirm?'':'none';
+  document.getElementById('btnMeasureClear').style.display=has?'':'none';
+  if(measuring&&measurePts.length>=3){
+    measureBadge.textContent='📐 '+fmtArea(sphericalArea(measurePts));
+    measureBadge.style.display='block';
+  } else if(measuring){
+    measureBadge.textContent=`📐 ${measurePts.length}点目 (3点以上で面積計算)`;
+    measureBadge.style.display='block';
+  } else {
+    measureBadge.style.display='none';
+  }
+}
+
+map.on('click',e=>{
+  if(!measuring) return;
+  measurePts.push(e.latlng);
+  L.circleMarker(e.latlng,{radius:5,color:'#0044cc',fillColor:'#4488ff',fillOpacity:1,weight:2}).addTo(measureGroup);
+  redrawMeasure();
+  updateMeasureUI();
+});
+
+document.getElementById('btnMeasure').onclick=()=>{
+  measuring=!measuring;
+  if(measuring){
+    measurePts=[];
+    measureGroup.clearLayers();
+    measurePoly=null;
+    map.closePopup();
+    closeSheet();
+    toast('地図をタップして頂点を追加（3点以上で面積表示）',3000);
+  }
+  updateMeasureUI();
+  if(!measuring) closeSheet();
+};
+
+document.getElementById('btnMeasureConfirm').onclick=()=>{
+  measuring=false;
+  redrawMeasure();
+  const a=sphericalArea(measurePts);
+  const aStr=fmtArea(a);
+  const clat=measurePts.reduce((s,p)=>s+p.lat,0)/measurePts.length;
+  const clng=measurePts.reduce((s,p)=>s+p.lng,0)/measurePts.length;
+  L.popup({closeOnClick:false,autoClose:false})
+    .setLatLng([clat,clng])
+    .setContent(`<div style="text-align:center;font-size:16px;font-weight:bold;padding:4px 0">📐 ${aStr}</div><div style="text-align:center;font-size:11px;color:#666">${measurePts.length}頂点</div>`)
+    .openOn(map);
+  updateMeasureUI();
+  closeSheet();
+  toast(`面積: ${aStr}`,4000);
+};
+
+document.getElementById('btnMeasureClear').onclick=()=>{
+  measuring=false;
+  measurePts=[];
+  measureGroup.clearLayers();
+  measurePoly=null;
+  map.closePopup();
+  updateMeasureUI();
+  toast('計測をクリアしました');
+  closeSheet();
+};
+updateMeasureUI();
 </script>
 </body>
 </html>
