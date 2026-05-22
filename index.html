@@ -249,7 +249,7 @@ function applyBG(){
   map.removeLayer(gsiStd); map.removeLayer(gsiPhoto); map.removeLayer(csLayer);
   if(bgMode==='map'){ gsiStd.addTo(map); csSliderRow.style.display='none'; }
   if(bgMode==='photo'){ gsiPhoto.addTo(map); csSliderRow.style.display='none'; }
-  if(bgMode==='cs'){ gsiStd.addTo(map); csLayer.addTo(map); csSliderRow.style.display=''; }
+  if(bgMode==='cs'){ gsiStd.addTo(map); csLayer.addTo(map); csSliderRow.style.display='block'; }
 }
 document.getElementById('btnBG').onclick=()=>{
   bgMode=bgMode==='cs'?'photo':bgMode==='photo'?'map':'cs';
