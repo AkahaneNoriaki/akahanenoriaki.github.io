@@ -79,6 +79,30 @@ html, body { height:100%; margin:0; }
 .s-slider-row { margin-top:10px; display:none; }
 .s-slider-row input { width:100%; }
 
+/* ─── CRS コントロール ─────────────────────────── */
+.leaflet-control-crs {
+  background: rgba(255,255,255,0.88);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: monospace, sans-serif;
+  color: #333;
+  border: 1px solid rgba(0,0,0,0.18);
+  white-space: nowrap;
+  line-height: 1.5;
+  cursor: default;
+}
+
+/* ─── 共有バッジ ───────────────────────────────── */
+#shareBadge {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+  background: rgba(0, 140, 60, 0.88); color: white;
+  padding: 6px 18px; border-radius: 20px;
+  font-size: 13px; font-family: sans-serif; font-weight: bold;
+  z-index: 9998; display: none; pointer-events: none;
+  white-space: nowrap;
+}
+
 /* ─── バッジ類 ───────────────────────────────── */
 #recBadge {
   position:fixed; top:12px; left:50%; transform:translateX(-50%);
@@ -168,7 +192,8 @@ html, body { height:100%; margin:0; }
     box-shadow: -2px 0 16px rgba(0,0,0,0.10);
   }
   body.sidebar-right #recBadge,
-  body.sidebar-right #measureBadge { left: calc(50% - 100px); }
+  body.sidebar-right #measureBadge,
+  body.sidebar-right #shareBadge { left: calc(50% - 100px); }
   body.sidebar-right #cacheBar { left: 0; right: 200px; width: auto !important; }
 
   /* ボタンを横並び（アイコン＋テキスト）に */
@@ -196,7 +221,7 @@ html, body { height:100%; margin:0; }
   .s-slider-row { margin-top: 6px; }
 
   /* バッジはマップ中央に合わせる */
-  #recBadge, #measureBadge { left: calc(50% + 100px); }
+  #recBadge, #measureBadge, #shareBadge { left: calc(50% + 100px); }
   #cacheBar { left: 200px; }
 }
 </style>
@@ -208,6 +233,7 @@ html, body { height:100%; margin:0; }
 <div id="cacheBar"></div>
 <div id="recBadge">● REC</div>
 <div id="measureBadge"></div>
+<div id="shareBadge">📍 共有したい場所をタップ</div>
 
 <input id="geojsonInput" type="file" accept=".geojson,.json" style="display:none">
 <input id="gpkgInput"    type="file" accept=".gpkg"          style="display:none">
@@ -389,7 +415,7 @@ let sheetOpen=false, measuring='';
 function openSheet(){ if(isPC()) return; sheetOpen=true; sheet.classList.add('open'); }
 function closeSheet(){ if(isPC()) return; sheetOpen=false; sheet.classList.remove('open'); }
 document.getElementById('sheetHandle').addEventListener('click',()=>sheetOpen?closeSheet():openSheet());
-document.getElementById('map').addEventListener('click',()=>{ if(measuring) return; if(sheetOpen) closeSheet(); });
+document.getElementById('map').addEventListener('click',()=>{ if(measuring||sharing) return; if(sheetOpen) closeSheet(); });
 
 /* =========================
    Map
@@ -422,6 +448,21 @@ document.getElementById('btnBG').onclick=()=>{
 applyBG();
 
 /* =========================
+   CRS コントロール
+========================= */
+const CrsControl=L.Control.extend({
+  options:{position:'bottomleft'},
+  onAdd(){
+    const div=L.DomUtil.create('div','leaflet-control-crs');
+    div.title='地図タイルのCRS（GeoTIFF作成時に使用）\n座標表示: WGS84 (EPSG:4326)';
+    div.innerHTML='🌐 EPSG:3857<br><span style="font-size:9px;color:#666">Web Mercator</span>';
+    L.DomEvent.disableClickPropagation(div);
+    return div;
+  }
+});
+new CrsControl().addTo(map);
+
+/* =========================
    Location + Follow
 ========================= */
 let follow=true, me=null;
@@ -451,12 +492,32 @@ btnFollow.onclick=()=>{
 /* =========================
    Share
 ========================= */
-document.getElementById('btnShare').onclick=async()=>{
-  const c=map.getCenter(), z=map.getZoom();
-  const url=`${location.origin}${location.pathname}?lat=${c.lat.toFixed(6)}&lng=${c.lng.toFixed(6)}&z=${z}`;
-  try{ await navigator.clipboard.writeText(url); toast('URLをコピーしました'); }
-  catch{ prompt('このURLをコピーしてください',url); }
-  closeSheet();
+let sharing=false;
+const shareBadge=document.getElementById('shareBadge');
+let _shareLL=null;
+
+window._copyShareUrl=()=>{
+  if(!_shareLL) return;
+  const url=`${location.origin}${location.pathname}?lat=${_shareLL.lat.toFixed(6)}&lng=${_shareLL.lng.toFixed(6)}&z=${map.getZoom()}`;
+  navigator.clipboard.writeText(url).then(()=>toast('URLをコピーしました')).catch(()=>prompt('URLをコピーしてください',url));
+};
+window._webShare=()=>{
+  if(!_shareLL) return;
+  const url=`${location.origin}${location.pathname}?lat=${_shareLL.lat.toFixed(6)}&lng=${_shareLL.lng.toFixed(6)}&z=${map.getZoom()}`;
+  navigator.share({title:'現場確認マップ',url}).catch(()=>{});
+};
+
+document.getElementById('btnShare').onclick=()=>{
+  sharing=!sharing;
+  document.getElementById('btnShare').classList.toggle('on',sharing);
+  if(sharing){
+    shareBadge.style.display='block';
+    closeSheet();
+    toast('共有したい場所をタップ',3000);
+  } else {
+    shareBadge.style.display='none';
+    map.closePopup();
+  }
 };
 
 /* =========================
@@ -833,6 +894,28 @@ function updateMeasureUI(){
 
 // ── マップクリック ────────────────────────────
 map.on('click',e=>{
+  if(sharing){
+    _shareLL=e.latlng;
+    const lat=e.latlng.lat.toFixed(6), lng=e.latlng.lng.toFixed(6);
+    const url=`${location.origin}${location.pathname}?lat=${lat}&lng=${lng}&z=${map.getZoom()}`;
+    const shareBtn=navigator.share
+      ?`<button onclick="window._webShare()" style="flex:1;padding:5px 8px;background:#00aa44;color:white;border:none;border-radius:6px;cursor:pointer;font-size:11px">📤 共有</button>`
+      :'';
+    L.popup({closeOnClick:true,autoClose:true,maxWidth:290})
+      .setLatLng(e.latlng)
+      .setContent(`
+        <div style="font-size:12px;font-weight:bold;margin-bottom:6px">📍 ${lat}, ${lng}</div>
+        <input value="${url}" readonly style="width:100%;font-size:10px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px" onclick="this.select()">
+        <div style="display:flex;gap:5px">
+          <button onclick="window._copyShareUrl()" style="flex:1;padding:5px 8px;background:#0066ff;color:white;border:none;border-radius:6px;cursor:pointer;font-size:11px">📋 コピー</button>
+          ${shareBtn}
+        </div>`)
+      .openOn(map);
+    sharing=false;
+    shareBadge.style.display='none';
+    document.getElementById('btnShare').classList.remove('on');
+    return;
+  }
   if(!measuring) return;
   measurePts.push(e.latlng);
   const color=measuring==='dist'?'#cc6600':'#0044cc';
@@ -908,6 +991,29 @@ updateMeasureUI();
    初期レイアウト適用
 ========================= */
 applyLayout();
+
+/* =========================
+   共有URLパラメータ読み込み
+========================= */
+(()=>{
+  const p=new URLSearchParams(location.search);
+  const lat=parseFloat(p.get('lat')), lng=parseFloat(p.get('lng')), z=parseInt(p.get('z'));
+  if(!isNaN(lat)&&!isNaN(lng)){
+    const zoom=isNaN(z)?16:z;
+    map.setView([lat,lng],zoom,{animate:false});
+    follow=false;
+    document.getElementById('btnFollow').innerHTML='<span class="ico">🚶</span>追従 OFF';
+    document.getElementById('btnFollow').classList.add('on');
+    L.marker([lat,lng],{
+      icon:L.divIcon({
+        html:'<div style="font-size:26px;line-height:1;margin:-24px 0 0 -13px">📍</div>',
+        iconSize:[26,26],iconAnchor:[13,26],className:''
+      })
+    }).addTo(map)
+     .bindPopup(`<div style="font-size:12px;text-align:center">📍 共有ポイント<br><b>${lat.toFixed(6)}, ${lng.toFixed(6)}</b></div>`)
+     .openPopup();
+  }
+})();
 </script>
 </body>
 </html>
