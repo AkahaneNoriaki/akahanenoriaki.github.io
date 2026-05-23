@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>CS立体図 現場確認マップ</title>
+<title>現場確認マップ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -135,21 +135,41 @@ html, body { height:100%; margin:0; }
   #sideHeader {
     display: flex;
     align-items: center;
-    padding: 12px 10px 8px;
+    padding: 10px 10px 8px;
     border-bottom: 1px solid #eee;
     flex-shrink: 0;
     font-family: sans-serif;
+    gap: 6px;
   }
   #sideHeader .app-title {
+    flex: 1;
     font-size: 11px;
     font-weight: bold;
     color: #444;
     line-height: 1.3;
   }
-  #sideHeader .app-sub {
-    font-size: 9px;
-    color: #aaa;
+  #btnSideSwitch {
+    background: none;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 3px 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #888;
+    line-height: 1;
+    flex-shrink: 0;
   }
+  #btnSideSwitch:hover { background: #f0f0f0; }
+
+  /* 右サイドバー */
+  body.sidebar-right #map  { left: 0; right: 200px; }
+  body.sidebar-right #bottomSheet {
+    left: auto; right: 0;
+    box-shadow: -2px 0 16px rgba(0,0,0,0.10);
+  }
+  body.sidebar-right #recBadge,
+  body.sidebar-right #measureBadge { left: calc(50% - 100px); }
+  body.sidebar-right #cacheBar { left: 0; right: 200px; width: auto !important; }
 
   /* ボタンを横並び（アイコン＋テキスト）に */
   .s-section { margin-bottom: 10px; }
@@ -197,10 +217,8 @@ html, body { height:100%; margin:0; }
 <div id="bottomSheet">
   <!-- PC時はサイドバーヘッダー（スマホ時は非表示） -->
   <div id="sideHeader" style="display:none">
-    <div>
-      <div class="app-title">CS立体図</div>
-      <div class="app-sub">現場確認マップ</div>
-    </div>
+    <div class="app-title">現場確認マップ</div>
+    <button id="btnSideSwitch" title="サイドバーを右へ">⇄</button>
   </div>
 
   <div id="sheetHandle"></div>
@@ -334,10 +352,28 @@ function propsToHtml(props){
 function isPC(){ return window.innerWidth>=768; }
 
 /* =========================
-   PC時にサイドバーヘッダーを表示
+   PC サイドバー左右切替
 ========================= */
+let sidebarSide=localStorage.getItem('sidebarSide')||'left';
+
+function applySidebarSide(){
+  const right=sidebarSide==='right';
+  document.body.classList.toggle('sidebar-right', right);
+  const btn=document.getElementById('btnSideSwitch');
+  if(btn) btn.title=right?'サイドバーを左へ':'サイドバーを右へ';
+}
+
+document.getElementById('btnSideSwitch').onclick=()=>{
+  sidebarSide=sidebarSide==='left'?'right':'left';
+  localStorage.setItem('sidebarSide',sidebarSide);
+  applySidebarSide();
+  map.invalidateSize();
+};
+
 function applyLayout(){
   document.getElementById('sideHeader').style.display=isPC()?'flex':'none';
+  if(isPC()) applySidebarSide();
+  else document.body.classList.remove('sidebar-right');
   map.invalidateSize();
 }
 window.addEventListener('resize', applyLayout);
