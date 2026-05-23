@@ -289,6 +289,9 @@ html, body { height:100%; margin:0; }
         <button class="s-btn" id="btnMeasure">
           <span class="ico">📐</span>面積計測
         </button>
+        <button class="s-btn" id="btnDistMeasure">
+          <span class="ico">📏</span>距離計測
+        </button>
         <button class="s-btn hi" id="btnMeasureConfirm" style="display:none">
           <span class="ico">✅</span>確定
         </button>
@@ -382,7 +385,7 @@ window.addEventListener('resize', applyLayout);
    Bottom Sheet / Sidebar
 ========================= */
 const sheet=document.getElementById('bottomSheet');
-let sheetOpen=false, measuring=false;
+let sheetOpen=false, measuring='';
 function openSheet(){ if(isPC()) return; sheetOpen=true; sheet.classList.add('open'); }
 function closeSheet(){ if(isPC()) return; sheetOpen=false; sheet.classList.remove('open'); }
 document.getElementById('sheetHandle').addEventListener('click',()=>sheetOpen?closeSheet():openSheet());
@@ -747,13 +750,14 @@ document.getElementById('btnClearCache').onclick=async()=>{
 };
 
 /* =========================
-   面積計測
+   計測共通（面積・距離）
 ========================= */
 let measurePts=[];
 const measureGroup=L.layerGroup().addTo(map);
 let measurePoly=null;
 const measureBadge=document.getElementById('measureBadge');
 
+// ── 面積（球面余剰公式）────────────────────────
 function sphericalArea(pts){
   const R=6378137, n=pts.length;
   if(n<3) return 0;
@@ -764,85 +768,135 @@ function sphericalArea(pts){
   }
   return Math.abs(s*R*R/2);
 }
-
 function fmtArea(m2){
   if(m2>=1000000) return `${(m2/1000000).toFixed(3)} km²`;
-  if(m2>=10000) return `${(m2/10000).toFixed(2)} ha`;
+  if(m2>=10000)   return `${(m2/10000).toFixed(2)} ha`;
   return `${Math.round(m2).toLocaleString()} m²`;
 }
 
+// ── 距離（Haversine）─────────────────────────
+function haverDist(a,b){
+  const R=6378137, dLat=(b.lat-a.lat)*Math.PI/180, dLng=(b.lng-a.lng)*Math.PI/180;
+  const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(x));
+}
+function totalDist(pts){
+  let d=0; for(let i=1;i<pts.length;i++) d+=haverDist(pts[i-1],pts[i]); return d;
+}
+function fmtDist(m){
+  if(m>=1000) return `${(m/1000).toFixed(2)} km`;
+  return `${Math.round(m)} m`;
+}
+
+// ── 描画 ─────────────────────────────────────
 function redrawMeasure(){
   if(measurePoly){ measureGroup.removeLayer(measurePoly); measurePoly=null; }
   if(measurePts.length<2) return;
-  if(measurePts.length>=3){
+  if(measuring==='area'&&measurePts.length>=3){
     measurePoly=L.polygon(measurePts,{color:'#0044cc',weight:2,fillColor:'#4488ff',fillOpacity:0.18}).addTo(measureGroup);
   } else {
-    measurePoly=L.polyline(measurePts,{color:'#0044cc',weight:2}).addTo(measureGroup);
+    measurePoly=L.polyline(measurePts,{color:'#cc6600',weight:3}).addTo(measureGroup);
   }
 }
 
+// ── UI更新 ────────────────────────────────────
 function updateMeasureUI(){
-  const btn=document.getElementById('btnMeasure');
+  const btnA=document.getElementById('btnMeasure');
+  const btnD=document.getElementById('btnDistMeasure');
   const has=measurePts.length>0;
-  const canConfirm=measuring&&measurePts.length>=3;
-  btn.innerHTML=`<span class="ico">${measuring?'⏹️':'📐'}</span>${measuring?'計測終了':'面積計測'}`;
-  btn.classList.toggle('on',measuring);
+  const canConfirm=(measuring==='area'&&measurePts.length>=3)||(measuring==='dist'&&measurePts.length>=2);
+
+  btnA.innerHTML=`<span class="ico">${measuring==='area'?'⏹️':'📐'}</span>${measuring==='area'?'計測終了':'面積計測'}`;
+  btnA.classList.toggle('on',measuring==='area');
+  btnD.innerHTML=`<span class="ico">${measuring==='dist'?'⏹️':'📏'}</span>${measuring==='dist'?'計測終了':'距離計測'}`;
+  btnD.classList.toggle('on',measuring==='dist');
+
   document.getElementById('btnMeasureConfirm').style.display=canConfirm?'':'none';
   document.getElementById('btnMeasureClear').style.display=has?'':'none';
-  if(measuring&&measurePts.length>=3){
+
+  if(measuring==='area'&&measurePts.length>=3){
     measureBadge.textContent='📐 '+fmtArea(sphericalArea(measurePts));
     measureBadge.style.display='block';
-  } else if(measuring){
-    measureBadge.textContent=`📐 ${measurePts.length}点目 (3点以上で面積計算)`;
+  } else if(measuring==='area'){
+    measureBadge.textContent=`📐 ${measurePts.length}点目 (3点以上で計算)`;
+    measureBadge.style.display='block';
+  } else if(measuring==='dist'&&measurePts.length>=2){
+    measureBadge.textContent='📏 '+fmtDist(totalDist(measurePts));
+    measureBadge.style.display='block';
+  } else if(measuring==='dist'){
+    measureBadge.textContent=`📏 ${measurePts.length}点目 (2点以上で計算)`;
     measureBadge.style.display='block';
   } else {
     measureBadge.style.display='none';
   }
 }
 
+// ── マップクリック ────────────────────────────
 map.on('click',e=>{
   if(!measuring) return;
   measurePts.push(e.latlng);
-  L.circleMarker(e.latlng,{radius:5,color:'#0044cc',fillColor:'#4488ff',fillOpacity:1,weight:2}).addTo(measureGroup);
+  const color=measuring==='dist'?'#cc6600':'#0044cc';
+  const fill=measuring==='dist'?'#ff9900':'#4488ff';
+  L.circleMarker(e.latlng,{radius:5,color,fillColor:fill,fillOpacity:1,weight:2}).addTo(measureGroup);
   redrawMeasure();
   updateMeasureUI();
 });
 
+// ── 面積計測ボタン ────────────────────────────
 document.getElementById('btnMeasure').onclick=()=>{
-  measuring=!measuring;
+  measuring=measuring==='area'?'':'area';
   if(measuring){
-    measurePts=[];
-    measureGroup.clearLayers();
-    measurePoly=null;
-    map.closePopup();
-    closeSheet();
+    measurePts=[]; measureGroup.clearLayers(); measurePoly=null;
+    map.closePopup(); closeSheet();
     toast('地図をクリックして頂点を追加（3点以上で面積表示）',3000);
   }
   updateMeasureUI();
   if(!measuring) closeSheet();
 };
 
-document.getElementById('btnMeasureConfirm').onclick=()=>{
-  measuring=false;
-  redrawMeasure();
-  const a=sphericalArea(measurePts);
-  const aStr=fmtArea(a);
-  const clat=measurePts.reduce((s,p)=>s+p.lat,0)/measurePts.length;
-  const clng=measurePts.reduce((s,p)=>s+p.lng,0)/measurePts.length;
-  L.popup({closeOnClick:false,autoClose:false})
-    .setLatLng([clat,clng])
-    .setContent(`<div style="text-align:center;font-size:16px;font-weight:bold;padding:4px 0">📐 ${aStr}</div><div style="text-align:center;font-size:11px;color:#666">${measurePts.length}頂点</div>`)
-    .openOn(map);
+// ── 距離計測ボタン ────────────────────────────
+document.getElementById('btnDistMeasure').onclick=()=>{
+  measuring=measuring==='dist'?'':'dist';
+  if(measuring){
+    measurePts=[]; measureGroup.clearLayers(); measurePoly=null;
+    map.closePopup(); closeSheet();
+    toast('地図をクリックして経路点を追加（2点以上で距離表示）',3000);
+  }
   updateMeasureUI();
-  closeSheet();
-  toast(`面積: ${aStr}`,4000);
+  if(!measuring) closeSheet();
 };
 
+// ── 確定 ──────────────────────────────────────
+document.getElementById('btnMeasureConfirm').onclick=()=>{
+  const mode=measuring;
+  measuring='';
+  redrawMeasure();
+  if(mode==='area'){
+    const aStr=fmtArea(sphericalArea(measurePts));
+    const clat=measurePts.reduce((s,p)=>s+p.lat,0)/measurePts.length;
+    const clng=measurePts.reduce((s,p)=>s+p.lng,0)/measurePts.length;
+    L.popup({closeOnClick:false,autoClose:false})
+      .setLatLng([clat,clng])
+      .setContent(`<div style="text-align:center;font-size:16px;font-weight:bold;padding:4px 0">📐 ${aStr}</div><div style="text-align:center;font-size:11px;color:#666">${measurePts.length}頂点</div>`)
+      .openOn(map);
+    toast(`面積: ${aStr}`,4000);
+  } else {
+    const dStr=fmtDist(totalDist(measurePts));
+    const mid=measurePts[Math.floor(measurePts.length/2)];
+    L.popup({closeOnClick:false,autoClose:false})
+      .setLatLng(mid)
+      .setContent(`<div style="text-align:center;font-size:16px;font-weight:bold;padding:4px 0">📏 ${dStr}</div><div style="text-align:center;font-size:11px;color:#666">${measurePts.length-1}区間 / ${measurePts.length}点</div>`)
+      .openOn(map);
+    toast(`距離: ${dStr}`,4000);
+  }
+  updateMeasureUI();
+  closeSheet();
+};
+
+// ── クリア ────────────────────────────────────
 document.getElementById('btnMeasureClear').onclick=()=>{
-  measuring=false;
-  measurePts=[];
-  measureGroup.clearLayers();
-  measurePoly=null;
+  measuring='';
+  measurePts=[]; measureGroup.clearLayers(); measurePoly=null;
   map.closePopup();
   updateMeasureUI();
   toast('計測をクリアしました');
