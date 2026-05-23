@@ -15,6 +15,7 @@
 html, body { height:100%; margin:0; }
 #map { height:100vh; width:100vw; }
 
+/* ─── ボトムシート（スマホ） ─────────────────── */
 #bottomSheet {
   position: fixed;
   left: 0; right: 0; bottom: 0;
@@ -52,6 +53,7 @@ html, body { height:100%; margin:0; }
   -webkit-overflow-scrolling: touch;
 }
 
+/* ─── ボタン共通 ─────────────────────────────── */
 .s-section { margin-bottom: 18px; }
 .s-title { font-size:11px; color:#aaa; letter-spacing:0.5px; margin:0 0 8px 2px; }
 .s-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
@@ -70,12 +72,14 @@ html, body { height:100%; margin:0; }
 }
 .s-btn .ico { font-size:24px; display:block; margin-bottom:2px; }
 .s-btn:active { background:#e5e5e5; }
+.s-btn:hover  { background:#ebebeb; }
 .s-btn.on { background:#fff0f0; border-color:#ffaaaa; color:#cc0000; }
 .s-btn.hi { background:#eef4ff; border-color:#99bbff; color:#0044cc; }
 
 .s-slider-row { margin-top:10px; display:none; }
 .s-slider-row input { width:100%; }
 
+/* ─── バッジ類 ───────────────────────────────── */
 #recBadge {
   position:fixed; top:12px; left:50%; transform:translateX(-50%);
   background:rgba(200,0,0,0.85); color:white;
@@ -103,6 +107,78 @@ html, body { height:100%; margin:0; }
   z-index:9998; display:none; pointer-events:none;
   white-space:nowrap;
 }
+
+/* ─── PC レイアウト (768px 以上) ─────────────── */
+@media (min-width: 768px) {
+  #map {
+    position: fixed;
+    left: 200px; top: 0;
+    width: calc(100vw - 200px);
+    height: 100vh;
+  }
+  #bottomSheet {
+    position: fixed;
+    left: 0; top: 0; bottom: 0; right: auto;
+    width: 200px;
+    height: 100vh;
+    max-height: none;
+    border-radius: 0;
+    box-shadow: 2px 0 16px rgba(0,0,0,0.10);
+    transform: none !important;
+    transition: none;
+    overflow: hidden;
+  }
+  #sheetHandle { display: none; }
+  #sheetContent { padding: 8px 10px 24px; }
+
+  /* サイドバー内タイトル */
+  #sideHeader {
+    display: flex;
+    align-items: center;
+    padding: 12px 10px 8px;
+    border-bottom: 1px solid #eee;
+    flex-shrink: 0;
+    font-family: sans-serif;
+  }
+  #sideHeader .app-title {
+    font-size: 11px;
+    font-weight: bold;
+    color: #444;
+    line-height: 1.3;
+  }
+  #sideHeader .app-sub {
+    font-size: 9px;
+    color: #aaa;
+  }
+
+  /* ボタンを横並び（アイコン＋テキスト）に */
+  .s-section { margin-bottom: 10px; }
+  .s-title { font-size: 9px; margin-bottom: 4px; }
+  .s-grid { grid-template-columns: 1fr; gap: 3px; }
+  .s-btn {
+    padding: 6px 10px;
+    border-radius: 8px;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .s-btn .ico {
+    font-size: 15px;
+    display: inline-block;
+    margin-bottom: 0;
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+  }
+  .s-slider-row { margin-top: 6px; }
+
+  /* バッジはマップ中央に合わせる */
+  #recBadge, #measureBadge { left: calc(50% + 100px); }
+  #cacheBar { left: 200px; }
+}
 </style>
 </head>
 
@@ -119,6 +195,14 @@ html, body { height:100%; margin:0; }
 <input id="geotiffInput" type="file" accept=".tif,.tiff,.geotiff" style="display:none">
 
 <div id="bottomSheet">
+  <!-- PC時はサイドバーヘッダー（スマホ時は非表示） -->
+  <div id="sideHeader" style="display:none">
+    <div>
+      <div class="app-title">CS立体図</div>
+      <div class="app-sub">現場確認マップ</div>
+    </div>
+  </div>
+
   <div id="sheetHandle"></div>
   <div id="sheetContent">
 
@@ -137,7 +221,7 @@ html, body { height:100%; margin:0; }
         </button>
       </div>
       <div class="s-slider-row" id="csSliderRow">
-        <div class="s-title" style="margin-top:8px;">CS立体図 透過度</div>
+        <div class="s-title" style="margin-top:6px;">CS立体図 透過度</div>
         <input id="csOpacity" type="range" min="0" max="100" value="100">
       </div>
     </div>
@@ -245,12 +329,26 @@ function propsToHtml(props){
 }
 
 /* =========================
-   Bottom Sheet
+   PC / スマホ判定
+========================= */
+function isPC(){ return window.innerWidth>=768; }
+
+/* =========================
+   PC時にサイドバーヘッダーを表示
+========================= */
+function applyLayout(){
+  document.getElementById('sideHeader').style.display=isPC()?'flex':'none';
+  map.invalidateSize();
+}
+window.addEventListener('resize', applyLayout);
+
+/* =========================
+   Bottom Sheet / Sidebar
 ========================= */
 const sheet=document.getElementById('bottomSheet');
 let sheetOpen=false, measuring=false;
-function openSheet(){ sheetOpen=true; sheet.classList.add('open'); }
-function closeSheet(){ sheetOpen=false; sheet.classList.remove('open'); }
+function openSheet(){ if(isPC()) return; sheetOpen=true; sheet.classList.add('open'); }
+function closeSheet(){ if(isPC()) return; sheetOpen=false; sheet.classList.remove('open'); }
 document.getElementById('sheetHandle').addEventListener('click',()=>sheetOpen?closeSheet():openSheet());
 document.getElementById('map').addEventListener('click',()=>{ if(measuring) return; if(sheetOpen) closeSheet(); });
 
@@ -436,7 +534,6 @@ geojsonInput.onchange=()=>{
 
 /* =========================
    GPKG（GeoPackage）読み込み
-   sql.js は初回使用時に遅延ロード
 ========================= */
 const SQLJS_CDN='https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/';
 let _SQL=null;
@@ -453,26 +550,21 @@ async function getSqlJs(){
   return _SQL;
 }
 
-/* GeoPackage WKB ヘッダーをスキップして標準WKBを返す */
 function gpkgGeomToWKB(u8){
-  if(u8[0]!==0x47||u8[1]!==0x50) return u8; // magic "GP" なければそのまま
+  if(u8[0]!==0x47||u8[1]!==0x50) return u8;
   const flags=u8[3];
   const isEmpty=(flags>>4)&1;
   if(isEmpty) return null;
   const envType=(flags>>1)&7;
   const envBytes=[0,32,48,48,64][envType]||0;
-  return u8.subarray(8+envBytes); // WKB開始位置
+  return u8.subarray(8+envBytes);
 }
 
-/* WKBパーサー（Point/LineString/Polygon/Multi系対応） */
 function parseWKB(u8, off=0){
   const v=new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
   const le=v.getUint8(off)===1; off++;
   const rawType=v.getUint32(off,le); off+=4;
-
-  // Z/M付きタイプ (1001-1007, 2001-2007, 3001-3007) を基本タイプに正規化
   const base=rawType%1000 || rawType;
-  // 座標がXYZかどうか（Z付きの場合は8バイト余分）
   const hasZ=(rawType>1000&&rawType<4000)||((rawType&0x80000000)!==0);
   const ptBytes=hasZ?24:16;
 
@@ -484,37 +576,21 @@ function parseWKB(u8, off=0){
   function readRing(){ const n=v.getUint32(off,le); off+=4; return readPts(n); }
 
   switch(base){
-    case 1:{
-      const c=readPt();
-      return {geom:{type:'Point',coordinates:c}, off};
-    }
-    case 2:{
-      const n=v.getUint32(off,le); off+=4;
-      return {geom:{type:'LineString',coordinates:readPts(n)}, off};
-    }
-    case 3:{
-      const rc=v.getUint32(off,le); off+=4;
-      const rings=[]; for(let r=0;r<rc;r++) rings.push(readRing());
-      return {geom:{type:'Polygon',coordinates:rings}, off};
-    }
+    case 1:{ const c=readPt(); return {geom:{type:'Point',coordinates:c},off}; }
+    case 2:{ const n=v.getUint32(off,le); off+=4; return {geom:{type:'LineString',coordinates:readPts(n)},off}; }
+    case 3:{ const rc=v.getUint32(off,le); off+=4; const rings=[]; for(let r=0;r<rc;r++) rings.push(readRing()); return {geom:{type:'Polygon',coordinates:rings},off}; }
     case 4: case 5: case 6:{
       const tnames={4:'MultiPoint',5:'MultiLineString',6:'MultiPolygon'};
       const gc=v.getUint32(off,le); off+=4;
       const geoms=[];
-      for(let i=0;i<gc;i++){
-        const r=parseWKB(u8,off); if(!r) break;
-        geoms.push(r.geom); off=r.off;
-      }
-      return {geom:{type:tnames[base],geometries:geoms}, off};
+      for(let i=0;i<gc;i++){ const r=parseWKB(u8,off); if(!r) break; geoms.push(r.geom); off=r.off; }
+      return {geom:{type:tnames[base],geometries:geoms},off};
     }
     case 7:{
       const gc=v.getUint32(off,le); off+=4;
       const geoms=[];
-      for(let i=0;i<gc;i++){
-        const r=parseWKB(u8,off); if(!r) break;
-        geoms.push(r.geom); off=r.off;
-      }
-      return {geom:{type:'GeometryCollection',geometries:geoms}, off};
+      for(let i=0;i<gc;i++){ const r=parseWKB(u8,off); if(!r) break; geoms.push(r.geom); off=r.off; }
+      return {geom:{type:'GeometryCollection',geometries:geoms},off};
     }
     default: return null;
   }
@@ -526,64 +602,39 @@ async function loadGPKG(file){
     const SQL=await getSqlJs();
     const buf=await file.arrayBuffer();
     const db=new SQL.Database(new Uint8Array(buf));
-
-    // フィーチャーテーブル一覧
     const res=db.exec("SELECT table_name FROM gpkg_contents WHERE data_type='features'");
-    if(!res.length||!res[0].values.length){
-      toast('フィーチャーテーブルが見つかりません'); db.close(); return;
-    }
-
+    if(!res.length||!res[0].values.length){ toast('フィーチャーテーブルが見つかりません'); db.close(); return; }
     let total=0;
     for(const [tbl] of res[0].values){
-      // ジオメトリ列名
       const gc=db.exec(`SELECT column_name FROM gpkg_geometry_columns WHERE table_name='${tbl}'`);
       if(!gc.length) continue;
       const geomCol=gc[0].values[0][0];
-
-      // 全フィーチャー取得
       const rows=db.exec(`SELECT * FROM "${tbl}"`);
       if(!rows.length) continue;
       const {columns,values}=rows[0];
       const gi=columns.indexOf(geomCol);
-
       const features=[];
       for(const row of values){
-        const raw=row[gi];
-        if(!raw) continue;
+        const raw=row[gi]; if(!raw) continue;
         const wkb=gpkgGeomToWKB(raw instanceof Uint8Array?raw:new Uint8Array(raw));
         if(!wkb) continue;
         let geom;
         try{ const r=parseWKB(wkb,0); geom=r&&r.geom; } catch{ continue; }
         if(!geom) continue;
-        const props={};
-        columns.forEach((c,i)=>{ if(i!==gi) props[c]=row[i]; });
+        const props={}; columns.forEach((c,i)=>{ if(i!==gi) props[c]=row[i]; });
         features.push({type:'Feature',geometry:geom,properties:props});
       }
-
-      if(features.length){
-        gjGroup.addLayer(makeVectorLayer({type:'FeatureCollection',features}));
-        total+=features.length;
-      }
+      if(features.length){ gjGroup.addLayer(makeVectorLayer({type:'FeatureCollection',features})); total+=features.length; }
     }
     db.close();
-
-    if(total){
-      map.fitBounds(gjGroup.getBounds().pad(0.1));
-      toast(`GPKG読込完了（${total}フィーチャー）`,3000);
-    } else {
-      toast('フィーチャーが見つかりませんでした');
-    }
-  } catch(e){
-    toast('GPKG読み込み失敗',3000); console.error(e);
-  }
+    if(total){ map.fitBounds(gjGroup.getBounds().pad(0.1)); toast(`GPKG読込完了（${total}フィーチャー）`,3000); }
+    else { toast('フィーチャーが見つかりませんでした'); }
+  } catch(e){ toast('GPKG読み込み失敗',3000); console.error(e); }
 }
 
 const gpkgInput=document.getElementById('gpkgInput');
 document.getElementById('btnPickGpkg').onclick=()=>{ gpkgInput.value=''; gpkgInput.click(); closeSheet(); };
-gpkgInput.addEventListener('change',()=>{
-  const f=gpkgInput.files[0]; if(!f) return;
-  loadGPKG(f);
-});
+gpkgInput.addEventListener('change',()=>{ const f=gpkgInput.files[0]; if(!f) return; loadGPKG(f); });
 
 /* =========================
    GeoTIFF
@@ -729,7 +780,7 @@ document.getElementById('btnMeasure').onclick=()=>{
     measurePoly=null;
     map.closePopup();
     closeSheet();
-    toast('地図をタップして頂点を追加（3点以上で面積表示）',3000);
+    toast('地図をクリックして頂点を追加（3点以上で面積表示）',3000);
   }
   updateMeasureUI();
   if(!measuring) closeSheet();
@@ -762,6 +813,11 @@ document.getElementById('btnMeasureClear').onclick=()=>{
   closeSheet();
 };
 updateMeasureUI();
+
+/* =========================
+   初期レイアウト適用
+========================= */
+applyLayout();
 </script>
 </body>
 </html>
