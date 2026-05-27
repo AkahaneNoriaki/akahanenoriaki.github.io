@@ -684,7 +684,7 @@ function parseWKB(u8, off=0){
       const gc=v.getUint32(off,le); off+=4;
       const geoms=[];
       for(let i=0;i<gc;i++){ const r=parseWKB(u8,off); if(!r) break; geoms.push(r.geom); off=r.off; }
-      return {geom:{type:tnames[base],geometries:geoms},off};
+      return {geom:{type:tnames[base],coordinates:geoms.map(g=>g.coordinates)},off};
     }
     case 7:{
       const gc=v.getUint32(off,le); off+=4;
@@ -696,40 +696,77 @@ function parseWKB(u8, off=0){
   }
 }
 
+function reprojectGeom(geom, fromCrs, toCrs){
+  function rePt(c){ const p=proj4(fromCrs,toCrs,[c[0],c[1]]); return [p[0],p[1]]; }
+  function reArr(a, d){ return d===0?rePt(a):a.map(x=>reArr(x,d-1)); }
+  const depths={Point:0,LineString:1,Polygon:2,MultiPoint:1,MultiLineString:2,MultiPolygon:3};
+  if(geom.type==='GeometryCollection')
+    return {...geom,geometries:geom.geometries.map(s=>reprojectGeom(s,fromCrs,toCrs))};
+  const d=depths[geom.type];
+  return d!==undefined?{...geom,coordinates:reArr(geom.coordinates,d)}:geom;
+}
+
 async function loadGPKG(file){
   toast('GPKG読み込み中（初回はsql.jsをDL）...', 20000);
   try{
     const SQL=await getSqlJs();
     const buf=await file.arrayBuffer();
     const db=new SQL.Database(new Uint8Array(buf));
-    const res=db.exec("SELECT table_name FROM gpkg_contents WHERE data_type='features'");
+    let res;
+    try{ res=db.exec("SELECT table_name FROM gpkg_contents WHERE data_type='features'"); }
+    catch(e){ toast(`GPKGフォーマットエラー: ${e.message}`,5000); db.close(); return; }
     if(!res.length||!res[0].values.length){ toast('フィーチャーテーブルが見つかりません'); db.close(); return; }
     let total=0;
     for(const [tbl] of res[0].values){
-      const gc=db.exec(`SELECT column_name FROM gpkg_geometry_columns WHERE table_name='${tbl}'`);
-      if(!gc.length) continue;
-      const geomCol=gc[0].values[0][0];
-      const rows=db.exec(`SELECT * FROM "${tbl}"`);
-      if(!rows.length) continue;
-      const {columns,values}=rows[0];
-      const gi=columns.indexOf(geomCol);
-      const features=[];
-      for(const row of values){
-        const raw=row[gi]; if(!raw) continue;
-        const wkb=gpkgGeomToWKB(raw instanceof Uint8Array?raw:new Uint8Array(raw));
-        if(!wkb) continue;
-        let geom;
-        try{ const r=parseWKB(wkb,0); geom=r&&r.geom; } catch{ continue; }
-        if(!geom) continue;
-        const props={}; columns.forEach((c,i)=>{ if(i!==gi) props[c]=row[i]; });
-        features.push({type:'Feature',geometry:geom,properties:props});
-      }
-      if(features.length){ gjGroup.addLayer(makeVectorLayer({type:'FeatureCollection',features})); total+=features.length; }
+      try{
+        const safe=tbl.replace(/'/g,"''");
+        const gc=db.exec(`SELECT column_name, srs_id FROM gpkg_geometry_columns WHERE table_name='${safe}'`);
+        if(!gc.length) continue;
+        const geomCol=gc[0].values[0][0];
+        const srsId=gc[0].values[0][1];
+
+        // CRS変換が必要か判定
+        let fromCrs=null;
+        if(srsId && srsId!==4326 && srsId!==0){
+          if(srsId===3857){
+            fromCrs='EPSG:3857';
+          } else {
+            try{
+              const srsRes=db.exec(`SELECT definition FROM gpkg_spatial_ref_sys WHERE srs_id=${srsId}`);
+              if(srsRes.length&&srsRes[0].values.length){
+                const def=srsRes[0].values[0][0];
+                if(def&&def.length>10&&!/^undefined/i.test(def)){
+                  proj4.defs(`EPSG:${srsId}`,def);
+                  fromCrs=`EPSG:${srsId}`;
+                }
+              }
+            }catch{}
+          }
+        }
+
+        const rows=db.exec(`SELECT * FROM "${tbl}"`);
+        if(!rows.length) continue;
+        const {columns,values}=rows[0];
+        const gi=columns.indexOf(geomCol);
+        const features=[];
+        for(const row of values){
+          const raw=row[gi]; if(!raw) continue;
+          const wkb=gpkgGeomToWKB(raw instanceof Uint8Array?raw:new Uint8Array(raw));
+          if(!wkb) continue;
+          let geom;
+          try{ const r=parseWKB(wkb,0); geom=r&&r.geom; } catch{ continue; }
+          if(!geom) continue;
+          if(fromCrs){ try{ geom=reprojectGeom(geom,fromCrs,'EPSG:4326'); }catch{} }
+          const props={}; columns.forEach((c,i)=>{ if(i!==gi) props[c]=row[i]; });
+          features.push({type:'Feature',geometry:geom,properties:props});
+        }
+        if(features.length){ gjGroup.addLayer(makeVectorLayer({type:'FeatureCollection',features})); total+=features.length; }
+      } catch(e){ console.warn(`GPKG table "${tbl}":`,e); }
     }
     db.close();
     if(total){ map.fitBounds(gjGroup.getBounds().pad(0.1)); toast(`GPKG読込完了（${total}フィーチャー）`,3000); }
-    else { toast('フィーチャーが見つかりませんでした'); }
-  } catch(e){ toast('GPKG読み込み失敗',3000); console.error(e); }
+    else{ toast('フィーチャーが見つかりませんでした'); }
+  } catch(e){ toast(`GPKG読み込み失敗: ${e.message}`,5000); console.error(e); }
 }
 
 const gpkgInput=document.getElementById('gpkgInput');
