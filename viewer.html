@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>現場確認ビューア</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/proj4/dist/proj4.js"></script>
+<script src="https://unpkg.com/georaster"></script>
+<script src="https://unpkg.com/georaster-layer-for-leaflet/dist/georaster-layer-for-leaflet.min.js"></script>
+<style>
+html, body { height:100%; margin:0; background:#222; }
+#map { height:100vh; width:100vw; }
+
+/* ─── ツールバー ─────────────────────────────── */
+#toolbar {
+  position: fixed; top: 12px; right: 12px;
+  z-index: 9000;
+  display: flex; flex-direction: column; gap: 6px;
+  font-family: sans-serif;
+}
+.tb-btn {
+  background: rgba(255,255,255,0.93);
+  border: 1px solid rgba(0,0,0,0.18);
+  border-radius: 10px;
+  padding: 7px 13px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  transition: background 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.tb-btn:hover  { background: #fff; }
+.tb-btn:active { background: #eee; }
+.tb-btn.on { background: #fff0f0; border-color: #ffaaaa; color: #cc0000; }
+
+/* ─── ドロップゾーン ─────────────────────────── */
+#dropZone {
+  position: fixed; inset: 0;
+  z-index: 10000;
+  background: rgba(0,80,200,0.18);
+  border: 4px dashed rgba(0,80,200,0.6);
+  display: none;
+  align-items: center; justify-content: center;
+  font-size: 22px; font-family: sans-serif;
+  color: #0044cc; font-weight: bold;
+  pointer-events: none;
+}
+#dropZone.active { display: flex; }
+
+/* ─── レイヤーパネル ─────────────────────────── */
+#layerPanel {
+  position: fixed; top: 12px; left: 12px;
+  z-index: 9000;
+  background: rgba(255,255,255,0.93);
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-family: sans-serif; font-size: 12px;
+  min-width: 160px; max-width: 220px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  display: none;
+}
+#layerPanel .lp-title {
+  font-size: 10px; color: #aaa; letter-spacing: 0.5px; margin-bottom: 8px;
+}
+.lp-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 0; cursor: pointer;
+}
+.lp-item input { cursor: pointer; flex-shrink: 0; }
+.lp-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.lp-item .lp-del {
+  flex-shrink: 0; background: none; border: none;
+  color: #bbb; cursor: pointer; font-size: 13px; padding: 0 2px;
+  line-height: 1;
+}
+.lp-item .lp-del:hover { color: #cc0000; }
+
+/* ─── トースト ───────────────────────────────── */
+#toast {
+  position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%);
+  background: rgba(0,0,0,0.75); color: white;
+  padding: 8px 16px; border-radius: 10px;
+  font-size: 12px; font-family: sans-serif;
+  z-index: 10001; display: none; white-space: nowrap;
+}
+
+/* ─── 空状態ヒント ───────────────────────────── */
+#hint {
+  position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+  color: rgba(255,255,255,0.55); font-size: 13px; font-family: sans-serif;
+  text-align: center; pointer-events: none; z-index: 8000;
+  transition: opacity 0.3s;
+}
+
+/* ─── CRS コントロール ─────────────────────────── */
+.leaflet-control-crs {
+  background: rgba(255,255,255,0.88);
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: monospace, sans-serif;
+  color: #333;
+  border: 1px solid rgba(0,0,0,0.18);
+  white-space: nowrap;
+  line-height: 1.5;
+  cursor: default;
+}
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="toast"></div>
+<div id="dropZone">📂 ここにドロップして読み込む</div>
+
+<div id="hint">
+  GeoJSON / GPKG / GeoTIFF をドラッグ&amp;ドロップ<br>
+  またはファイルを選択して読み込む
+</div>
+
+<!-- ツールバー -->
+<div id="toolbar">
+  <button class="tb-btn" id="btnBG">🗺️ 背景切替</button>
+  <button class="tb-btn" id="btnOpen">📂 ファイルを開く</button>
+  <button class="tb-btn" id="btnFit" style="display:none">🎯 全体表示</button>
+  <button class="tb-btn" id="btnShare">🔗 この場所を共有</button>
+  <a class="tb-btn" href="index.html" style="text-decoration:none;color:inherit">🛠️ 現場マップへ</a>
+</div>
+
+<!-- レイヤーパネル -->
+<div id="layerPanel">
+  <div class="lp-title">レイヤー</div>
+  <div id="layerList"></div>
+</div>
+
+<!-- ファイル入力 -->
+<input id="fileInput" type="file" accept=".geojson,.json,.gpkg,.tif,.tiff,.geotiff" multiple style="display:none">
+
+<script>
+/* =========================
+   util
+========================= */
+function toast(msg, ms=2500){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.style.display='block';
+  clearTimeout(t._t); t._t=setTimeout(()=>t.style.display='none',ms);
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function propsToHtml(props){
+  if(!props) return '属性なし';
+  const keys=Object.keys(props); if(!keys.length) return '属性なし';
+  return keys.slice(0,40).map(k=>`<div><b>${escapeHtml(k)}</b>: ${escapeHtml(props[k]==null?'':String(props[k]))}</div>`).join('');
+}
+
+/* =========================
+   計測ヘルパー
+========================= */
+function sphericalArea(pts){
+  const R=6378137, n=pts.length; if(n<3) return 0;
+  let s=0;
+  for(let i=0;i<n;i++){
+    const a=pts[i], b=pts[(i+1)%n];
+    s+=(b.lng-a.lng)*Math.PI/180*(2+Math.sin(a.lat*Math.PI/180)+Math.sin(b.lat*Math.PI/180));
+  }
+  return Math.abs(s*R*R/2);
+}
+function haverDist(a,b){
+  const R=6378137, dLat=(b.lat-a.lat)*Math.PI/180, dLng=(b.lng-a.lng)*Math.PI/180;
+  const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(x));
+}
+function totalDist(pts){ let d=0; for(let i=1;i<pts.length;i++) d+=haverDist(pts[i-1],pts[i]); return d; }
+function fmtArea(m2){
+  if(m2>=1000000) return `${(m2/1000000).toFixed(3)} km²`;
+  if(m2>=10000)   return `${(m2/10000).toFixed(2)} ha`;
+  return `${Math.round(m2).toLocaleString()} m²`;
+}
+function fmtDist(m){ return m>=1000?`${(m/1000).toFixed(2)} km`:`${Math.round(m)} m`; }
+function geoJsonPts(coords){ return coords.map(c=>({lat:c[1],lng:c[0]})); }
+function calcGeomMeasure(geom){
+  if(!geom) return null;
+  switch(geom.type){
+    case 'Polygon':
+      return {ico:'📐', val:fmtArea(sphericalArea(geoJsonPts(geom.coordinates[0])))};
+    case 'MultiPolygon':{
+      const a=geom.coordinates.reduce((s,p)=>s+sphericalArea(geoJsonPts(p[0])),0);
+      return {ico:'📐', val:fmtArea(a)};
+    }
+    case 'LineString':
+      return {ico:'📏', val:fmtDist(totalDist(geoJsonPts(geom.coordinates)))};
+    case 'MultiLineString':{
+      const d=geom.coordinates.reduce((s,l)=>s+totalDist(geoJsonPts(l)),0);
+      return {ico:'📏', val:fmtDist(d)};
+    }
+    default: return null;
+  }
+}
+
+/* =========================
+   Map
+========================= */
+const map=L.map('map',{maxZoom:22}).setView([36.2,138.0],10);
+const gsiStd=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
+  {maxNativeZoom:18,maxZoom:22,attribution:'© 地理院'});
+const gsiPhoto=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',
+  {maxNativeZoom:18,maxZoom:22,attribution:'© 地理院（航空写真）'});
+const csLayer=L.tileLayer('https://tile.geospatial.jp/CS/VER2/{z}/{x}/{y}.png',
+  {opacity:1.0,minZoom:8,maxNativeZoom:18,maxZoom:22,attribution:'© 長野県 CS立体図'});
+
+let bgMode='cs';
+function applyBG(){
+  map.removeLayer(gsiStd); map.removeLayer(gsiPhoto); map.removeLayer(csLayer);
+  if(bgMode==='map')   gsiStd.addTo(map);
+  if(bgMode==='photo') gsiPhoto.addTo(map);
+  if(bgMode==='cs'){   gsiStd.addTo(map); csLayer.addTo(map); }
+  document.getElementById('btnBG').textContent=
+    bgMode==='cs'?'🗺️ CS立体図':bgMode==='photo'?'🖼️ 航空写真':'🗺️ 地理院標準';
+}
+document.getElementById('btnBG').onclick=()=>{
+  bgMode=bgMode==='cs'?'photo':bgMode==='photo'?'map':'cs'; applyBG();
+};
+applyBG();
+
+/* CRS コントロール */
+L.Control.extend({
+  options:{position:'bottomleft'},
+  onAdd(){
+    const div=L.DomUtil.create('div','leaflet-control-crs');
+    div.title='地図タイルのCRS（GeoTIFF作成時に使用）\n座標表示: WGS84 (EPSG:4326)';
+    div.innerHTML='🌐 EPSG:3857<br><span style="font-size:9px;color:#666">Web Mercator</span>';
+    L.DomEvent.disableClickPropagation(div);
+    return div;
+  }
+}).prototype.initialize=function(){};
+const _CrsCtrl=L.Control.extend({
+  options:{position:'bottomleft'},
+  onAdd(){
+    const div=L.DomUtil.create('div','leaflet-control-crs');
+    div.title='地図タイルのCRS（GeoTIFF作成時に使用）\n座標表示: WGS84 (EPSG:4326)';
+    div.innerHTML='🌐 EPSG:3857<br><span style="font-size:9px;color:#666">Web Mercator</span>';
+    L.DomEvent.disableClickPropagation(div);
+    return div;
+  }
+});
+new _CrsCtrl().addTo(map);
+
+/* =========================
+   レイヤー管理
+========================= */
+const layers=[];
+
+function makeVectorLayer(geojson, name){
+  const colors=['#e63946','#2a9d8f','#e9c46a','#264653','#f4a261','#6a4c93','#3a86ff'];
+  const color=colors[layers.length%colors.length];
+  const lg=L.geoJSON(geojson,{
+    style:()=>({color,weight:2,fillOpacity:0.2,fillColor:color}),
+    pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:6,color,fillColor:color,fillOpacity:0.85,weight:2}),
+    onEachFeature:(ft,l)=>l.on('click',e=>{
+      const m=calcGeomMeasure(ft.geometry);
+      const mHtml=m
+        ?`<div style="margin-bottom:6px;padding:5px 10px;background:#eef4ff;border-radius:7px;font-size:14px;font-weight:bold;color:#0044cc;text-align:center">${m.ico} ${m.val}</div>`
+        :'';
+      L.popup({maxWidth:360}).setLatLng(e.latlng).setContent(mHtml+propsToHtml(ft.properties)).openOn(map);
+    })
+  });
+  return {lg, name, color, visible:true};
+}
+
+function addLayer(entry, parentGroup){
+  layers.push(entry);
+  entry.lg.addTo(parentGroup||map);
+  renderLayerPanel();
+  updateFitBtn();
+  document.getElementById('hint').style.opacity='0';
+}
+
+function renderLayerPanel(){
+  const panel=document.getElementById('layerPanel');
+  const list=document.getElementById('layerList');
+  panel.style.display=layers.length?'block':'none';
+  list.innerHTML='';
+  layers.forEach((entry,i)=>{
+    const item=document.createElement('div');
+    item.className='lp-item';
+    item.innerHTML=`
+      <input type="checkbox" ${entry.visible?'checked':''}>
+      <span style="color:${entry.color};font-weight:bold">■</span>
+      <span title="${escapeHtml(entry.name)}">${escapeHtml(entry.name)}</span>
+      <button class="lp-del" title="削除">✕</button>`;
+    item.querySelector('input').onchange=ev=>{
+      entry.visible=ev.target.checked;
+      ev.target.checked?map.addLayer(entry.lg):map.removeLayer(entry.lg);
+    };
+    item.querySelector('.lp-del').onclick=()=>{
+      map.removeLayer(entry.lg);
+      layers.splice(i,1);
+      renderLayerPanel();
+      updateFitBtn();
+      if(!layers.length) document.getElementById('hint').style.opacity='1';
+    };
+    list.appendChild(item);
+  });
+}
+
+function updateFitBtn(){
+  document.getElementById('btnFit').style.display=layers.length?'':'none';
+}
+
+document.getElementById('btnFit').onclick=()=>{
+  const visible=layers.filter(e=>e.visible&&e.lg.getBounds);
+  if(!visible.length) return;
+  try{
+    const bounds=visible.reduce((b,e)=>b?b.extend(e.lg.getBounds()):e.lg.getBounds(),null);
+    if(bounds&&bounds.isValid()) map.fitBounds(bounds.pad(0.1));
+  }catch{}
+};
+
+/* =========================
+   ファイル読み込み
+========================= */
+const SQLJS_CDN='https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/';
+let _SQL=null;
+async function getSqlJs(){
+  if(_SQL) return _SQL;
+  await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=SQLJS_CDN+'sql-wasm.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+  _SQL=await initSqlJs({locateFile:f=>SQLJS_CDN+f});
+  return _SQL;
+}
+
+function gpkgGeomToWKB(u8){
+  if(u8[0]!==0x47||u8[1]!==0x50) return u8;
+  const flags=u8[3]; if((flags>>4)&1) return null;
+  const envBytes=[0,32,48,48,64][(flags>>1)&7]||0;
+  return u8.subarray(8+envBytes);
+}
+function parseWKB(u8, off=0){
+  const v=new DataView(u8.buffer,u8.byteOffset,u8.byteLength);
+  const le=v.getUint8(off)===1; off++;
+  const rawType=v.getUint32(off,le); off+=4;
+  const base=rawType%1000||rawType;
+  const hasZ=(rawType>1000&&rawType<4000)||((rawType&0x80000000)!==0);
+  const ptBytes=hasZ?24:16;
+  function readPt(){ const x=v.getFloat64(off,le),y=v.getFloat64(off+8,le); off+=ptBytes; return [x,y]; }
+  function readPts(n){ const a=[]; for(let i=0;i<n;i++) a.push(readPt()); return a; }
+  function readRing(){ const n=v.getUint32(off,le); off+=4; return readPts(n); }
+  switch(base){
+    case 1:{ const c=readPt(); return {geom:{type:'Point',coordinates:c},off}; }
+    case 2:{ const n=v.getUint32(off,le); off+=4; return {geom:{type:'LineString',coordinates:readPts(n)},off}; }
+    case 3:{ const rc=v.getUint32(off,le); off+=4; const rings=[]; for(let r=0;r<rc;r++) rings.push(readRing()); return {geom:{type:'Polygon',coordinates:rings},off}; }
+    case 4: case 5: case 6:{
+      const tnames={4:'MultiPoint',5:'MultiLineString',6:'MultiPolygon'};
+      const gc=v.getUint32(off,le); off+=4;
+      const geoms=[]; for(let i=0;i<gc;i++){ const r=parseWKB(u8,off); if(!r) break; geoms.push(r.geom); off=r.off; }
+      return {geom:{type:tnames[base],coordinates:geoms.map(g=>g.coordinates)},off};
+    }
+    case 7:{
+      const gc=v.getUint32(off,le); off+=4;
+      const geoms=[]; for(let i=0;i<gc;i++){ const r=parseWKB(u8,off); if(!r) break; geoms.push(r.geom); off=r.off; }
+      return {geom:{type:'GeometryCollection',geometries:geoms},off};
+    }
+    default: return null;
+  }
+}
+function reprojectGeom(geom,fromCrs,toCrs){
+  function rePt(c){ const p=proj4(fromCrs,toCrs,[c[0],c[1]]); return [p[0],p[1]]; }
+  function reArr(a,d){ return d===0?rePt(a):a.map(x=>reArr(x,d-1)); }
+  const depths={Point:0,LineString:1,Polygon:2,MultiPoint:1,MultiLineString:2,MultiPolygon:3};
+  if(geom.type==='GeometryCollection') return {...geom,geometries:geom.geometries.map(s=>reprojectGeom(s,fromCrs,toCrs))};
+  const d=depths[geom.type];
+  return d!==undefined?{...geom,coordinates:reArr(geom.coordinates,d)}:geom;
+}
+
+async function loadFile(file){
+  const name=file.name;
+  const ext=name.split('.').pop().toLowerCase();
+
+  if(ext==='geojson'||ext==='json'){
+    toast(`${name} 読み込み中...`);
+    const text=await file.text();
+    try{
+      const gj=JSON.parse(text);
+      const entry=makeVectorLayer(gj, name);
+      addLayer(entry);
+      try{ map.fitBounds(entry.lg.getBounds().pad(0.1)); }catch{}
+      toast(`${name} 読み込み完了`);
+    }catch(e){ toast(`GeoJSON読み込み失敗: ${e.message}`,4000); }
+    return;
+  }
+
+  if(ext==='gpkg'){
+    toast(`${name} 読み込み中（初回はsql.jsをDL）...`,20000);
+    try{
+      const SQL=await getSqlJs();
+      const db=new SQL.Database(new Uint8Array(await file.arrayBuffer()));
+      let res;
+      try{ res=db.exec("SELECT table_name FROM gpkg_contents WHERE data_type='features'"); }
+      catch(e){ toast(`GPKGエラー: ${e.message}`,5000); db.close(); return; }
+      if(!res.length||!res[0].values.length){ toast('フィーチャーが見つかりません'); db.close(); return; }
+      let total=0;
+      for(const [tbl] of res[0].values){
+        try{
+          const safe=tbl.replace(/'/g,"''");
+          const gc=db.exec(`SELECT column_name, srs_id FROM gpkg_geometry_columns WHERE table_name='${safe}'`);
+          if(!gc.length) continue;
+          const geomCol=gc[0].values[0][0], srsId=gc[0].values[0][1];
+          let fromCrs=null;
+          if(srsId&&srsId!==4326&&srsId!==0){
+            if(srsId===3857){ fromCrs='EPSG:3857'; }
+            else{ try{ const r=db.exec(`SELECT definition FROM gpkg_spatial_ref_sys WHERE srs_id=${srsId}`); if(r.length&&r[0].values.length){ const def=r[0].values[0][0]; if(def&&def.length>10&&!/^undefined/i.test(def)){ proj4.defs(`EPSG:${srsId}`,def); fromCrs=`EPSG:${srsId}`; } } }catch{} }
+          }
+          const rows=db.exec(`SELECT * FROM "${tbl}"`);
+          if(!rows.length) continue;
+          const {columns,values}=rows[0]; const gi=columns.indexOf(geomCol);
+          const features=[];
+          for(const row of values){
+            const raw=row[gi]; if(!raw) continue;
+            const wkb=gpkgGeomToWKB(raw instanceof Uint8Array?raw:new Uint8Array(raw)); if(!wkb) continue;
+            let geom; try{ const r=parseWKB(wkb,0); geom=r&&r.geom; }catch{ continue; }
+            if(!geom) continue;
+            if(fromCrs){ try{ geom=reprojectGeom(geom,fromCrs,'EPSG:4326'); }catch{} }
+            const props={}; columns.forEach((c,i)=>{ if(i!==gi) props[c]=row[i]; });
+            features.push({type:'Feature',geometry:geom,properties:props});
+          }
+          if(features.length){
+            const entry=makeVectorLayer({type:'FeatureCollection',features}, `${name}/${tbl}`);
+            addLayer(entry); total+=features.length;
+          }
+        }catch(e){ console.warn(`table "${tbl}":`,e); }
+      }
+      db.close();
+      if(total){ try{ const b=layers.filter(e=>e.visible).reduce((b,e)=>b?b.extend(e.lg.getBounds()):e.lg.getBounds(),null); if(b&&b.isValid()) map.fitBounds(b.pad(0.1)); }catch{} toast(`${name} 完了（${total}フィーチャー）`,3000); }
+      else{ toast('フィーチャーが見つかりません'); }
+    }catch(e){ toast(`GPKG失敗: ${e.message}`,5000); console.error(e); }
+    return;
+  }
+
+  if(ext==='tif'||ext==='tiff'||ext==='geotiff'){
+    toast(`${name} 読み込み中...`,15000);
+    try{
+      const gr=await parseGeoraster(await file.arrayBuffer());
+      const gl=new GeoRasterLayer({georaster:gr,opacity:0.75,resolution:256});
+      const entry={lg:gl, name, color:'#888', visible:true};
+      // GeoRasterLayer を直接 map に追加
+      gl.addTo(map);
+      layers.push(entry);
+      renderLayerPanel();
+      updateFitBtn();
+      document.getElementById('hint').style.opacity='0';
+      try{ map.fitBounds(gl.getBounds()); }catch{}
+      toast(`${name} 読み込み完了`,3000);
+    }catch(e){ toast(`GeoTIFF失敗: ${e.message}`,4000); console.error(e); }
+    return;
+  }
+
+  toast(`非対応のファイル形式: .${ext}`,3000);
+}
+
+/* =========================
+   ファイル入力・ドロップ
+========================= */
+const fileInput=document.getElementById('fileInput');
+document.getElementById('btnOpen').onclick=()=>{ fileInput.value=''; fileInput.click(); };
+fileInput.onchange=async()=>{ for(const f of fileInput.files) await loadFile(f); };
+
+const dropZone=document.getElementById('dropZone');
+let dragCount=0;
+document.addEventListener('dragenter',e=>{ e.preventDefault(); dragCount++; dropZone.classList.add('active'); });
+document.addEventListener('dragleave',()=>{ dragCount--; if(dragCount<=0){ dragCount=0; dropZone.classList.remove('active'); } });
+document.addEventListener('dragover',e=>e.preventDefault());
+document.addEventListener('drop',async e=>{
+  e.preventDefault(); dragCount=0; dropZone.classList.remove('active');
+  const files=[...e.dataTransfer.files];
+  for(const f of files) await loadFile(f);
+});
+
+/* =========================
+   共有
+========================= */
+document.getElementById('btnShare').onclick=()=>{
+  const c=map.getCenter(), z=map.getZoom();
+  const url=`${location.origin}${location.pathname}?lat=${c.lat.toFixed(6)}&lng=${c.lng.toFixed(6)}&z=${z}`;
+  navigator.clipboard.writeText(url).then(()=>toast('URLをコピーしました')).catch(()=>prompt('URLをコピーしてください',url));
+};
+
+/* =========================
+   URLパラメータで位置指定
+========================= */
+(()=>{
+  const p=new URLSearchParams(location.search);
+  const lat=parseFloat(p.get('lat')), lng=parseFloat(p.get('lng')), z=parseInt(p.get('z'));
+  if(!isNaN(lat)&&!isNaN(lng)){
+    map.setView([lat,lng],isNaN(z)?14:z,{animate:false});
+  }
+})();
+</script>
+</body>
+</html>
