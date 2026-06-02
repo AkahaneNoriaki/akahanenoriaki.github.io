@@ -599,11 +599,36 @@ updateTrackUI();
 ========================= */
 const gjGroup=L.featureGroup().addTo(map);
 
+function geoJsonPts(coords){ return coords.map(c=>({lat:c[1],lng:c[0]})); }
+
+function calcGeomMeasure(geom){
+  if(!geom) return null;
+  switch(geom.type){
+    case 'Polygon':
+      return {ico:'📐', val:fmtArea(sphericalArea(geoJsonPts(geom.coordinates[0])))};
+    case 'MultiPolygon':{
+      const a=geom.coordinates.reduce((s,poly)=>s+sphericalArea(geoJsonPts(poly[0])),0);
+      return {ico:'📐', val:fmtArea(a)};
+    }
+    case 'LineString':
+      return {ico:'📏', val:fmtDist(totalDist(geoJsonPts(geom.coordinates)))};
+    case 'MultiLineString':{
+      const d=geom.coordinates.reduce((s,line)=>s+totalDist(geoJsonPts(line)),0);
+      return {ico:'📏', val:fmtDist(d)};
+    }
+    default: return null;
+  }
+}
+
 function makeVectorLayer(geojson){
   return L.geoJSON(geojson,{
     style:()=>({color:'#ff0066',weight:2,fillOpacity:0.2}),
     onEachFeature:(ft,l)=>l.on('click',e=>{
-      L.popup({maxWidth:360,autoPan:true}).setLatLng(e.latlng).setContent(propsToHtml(ft.properties)).openOn(map);
+      const m=calcGeomMeasure(ft.geometry);
+      const mHtml=m
+        ?`<div style="margin-bottom:6px;padding:5px 10px;background:#eef4ff;border-radius:7px;font-size:14px;font-weight:bold;color:#0044cc;text-align:center">${m.ico} ${m.val}</div>`
+        :'';
+      L.popup({maxWidth:360,autoPan:true}).setLatLng(e.latlng).setContent(mHtml+propsToHtml(ft.properties)).openOn(map);
     })
   });
 }
