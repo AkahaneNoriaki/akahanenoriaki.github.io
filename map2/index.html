@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>現場マップ</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/georaster"></script>
+<script src="https://unpkg.com/georaster-layer-for-leaflet/dist/georaster-layer-for-leaflet.min.js"></script>
+<style>
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
+#map { position: fixed; inset: 0; height: 100%; width: 100%; }
+
+/* ─── ボトムバー ──────────────────────────── */
+#bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 9000;
+  background: rgba(255,255,255,0.96);
+  border-top: 1px solid rgba(0,0,0,0.10);
+  display: flex;
+  align-items: stretch;
+  padding: 0 4px env(safe-area-inset-bottom) 4px;
+  gap: 2px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.b-btn {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  padding: 8px 6px 6px;
+  background: none;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 10px;
+  color: #333;
+  line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+  gap: 2px;
+}
+.b-btn .ico { font-size: 22px; line-height: 1; }
+.b-btn:active { background: #eee; }
+.b-btn.on  { background: #fff0f0; color: #cc0000; }
+.b-btn.hi  { background: #eef4ff; color: #0044cc; }
+
+/* CS透過スライダー */
+#csSliderWrap {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom) + 72px);
+  left: 50%; transform: translateX(-50%);
+  z-index: 9001;
+  background: rgba(255,255,255,0.93);
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 12px;
+  padding: 8px 14px;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-family: sans-serif;
+  color: #555;
+  min-width: 200px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+}
+#csSlider { width: 180px; }
+
+/* ─── バッジ類 ─────────────────────────────── */
+#recBadge {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+  background: rgba(200,0,0,0.85); color: white;
+  padding: 5px 16px; border-radius: 20px;
+  font-size: 12px; font-family: sans-serif;
+  z-index: 9002; display: none; pointer-events: none;
+}
+#toast {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.75); color: white;
+  padding: 8px 16px; border-radius: 10px;
+  font-size: 12px; font-family: sans-serif;
+  z-index: 10000; display: none; white-space: nowrap;
+}
+
+/* ─── CRS ──────────────────────────────────── */
+.leaflet-control-crs {
+  background: rgba(255,255,255,0.88);
+  padding: 3px 8px; border-radius: 4px;
+  font-size: 10px; font-family: monospace, sans-serif;
+  color: #444; border: 1px solid rgba(0,0,0,0.18);
+  white-space: nowrap; line-height: 1.5; cursor: default;
+}
+
+/* ─── 進捗バー ─────────────────────────────── */
+#cacheBar {
+  position: fixed; top: 0; left: 0;
+  height: 4px; background: #0066ff;
+  z-index: 99999; display: none; width: 0%;
+  transition: width 0.2s;
+}
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="recBadge">● REC</div>
+<div id="toast"></div>
+<div id="cacheBar"></div>
+<div id="csSliderWrap">
+  <span>CS立体図 透過度</span>
+  <input id="csSlider" type="range" min="0" max="100" value="100">
+</div>
+
+<!-- ファイル入力 -->
+<input id="geotiffInput" type="file" accept=".tif,.tiff,.geotiff" style="display:none">
+
+<div id="bar">
+  <!-- 地図 -->
+  <button class="b-btn" id="btnBG">
+    <span class="ico">🗺️</span>CS立体図
+  </button>
+  <button class="b-btn" id="btnCS">
+    <span class="ico">🎚️</span>透過度
+  </button>
+
+  <div style="width:1px;background:#eee;margin:8px 2px;flex-shrink:0"></div>
+
+  <!-- GPS -->
+  <button class="b-btn" id="btnFollow">
+    <span class="ico">🧍</span>追従 ON
+  </button>
+  <button class="b-btn" id="btnRecord">
+    <span class="ico">🔴</span>記録開始
+  </button>
+  <button class="b-btn" id="btnExportTrack" style="display:none">
+    <span class="ico">⬇️</span>GPX保存
+  </button>
+  <button class="b-btn" id="btnClearTrack" style="display:none">
+    <span class="ico">🗑️</span>軌跡削除
+  </button>
+
+  <div style="width:1px;background:#eee;margin:8px 2px;flex-shrink:0"></div>
+
+  <!-- GeoTIFF -->
+  <button class="b-btn" id="btnPickGeotiff">
+    <span class="ico">🛰️</span>GeoTIFF
+  </button>
+  <button class="b-btn" id="btnClearGeotiff" style="display:none">
+    <span class="ico">🗑️</span>GTiff削除
+  </button>
+
+  <div style="width:1px;background:#eee;margin:8px 2px;flex-shrink:0"></div>
+
+  <!-- オフライン -->
+  <button class="b-btn hi" id="btnCacheView">
+    <span class="ico">💾</span>表示域保存
+  </button>
+  <button class="b-btn hi" id="btnCacheGeotiff" style="display:none">
+    <span class="ico">💾</span>GTiff域保存
+  </button>
+  <button class="b-btn" id="btnClearCache">
+    <span class="ico">🧹</span>Cache削除
+  </button>
+</div>
+
+<script>
+/* ── util ─────────────────────────────────── */
+function toast(msg, ms=2500){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.style.display='block';
+  clearTimeout(t._t); t._t=setTimeout(()=>t.style.display='none',ms);
+}
+
+/* ── Map ──────────────────────────────────── */
+const map=L.map('map',{maxZoom:22,zoomControl:false}).setView([36.2,138.0],12);
+L.control.zoom({position:'topright'}).addTo(map);
+
+const gsiStd  =L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
+  {maxNativeZoom:18,maxZoom:22,attribution:'© 地理院'});
+const gsiPhoto=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',
+  {maxNativeZoom:18,maxZoom:22,attribution:'© 地理院（航空写真）'});
+const csLayer =L.tileLayer('https://tile.geospatial.jp/CS/VER2/{z}/{x}/{y}.png',
+  {opacity:1.0,minZoom:8,maxNativeZoom:18,maxZoom:22,attribution:'© 長野県 CS立体図'});
+
+const bgLabels={cs:'CS立体図', photo:'航空写真', map:'地理院標準'};
+let bgMode='cs';
+
+function applyBG(){
+  map.removeLayer(gsiStd); map.removeLayer(gsiPhoto); map.removeLayer(csLayer);
+  if(bgMode==='cs')   { gsiStd.addTo(map); csLayer.addTo(map); }
+  if(bgMode==='photo'){ gsiPhoto.addTo(map); }
+  if(bgMode==='map')  { gsiStd.addTo(map); }
+  document.getElementById('btnBG').querySelector('.ico').textContent=
+    bgMode==='cs'?'🗺️':bgMode==='photo'?'🖼️':'🗺️';
+  document.getElementById('btnBG').lastChild.textContent=bgLabels[bgMode];
+  document.getElementById('btnCS').style.display=bgMode==='cs'?'':'none';
+}
+
+document.getElementById('btnBG').onclick=()=>{
+  bgMode=bgMode==='cs'?'photo':bgMode==='photo'?'map':'cs';
+  applyBG();
+};
+
+/* CS透過スライダー */
+const csSliderWrap=document.getElementById('csSliderWrap');
+const csSlider=document.getElementById('csSlider');
+document.getElementById('btnCS').onclick=()=>{
+  const show=csSliderWrap.style.display==='flex';
+  csSliderWrap.style.display=show?'none':'flex';
+};
+csSlider.addEventListener('input',()=>csLayer.setOpacity(csSlider.value/100));
+
+applyBG();
+
+/* CRS コントロール */
+const _CrsCtrl=L.Control.extend({
+  options:{position:'bottomleft'},
+  onAdd(){
+    const div=L.DomUtil.create('div','leaflet-control-crs');
+    div.title='GeoTIFF作成時はEPSG:3857を使用\n座標: WGS84 (EPSG:4326)';
+    div.innerHTML='🌐 EPSG:3857<br><span style="font-size:9px;color:#666">Web Mercator</span>';
+    L.DomEvent.disableClickPropagation(div);
+    return div;
+  }
+});
+new _CrsCtrl().addTo(map);
+
+/* ── GPS ──────────────────────────────────── */
+let follow=true, me=null;
+let recording=false, trackPoints=[], trackLine=null;
+const recBadge=document.getElementById('recBadge');
+
+if(navigator.geolocation){
+  navigator.geolocation.watchPosition(
+    pos=>{
+      const ll=[pos.coords.latitude, pos.coords.longitude];
+      if(!me){
+        me=L.circleMarker(ll,{radius:9,color:'#0066ff',fillColor:'#3399ff',fillOpacity:0.9,weight:2}).addTo(map);
+      } else {
+        me.setLatLng(ll);
+      }
+      if(follow) map.setView(ll,Math.max(map.getZoom(),16),{animate:true});
+      if(recording){
+        trackPoints.push({lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toISOString()});
+        const lls=trackPoints.map(p=>[p.lat,p.lng]);
+        if(!trackLine){ trackLine=L.polyline(lls,{color:'#ff6600',weight:4,opacity:0.85}).addTo(map); }
+        else { trackLine.setLatLngs(lls); }
+        updateTrackUI();
+      }
+    },
+    err=>toast('現在地エラー: '+err.message, 3000),
+    {enableHighAccuracy:true,maximumAge:1000,timeout:15000}
+  );
+}
+
+const btnFollow=document.getElementById('btnFollow');
+btnFollow.onclick=()=>{
+  follow=!follow;
+  btnFollow.querySelector('.ico').textContent=follow?'🧍':'🚶';
+  btnFollow.lastChild.textContent=`追従 ${follow?'ON':'OFF'}`;
+  btnFollow.classList.toggle('on',!follow);
+  if(follow&&me) map.setView(me.getLatLng(),Math.max(map.getZoom(),16));
+};
+
+function updateTrackUI(){
+  const has=trackPoints.length>0;
+  const btnR=document.getElementById('btnRecord');
+  if(recording){
+    btnR.querySelector('.ico').textContent='⏹️';
+    btnR.lastChild.textContent='記録停止';
+    btnR.classList.add('on'); recBadge.style.display='block';
+  } else {
+    btnR.querySelector('.ico').textContent='🔴';
+    btnR.lastChild.textContent='記録開始';
+    btnR.classList.remove('on'); recBadge.style.display='none';
+  }
+  document.getElementById('btnExportTrack').style.display=has?'':'none';
+  document.getElementById('btnClearTrack').style.display=has?'':'none';
+}
+
+document.getElementById('btnRecord').onclick=()=>{
+  recording=!recording;
+  toast(recording?'軌跡記録を開始しました':'軌跡記録を停止しました');
+  updateTrackUI();
+};
+
+document.getElementById('btnExportTrack').onclick=()=>{
+  if(!trackPoints.length){ toast('データがありません'); return; }
+  const pts=trackPoints.map(p=>`    <trkpt lat="${p.lat}" lon="${p.lng}"><time>${p.time}</time></trkpt>`).join('\n');
+  const gpx=`<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="現場マップ" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk><name>Track ${new Date().toLocaleString('ja-JP')}</name><trkseg>\n${pts}\n  </trkseg></trk>\n</gpx>`;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([gpx],{type:'application/gpx+xml'}));
+  a.download=`track_${new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)}.gpx`;
+  a.click();
+  toast('GPXをダウンロードしました');
+};
+
+document.getElementById('btnClearTrack').onclick=()=>{
+  trackPoints=[];
+  if(trackLine){ map.removeLayer(trackLine); trackLine=null; }
+  updateTrackUI(); toast('軌跡をクリアしました');
+};
+
+updateTrackUI();
+
+/* ── GeoTIFF ──────────────────────────────── */
+const geotiffInput=document.getElementById('geotiffInput');
+let geotiffLayer=null, geotiffBounds=null;
+
+document.getElementById('btnPickGeotiff').onclick=()=>{ geotiffInput.value=''; geotiffInput.click(); };
+geotiffInput.addEventListener('change', async()=>{
+  const file=geotiffInput.files[0]; if(!file) return;
+  toast('GeoTIFF読み込み中...', 15000);
+  try{
+    const gr=await parseGeoraster(await file.arrayBuffer());
+    if(geotiffLayer) map.removeLayer(geotiffLayer);
+    geotiffLayer=new GeoRasterLayer({georaster:gr,opacity:0.75,resolution:256});
+    geotiffLayer.addTo(map);
+    geotiffBounds=geotiffLayer.getBounds();
+    map.fitBounds(geotiffBounds);
+    toast(`GeoTIFF読み込み完了（${file.name}）`,3000);
+  } catch(e){ toast('GeoTIFF読み込み失敗',3000); console.error(e); }
+  updateGeotiffUI();
+});
+
+document.getElementById('btnClearGeotiff').onclick=()=>{
+  if(geotiffLayer){ map.removeLayer(geotiffLayer); geotiffLayer=null; }
+  geotiffBounds=null; updateGeotiffUI(); toast('GeoTIFFをクリアしました');
+};
+
+function updateGeotiffUI(){
+  const has=!!geotiffBounds;
+  document.getElementById('btnClearGeotiff').style.display=has?'':'none';
+  document.getElementById('btnCacheGeotiff').style.display=has?'':'none';
+}
+updateGeotiffUI();
+
+/* ── タイルキャッシュ ─────────────────────── */
+const TILE_CACHE='map2-tiles-v1';
+const CACHE_MIN_Z=10, CACHE_MAX_Z=17;
+const TILE_TPLS=[
+  'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
+  'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',
+  'https://tile.geospatial.jp/CS/VER2/{z}/{x}/{y}.png',
+];
+
+function toTile(lat,lng,z){
+  const n=1<<z;
+  return {x:Math.floor((lng+180)/360*n), y:Math.floor((1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n)};
+}
+function tileCount(b){
+  let n=0;
+  for(let z=CACHE_MIN_Z;z<=CACHE_MAX_Z;z++){
+    const sw=toTile(b.getSouth(),b.getWest(),z), ne=toTile(b.getNorth(),b.getEast(),z);
+    n+=(ne.x-sw.x+1)*(sw.y-ne.y+1);
+  }
+  return n*TILE_TPLS.length;
+}
+function* tileUrls(b){
+  for(let z=CACHE_MIN_Z;z<=CACHE_MAX_Z;z++){
+    const sw=toTile(b.getSouth(),b.getWest(),z), ne=toTile(b.getNorth(),b.getEast(),z);
+    for(let x=sw.x;x<=ne.x;x++) for(let y=ne.y;y<=sw.y;y++)
+      for(const t of TILE_TPLS) yield t.replace('{z}',z).replace('{x}',x).replace('{y}',y);
+  }
+}
+
+async function runCache(bounds){
+  if(!('caches' in window)){ toast('このブラウザはキャッシュ非対応'); return; }
+  const total=tileCount(bounds);
+  if(!confirm(`約${total}枚のタイルをキャッシュします\n（約${Math.round(total*35/1024)}MB想定）\n続行しますか？`)) return;
+  const urls=[...tileUrls(bounds)];
+  const cache=await caches.open(TILE_CACHE);
+  const bar=document.getElementById('cacheBar');
+  bar.style.display='block'; bar.style.width='0%';
+  let done=0;
+  for(let i=0;i<urls.length;i+=8){
+    await Promise.all(urls.slice(i,i+8).map(u=>fetch(u,{mode:'cors'}).then(r=>{if(r.ok)cache.put(u,r);}).catch(()=>{})));
+    done=Math.min(i+8,urls.length);
+    bar.style.width=`${Math.round(done/urls.length*100)}%`;
+    if(done%200===0||done===urls.length) toast(`キャッシュ中 ${done}/${urls.length}`,2000);
+  }
+  bar.style.display='none';
+  toast(`キャッシュ完了（${total}枚）`,4000);
+}
+
+document.getElementById('btnCacheView').onclick=()=>{
+  runCache(map.getBounds());
+};
+document.getElementById('btnCacheGeotiff').onclick=()=>{
+  if(!geotiffBounds){ toast('まずGeoTIFFを読み込んでください'); return; }
+  runCache(geotiffBounds);
+};
+document.getElementById('btnClearCache').onclick=async()=>{
+  if(!('caches' in window)) return;
+  if(!confirm('タイルキャッシュをすべて削除しますか？')) return;
+  await caches.delete(TILE_CACHE);
+  toast('タイルキャッシュをクリアしました');
+};
+
+/* ── Service Worker ───────────────────────── */
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./sw.js').catch(e=>console.warn('SW:',e));
+}
+
+/* ── URLパラメータで初期位置 ──────────────── */
+(()=>{
+  const p=new URLSearchParams(location.search);
+  const lat=parseFloat(p.get('lat')), lng=parseFloat(p.get('lng')), z=parseInt(p.get('z'));
+  if(!isNaN(lat)&&!isNaN(lng)){
+    map.setView([lat,lng],isNaN(z)?14:z,{animate:false});
+    follow=false;
+    btnFollow.querySelector('.ico').textContent='🚶';
+    btnFollow.lastChild.textContent='追従 OFF';
+    btnFollow.classList.add('on');
+  }
+})();
+</script>
+</body>
+</html>
