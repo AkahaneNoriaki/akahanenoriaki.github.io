@@ -223,7 +223,13 @@ html, body { height:100%; margin:0; }
   /* バッジはマップ中央に合わせる */
   #recBadge, #measureBadge, #shareBadge { left: calc(50% + 100px); }
   #cacheBar { left: 200px; }
+
+  /* PC: スケールバーはデフォルト位置 */
+  .leaflet-bottom.leaflet-right { bottom: 8px; }
 }
+
+/* スケールバー: モバイルではシートハンドル(44px)の上 */
+.leaflet-bottom.leaflet-right { bottom: 50px; }
 </style>
 </head>
 
@@ -1048,6 +1054,11 @@ document.getElementById('btnMeasureClear').onclick=()=>{
   closeSheet();
 };
 updateMeasureUI();
+
+/* =========================
+   スケールバー
+========================= */
+L.control.scale({imperial:false, position:'bottomright'}).addTo(map);
 
 /* =========================
    初期レイアウト適用
