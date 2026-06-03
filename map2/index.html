@@ -104,6 +104,11 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
   z-index: 99999; display: none; width: 0%;
   transition: width 0.2s;
 }
+
+/* ─── スケールバー: ボトムバーの上 ────────── */
+.leaflet-bottom.leaflet-right {
+  bottom: calc(70px + env(safe-area-inset-bottom));
+}
 </style>
 </head>
 <body>
@@ -230,6 +235,7 @@ const _CrsCtrl=L.Control.extend({
   }
 });
 new _CrsCtrl().addTo(map);
+L.control.scale({imperial:false, position:'bottomright'}).addTo(map);
 
 /* ── GPS ──────────────────────────────────── */
 let follow=true, me=null;
