@@ -584,7 +584,7 @@ async function searchAddr(){
     }).addTo(map)
       .bindPopup(`<div style="font-size:12px;font-weight:bold">${addrStr}</div>`)
       .openPopup();
-    document.getElementById('btnAddrClear').style.display='';
+    document.getElementById('btnAddrClear').style.display='block';
     toast('住所が見つかりました',2000);
     addrRow.style.display='none';
     document.getElementById('addrInput').value='';
