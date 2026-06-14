@@ -505,8 +505,8 @@ async function searchAddr(){
       .bindPopup(`<div style="font-size:12px;font-weight:bold">${addrStr}</div>`)
       .openPopup();
     document.getElementById('btnAddrClear').style.display='';
+    document.getElementById('addrInput').value='';
     toast('住所が見つかりました',2000);
-    addrPanel.style.display='none';
   }catch(e){ toast('検索に失敗しました',3000); console.error(e); }
 }
 document.getElementById('btnAddrSearch').onclick=searchAddr;
