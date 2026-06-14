@@ -109,11 +109,41 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 .leaflet-bottom.leaflet-right {
   bottom: calc(70px + env(safe-area-inset-bottom));
 }
+
+/* ─── 住所検索バー ─────────────────────────── */
+#searchBar {
+  position: fixed;
+  top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 9500;
+  display: flex; gap: 4px;
+  background: rgba(255,255,255,0.95);
+  border-radius: 24px;
+  padding: 5px 5px 5px 14px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+  width: min(340px, calc(100vw - 24px));
+  font-family: sans-serif;
+}
+#addrInput {
+  flex: 1; border: none; background: none;
+  font-size: 13px; outline: none; min-width: 0;
+}
+#addrInput::placeholder { color: #aaa; }
+#btnAddrSearch {
+  flex-shrink: 0;
+  border: none; background: #0066ff; color: white;
+  border-radius: 18px; padding: 5px 13px;
+  font-size: 12px; cursor: pointer;
+}
+#btnAddrSearch:active { background: #0055cc; }
 </style>
 </head>
 <body>
 
 <div id="map"></div>
+<div id="searchBar">
+  <input id="addrInput" type="search" placeholder="🔍 住所を検索..." autocomplete="off">
+  <button id="btnAddrSearch">検索</button>
+</div>
 <div id="recBadge">● REC</div>
 <div id="toast"></div>
 <div id="cacheBar"></div>
@@ -426,6 +456,31 @@ if('serviceWorker' in navigator){
     btnFollow.classList.add('on');
   }
 })();
+
+/* ── 住所検索（アドレス・ベース・レジストリ） ── */
+let searchMarker=null;
+async function searchAddr(){
+  const q=document.getElementById('addrInput').value.trim();
+  if(!q) return;
+  toast('住所を検索中...',5000);
+  try{
+    const res=await fetch(`https://geocoding.address.go.jp/api/search?q=${encodeURIComponent(q)}`);
+    const data=await res.json();
+    if(!data.result){ toast('住所が見つかりませんでした',3000); return; }
+    const {lat,lng,address}=data.result;
+    const addrStr=[address?.prefecture,address?.city,address?.town,address?.block].filter(Boolean).join('')||q;
+    map.setView([lat,lng],17);
+    if(searchMarker) map.removeLayer(searchMarker);
+    searchMarker=L.marker([lat,lng],{
+      icon:L.divIcon({html:'<div style="font-size:28px;margin:-28px 0 0 -14px">📍</div>',iconSize:[28,28],className:''})
+    }).addTo(map)
+      .bindPopup(`<div style="font-size:12px;font-weight:bold">${addrStr}</div>`)
+      .openPopup();
+    toast('住所が見つかりました',2000);
+  }catch(e){ toast('検索に失敗しました',3000); console.error(e); }
+}
+document.getElementById('btnAddrSearch').onclick=searchAddr;
+document.getElementById('addrInput').addEventListener('keydown',e=>{ if(e.key==='Enter') searchAddr(); });
 </script>
 </body>
 </html>
