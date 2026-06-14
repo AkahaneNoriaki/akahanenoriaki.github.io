@@ -242,7 +242,7 @@ html, body { height:100%; margin:0; }
   padding: 7px 10px;
   border: 1px solid #e0e0e0;
   border-radius: 10px;
-  font-size: 12px; outline: none;
+  font-size: 16px; outline: none;
   font-family: sans-serif;
 }
 #btnAddrSearch {
@@ -253,6 +253,15 @@ html, body { height:100%; margin:0; }
   font-size: 12px; cursor: pointer;
 }
 #btnAddrSearch:active { background: #0055cc; }
+#btnAddrClear {
+  flex-shrink: 0;
+  padding: 7px 10px;
+  background: #f0f0f0; color: #666;
+  border: none; border-radius: 10px;
+  font-size: 12px; cursor: pointer;
+  display: none;
+}
+#btnAddrClear:active { background: #e0e0e0; }
 </style>
 </head>
 
@@ -299,6 +308,7 @@ html, body { height:100%; margin:0; }
       <div id="addrSearchRow" style="display:none">
         <input id="addrInput" type="search" placeholder="住所を入力（例：長野県○○市...）" autocomplete="off">
         <button id="btnAddrSearch">🔍</button>
+        <button id="btnAddrClear">🗑️ ピン削除</button>
       </div>
       <div class="s-slider-row" id="csSliderRow">
         <div class="s-title" style="margin-top:6px;">CS立体図 透過度</div>
@@ -565,13 +575,14 @@ async function searchAddr(){
     if(!data.length){ toast('住所が見つかりませんでした',3000); return; }
     const [lng,lat]=data[0].geometry.coordinates;
     const addrStr=data[0].properties.title||q;
-    map.setView([lat,lng],17);
+    map.setView([lat,lng],15);
     if(searchMarker) map.removeLayer(searchMarker);
     searchMarker=L.marker([lat,lng],{
       icon:L.divIcon({html:'<div style="font-size:28px;margin:-28px 0 0 -14px">📍</div>',iconSize:[28,28],className:''})
     }).addTo(map)
       .bindPopup(`<div style="font-size:12px;font-weight:bold">${addrStr}</div>`)
       .openPopup();
+    document.getElementById('btnAddrClear').style.display='';
     toast('住所が見つかりました',2000);
     addrRow.style.display='none';
     closeSheet();
@@ -579,6 +590,12 @@ async function searchAddr(){
 }
 document.getElementById('btnAddrSearch').onclick=searchAddr;
 document.getElementById('addrInput').addEventListener('keydown',e=>{ if(e.key==='Enter') searchAddr(); });
+document.getElementById('btnAddrClear').onclick=()=>{
+  if(searchMarker){ map.removeLayer(searchMarker); searchMarker=null; }
+  map.closePopup();
+  document.getElementById('btnAddrClear').style.display='none';
+  toast('ピンを削除しました');
+};
 
 document.getElementById('btnShare').onclick=()=>{
   sharing=!sharing;
