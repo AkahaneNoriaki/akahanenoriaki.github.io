@@ -560,11 +560,11 @@ async function searchAddr(){
   if(!q) return;
   toast('住所を検索中...',5000);
   try{
-    const res=await fetch(`https://geocoding.address.go.jp/api/search?q=${encodeURIComponent(q)}`);
+    const res=await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(q)}`);
     const data=await res.json();
-    if(!data.result){ toast('住所が見つかりませんでした',3000); return; }
-    const {lat,lng,address}=data.result;
-    const addrStr=[address?.prefecture,address?.city,address?.town,address?.block].filter(Boolean).join('')||q;
+    if(!data.length){ toast('住所が見つかりませんでした',3000); return; }
+    const [lng,lat]=data[0].geometry.coordinates;
+    const addrStr=data[0].properties.title||q;
     map.setView([lat,lng],17);
     if(searchMarker) map.removeLayer(searchMarker);
     searchMarker=L.marker([lat,lng],{
