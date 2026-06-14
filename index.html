@@ -304,11 +304,13 @@ html, body { height:100%; margin:0; }
         <button class="s-btn" id="btnAddrBtn">
           <span class="ico">📮</span>住所検索
         </button>
+        <button class="s-btn" id="btnAddrClear" style="display:none">
+          <span class="ico">🗑️</span>ピン削除
+        </button>
       </div>
       <div id="addrSearchRow" style="display:none">
         <input id="addrInput" type="search" placeholder="住所を入力（例：長野県○○市...）" autocomplete="off">
         <button id="btnAddrSearch">🔍</button>
-        <button id="btnAddrClear">🗑️ ピン削除</button>
       </div>
       <div class="s-slider-row" id="csSliderRow">
         <div class="s-title" style="margin-top:6px;">CS立体図 透過度</div>
@@ -585,6 +587,7 @@ async function searchAddr(){
     document.getElementById('btnAddrClear').style.display='';
     toast('住所が見つかりました',2000);
     addrRow.style.display='none';
+    document.getElementById('addrInput').value='';
     closeSheet();
   }catch(e){ toast('検索に失敗しました',3000); console.error(e); }
 }
@@ -594,7 +597,9 @@ document.getElementById('btnAddrClear').onclick=()=>{
   if(searchMarker){ map.removeLayer(searchMarker); searchMarker=null; }
   map.closePopup();
   document.getElementById('btnAddrClear').style.display='none';
+  addrRow.style.display='none';
   toast('ピンを削除しました');
+  closeSheet();
 };
 
 document.getElementById('btnShare').onclick=()=>{
