@@ -231,43 +231,28 @@ html, body { height:100%; margin:0; }
 /* スケールバー: モバイルではシートハンドル+影の上 */
 .leaflet-bottom.leaflet-right { bottom: 72px; }
 
-/* ─── 住所検索バー ─────────────────────────── */
-#searchBar {
-  position: fixed;
-  top: 10px;
-  left: 50%; transform: translateX(-50%);
-  z-index: 9500;
-  display: flex;
-  gap: 4px;
-  background: rgba(255,255,255,0.95);
-  border-radius: 24px;
-  padding: 5px 5px 5px 14px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.18);
-  width: min(340px, calc(100vw - 24px));
-  font-family: sans-serif;
+/* ─── 住所検索（メニュー内展開行） ────────── */
+#addrSearchRow {
+  display: none;
+  margin-top: 8px;
+  gap: 5px;
 }
 #addrInput {
-  flex: 1; border: none; background: none;
-  font-size: 13px; outline: none; min-width: 0;
+  flex: 1; min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  font-size: 12px; outline: none;
+  font-family: sans-serif;
 }
-#addrInput::placeholder { color: #aaa; }
 #btnAddrSearch {
   flex-shrink: 0;
-  border: none; background: #0066ff; color: white;
-  border-radius: 18px; padding: 5px 13px;
+  padding: 7px 12px;
+  background: #0066ff; color: white;
+  border: none; border-radius: 10px;
   font-size: 12px; cursor: pointer;
 }
 #btnAddrSearch:active { background: #0055cc; }
-
-@media (min-width: 768px) {
-  #searchBar {
-    left: calc(200px + (100vw - 200px) / 2);
-    width: min(360px, calc(100vw - 230px));
-  }
-  body.sidebar-right #searchBar {
-    left: calc((100vw - 200px) / 2);
-  }
-}
 </style>
 </head>
 
@@ -278,11 +263,6 @@ html, body { height:100%; margin:0; }
 <div id="recBadge">● REC</div>
 <div id="measureBadge"></div>
 <div id="shareBadge">📍 共有したい場所をタップ</div>
-
-<div id="searchBar">
-  <input id="addrInput" type="search" placeholder="🔍 住所を検索..." autocomplete="off">
-  <button id="btnAddrSearch">検索</button>
-</div>
 
 <input id="geojsonInput" type="file" accept=".geojson,.json" style="display:none">
 <input id="gpkgInput"    type="file" accept=".gpkg"          style="display:none">
@@ -312,6 +292,13 @@ html, body { height:100%; margin:0; }
         <button class="s-btn" id="btnShare">
           <span class="ico">🔗</span>共有
         </button>
+        <button class="s-btn" id="btnAddrBtn">
+          <span class="ico">📮</span>住所検索
+        </button>
+      </div>
+      <div id="addrSearchRow" style="display:none">
+        <input id="addrInput" type="search" placeholder="住所を入力（例：長野県○○市...）" autocomplete="off">
+        <button id="btnAddrSearch">🔍</button>
       </div>
       <div class="s-slider-row" id="csSliderRow">
         <div class="s-title" style="margin-top:6px;">CS立体図 透過度</div>
@@ -560,6 +547,14 @@ window._webShare=()=>{
    住所検索（アドレス・ベース・レジストリ）
 ========================= */
 let searchMarker=null;
+const addrRow=document.getElementById('addrSearchRow');
+
+document.getElementById('btnAddrBtn').onclick=()=>{
+  const open=addrRow.style.display==='flex';
+  addrRow.style.display=open?'none':'flex';
+  if(!open) setTimeout(()=>document.getElementById('addrInput').focus(),50);
+};
+
 async function searchAddr(){
   const q=document.getElementById('addrInput').value.trim();
   if(!q) return;
@@ -578,6 +573,8 @@ async function searchAddr(){
       .bindPopup(`<div style="font-size:12px;font-weight:bold">${addrStr}</div>`)
       .openPopup();
     toast('住所が見つかりました',2000);
+    addrRow.style.display='none';
+    closeSheet();
   }catch(e){ toast('検索に失敗しました',3000); console.error(e); }
 }
 document.getElementById('btnAddrSearch').onclick=searchAddr;
