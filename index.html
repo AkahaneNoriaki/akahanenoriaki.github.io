@@ -536,6 +536,7 @@ if(navigator.geolocation){
 const btnFollow=document.getElementById('btnFollow');
 btnFollow.onclick=()=>{
   follow=!follow;
+  if(follow && me) map.setView(me.getLatLng(),Math.max(map.getZoom(),16),{animate:true});
   btnFollow.innerHTML=`<span class="ico">${follow?'🧍':'🚶'}</span>追従 ${follow?'ON':'OFF'}`;
   btnFollow.classList.toggle('on',!follow);
   toast(follow?'自分を中央 ON':'自分を中央 OFF');
@@ -669,6 +670,7 @@ function addTrackPoint(lat,lng){
 }
 document.getElementById('btnRecord').onclick=()=>{
   recording=!recording;
+  if(recording && me) addTrackPoint(me.getLatLng().lat,me.getLatLng().lng);
   toast(recording?'軌跡記録を開始しました':'軌跡記録を停止しました',2000);
   updateTrackUI(); closeSheet();
 };
