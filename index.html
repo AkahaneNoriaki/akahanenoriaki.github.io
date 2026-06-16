@@ -12,6 +12,7 @@
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.js"></script>
 <script src="https://unpkg.com/proj4/dist/proj4.js"></script>
 <script src="https://unpkg.com/georaster"></script>
 <script src="https://unpkg.com/georaster-layer-for-leaflet/dist/georaster-layer-for-leaflet.min.js"></script>
@@ -627,20 +628,46 @@ document.getElementById('btnShare').onclick=()=>{
 const cameraInput=document.getElementById('cameraInput');
 const photoLayer=L.layerGroup().addTo(map);
 document.getElementById('btnCamera').onclick=()=>{ cameraInput.value=''; cameraInput.click(); closeSheet(); };
+
+function decToDmsRational(deg){
+  const d=Math.floor(deg);
+  const mFull=(deg-d)*60, m=Math.floor(mFull);
+  const s=Math.round((mFull-m)*60*1000000);
+  return [[d,1],[m,1],[s,1000000]];
+}
+
 cameraInput.addEventListener('change',()=>{
   const file=cameraInput.files&&cameraInput.files[0]; if(!file) return;
   if(!me){ toast('現在地が未取得です',2500); return; }
-  const ll=me.getLatLng(), imgURL=URL.createObjectURL(file);
+  const ll=me.getLatLng();
   const ts=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
   const fn=`photo_${ll.lat.toFixed(6)}_${ll.lng.toFixed(6)}_${ts}.jpg`;
-  L.marker(ll).addTo(photoLayer).bindPopup(`
-    <div style="text-align:center">
-      <img src="${imgURL}" style="max-width:220px;border-radius:8px;"><br>
-      <div style="font-size:12px;margin-top:4px;">${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}</div>
-      <a href="${imgURL}" download="${fn}" style="display:inline-block;margin-top:6px;padding:5px 12px;background:#0066ff;color:white;border-radius:8px;font-size:12px;text-decoration:none;">💾 写真を保存</a>
-    </div>`).openPopup();
-  map.setView(ll,Math.max(map.getZoom(),16));
-  toast('写真ピンを追加（ポップアップから保存）',2500);
+  const imgURL=URL.createObjectURL(file);
+
+  const reader=new FileReader();
+  reader.onload=e=>{
+    let downloadUrl=e.target.result;
+    try{
+      const exifObj=piexif.load(downloadUrl);
+      if(!exifObj['GPS']) exifObj['GPS']={};
+      const lat=ll.lat, lng=ll.lng;
+      exifObj['GPS'][piexif.GPSIFD.GPSLatitudeRef]=lat>=0?'N':'S';
+      exifObj['GPS'][piexif.GPSIFD.GPSLatitude]=decToDmsRational(Math.abs(lat));
+      exifObj['GPS'][piexif.GPSIFD.GPSLongitudeRef]=lng>=0?'E':'W';
+      exifObj['GPS'][piexif.GPSIFD.GPSLongitude]=decToDmsRational(Math.abs(lng));
+      downloadUrl=piexif.insert(piexif.dump(exifObj),downloadUrl);
+    }catch(err){ console.warn('EXIF write failed:',err); }
+
+    L.marker(ll).addTo(photoLayer).bindPopup(`
+      <div style="text-align:center">
+        <img src="${imgURL}" style="max-width:220px;border-radius:8px;"><br>
+        <div style="font-size:12px;margin-top:4px;">${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}</div>
+        <a href="${downloadUrl}" download="${fn}" style="display:inline-block;margin-top:6px;padding:5px 12px;background:#0066ff;color:white;border-radius:8px;font-size:12px;text-decoration:none;">💾 写真を保存</a>
+      </div>`).openPopup();
+    map.setView(ll,Math.max(map.getZoom(),16));
+    toast('写真ピンを追加（ポップアップから保存）',2500);
+  };
+  reader.readAsDataURL(file);
 });
 
 /* =========================
