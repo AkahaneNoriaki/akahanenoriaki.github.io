@@ -671,13 +671,17 @@ function decToDmsRational(deg){
 }
 
 const _photoBlobs={};
-window.savePhoto=async key=>{
+window.sharePhoto=async key=>{
   const data=_photoBlobs[key]; if(!data){ toast('写真データがありません'); return; }
   const f=new File([data.blob],data.name,{type:'image/jpeg'});
   if(navigator.canShare&&navigator.canShare({files:[f]})){
     try{ await navigator.share({files:[f],title:data.name}); return; }
     catch(e){ if(e.name==='AbortError') return; }
   }
+  toast('このブラウザは写真アプリへの保存に非対応です');
+};
+window.savePhoto=async key=>{
+  const data=_photoBlobs[key]; if(!data){ toast('写真データがありません'); return; }
   const url=URL.createObjectURL(data.blob);
   const a=document.createElement('a'); a.href=url; a.download=data.name; a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
@@ -711,20 +715,17 @@ cameraInput.addEventListener('change',()=>{
     }catch(err){ console.warn('EXIF write failed:',err); }
     _photoBlobs[key]={blob,name:fn};
 
-    // 撮影直後に自動でシェアシートを開いて写真アプリに保存
-    const f=new File([blob],fn,{type:'image/jpeg'});
-    if(navigator.canShare&&navigator.canShare({files:[f]})){
-      navigator.share({files:[f],title:fn}).catch(e=>{ if(e.name!=='AbortError') console.warn(e); });
-    }
-
     L.marker(ll).addTo(photoLayer).bindPopup(`
       <div style="text-align:center">
         <img src="${imgURL}" style="max-width:220px;border-radius:8px;"><br>
         <div style="font-size:12px;margin-top:4px;">${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}</div>
-        <button onclick="savePhoto(${key})" style="margin-top:6px;padding:8px 16px;background:#0066ff;color:white;border-radius:8px;font-size:13px;border:none;cursor:pointer;">💾 ダウンロード</button>
+        <div style="display:flex;gap:6px;margin-top:6px;justify-content:center;">
+          <button onclick="sharePhoto(${key})" style="padding:8px 12px;background:#34c759;color:white;border-radius:8px;font-size:12px;border:none;cursor:pointer;">📷 写真アプリへ</button>
+          <button onclick="savePhoto(${key})" style="padding:8px 12px;background:#0066ff;color:white;border-radius:8px;font-size:12px;border:none;cursor:pointer;">💾 ダウンロード</button>
+        </div>
       </div>`).openPopup();
     map.setView(ll,Math.max(map.getZoom(),16));
-    toast('写真を保存してください',3000);
+    toast('ピンを追加しました',2000);
   };
   reader.readAsDataURL(file);
 });
