@@ -711,14 +711,20 @@ cameraInput.addEventListener('change',()=>{
     }catch(err){ console.warn('EXIF write failed:',err); }
     _photoBlobs[key]={blob,name:fn};
 
+    // 撮影直後に自動でシェアシートを開いて写真アプリに保存
+    const f=new File([blob],fn,{type:'image/jpeg'});
+    if(navigator.canShare&&navigator.canShare({files:[f]})){
+      navigator.share({files:[f],title:fn}).catch(e=>{ if(e.name!=='AbortError') console.warn(e); });
+    }
+
     L.marker(ll).addTo(photoLayer).bindPopup(`
       <div style="text-align:center">
         <img src="${imgURL}" style="max-width:220px;border-radius:8px;"><br>
         <div style="font-size:12px;margin-top:4px;">${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}</div>
-        <button onclick="savePhoto(${key})" style="margin-top:6px;padding:8px 16px;background:#0066ff;color:white;border-radius:8px;font-size:13px;border:none;cursor:pointer;">💾 写真を保存</button>
+        <button onclick="savePhoto(${key})" style="margin-top:6px;padding:8px 16px;background:#0066ff;color:white;border-radius:8px;font-size:13px;border:none;cursor:pointer;">💾 ダウンロード</button>
       </div>`).openPopup();
     map.setView(ll,Math.max(map.getZoom(),16));
-    toast('写真ピンを追加（ポップアップから保存）',2500);
+    toast('写真を保存してください',3000);
   };
   reader.readAsDataURL(file);
 });
