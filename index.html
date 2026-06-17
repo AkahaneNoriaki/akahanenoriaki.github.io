@@ -123,6 +123,19 @@ html, body { height:100%; margin:0; }
   z-index:99999; display:none; width:0%;
   transition:width 0.2s;
 }
+#confirmOverlay {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,0.45); z-index:20000;
+  align-items:center; justify-content:center;
+}
+#confirmBox {
+  background:#fff; border-radius:16px; padding:20px 20px 14px;
+  max-width:280px; width:88%; text-align:center; font-size:14px; line-height:1.6;
+}
+#confirmBox .c-btns { display:flex; gap:10px; margin-top:14px; }
+#confirmBox .c-btns button { flex:1; padding:10px; border:none; border-radius:10px; font-size:14px; cursor:pointer; }
+#confirmBox .c-ok  { background:#0066ff; color:#fff; }
+#confirmBox .c-cancel { background:#f0f0f0; color:#333; }
 #toast {
   position:fixed; left:50%; bottom:60px; transform:translateX(-50%);
   background:rgba(0,0,0,0.75); color:white;
@@ -275,6 +288,15 @@ html, body { height:100%; margin:0; }
 <div id="map"></div>
 <div id="toast"></div>
 <div id="cacheBar"></div>
+<div id="confirmOverlay">
+  <div id="confirmBox">
+    <div id="confirmMsg"></div>
+    <div class="c-btns">
+      <button class="c-cancel" id="confirmCancel">キャンセル</button>
+      <button class="c-ok" id="confirmOk">続行</button>
+    </div>
+  </div>
+</div>
 <div id="recBadge">● REC</div>
 <div id="measureBadge"></div>
 <div id="shareBadge">📍 共有したい場所をタップ</div>
@@ -419,6 +441,18 @@ function toast(msg, ms=2000){
   t.textContent=msg; t.style.display='block';
   clearTimeout(t._t);
   t._t=setTimeout(()=>t.style.display='none', ms);
+}
+function showConfirm(msg){
+  return new Promise(resolve=>{
+    const ov=document.getElementById('confirmOverlay');
+    document.getElementById('confirmMsg').textContent=msg;
+    ov.style.display='flex';
+    const ok=document.getElementById('confirmOk');
+    const cancel=document.getElementById('confirmCancel');
+    const done=result=>{ ov.style.display='none'; ok.onclick=null; cancel.onclick=null; resolve(result); };
+    ok.onclick=()=>done(true);
+    cancel.onclick=()=>done(false);
+  });
 }
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -978,7 +1012,7 @@ document.getElementById('btnCacheArea').onclick=async()=>{
   if(!geotiffBounds){ toast('まずGeoTIFFを読み込んでください'); return; }
   if(!('caches' in window)){ toast('このブラウザはキャッシュAPIに非対応'); return; }
   const total=tileCount(geotiffBounds);
-  if(!confirm(`約${total}枚のタイルをキャッシュします\n（約${Math.round(total*35/1024)}MB想定）\n続行しますか？`)) return;
+  if(!await showConfirm(`約${total}枚のタイルをキャッシュします\n（約${Math.round(total*35/1024)}MB想定）\n続行しますか？`)) return;
   closeSheet();
   const urls=[...tileUrls(geotiffBounds)];
   const cache=await caches.open(TILE_CACHE);
@@ -996,7 +1030,7 @@ document.getElementById('btnCacheArea').onclick=async()=>{
 };
 document.getElementById('btnClearCache').onclick=async()=>{
   if(!('caches' in window)) return;
-  if(!confirm('タイルキャッシュをすべて削除しますか？')) return;
+  if(!await showConfirm('タイルキャッシュをすべて削除しますか？')) return;
   await caches.delete(TILE_CACHE);
   toast('タイルキャッシュをクリアしました'); closeSheet();
 };
