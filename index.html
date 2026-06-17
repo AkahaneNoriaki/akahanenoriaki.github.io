@@ -670,6 +670,19 @@ function decToDmsRational(deg){
   return [[d,1],[m,1],[s,1000000]];
 }
 
+const _photoBlobs={};
+window.savePhoto=async key=>{
+  const data=_photoBlobs[key]; if(!data){ toast('写真データがありません'); return; }
+  const f=new File([data.blob],data.name,{type:'image/jpeg'});
+  if(navigator.canShare&&navigator.canShare({files:[f]})){
+    try{ await navigator.share({files:[f],title:data.name}); return; }
+    catch(e){ if(e.name==='AbortError') return; }
+  }
+  const url=URL.createObjectURL(data.blob);
+  const a=document.createElement('a'); a.href=url; a.download=data.name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+
 cameraInput.addEventListener('change',()=>{
   const file=cameraInput.files&&cameraInput.files[0]; if(!file) return;
   if(!me){ toast('現在地が未取得です',2500); return; }
@@ -677,26 +690,32 @@ cameraInput.addEventListener('change',()=>{
   const ts=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
   const fn=`photo_${ll.lat.toFixed(6)}_${ll.lng.toFixed(6)}_${ts}.jpg`;
   const imgURL=URL.createObjectURL(file);
+  const key=Date.now();
 
   const reader=new FileReader();
   reader.onload=e=>{
-    let downloadUrl=e.target.result;
+    let blob=file;
     try{
-      const exifObj=piexif.load(downloadUrl);
+      const exifObj=piexif.load(e.target.result);
       if(!exifObj['GPS']) exifObj['GPS']={};
       const lat=ll.lat, lng=ll.lng;
       exifObj['GPS'][piexif.GPSIFD.GPSLatitudeRef]=lat>=0?'N':'S';
       exifObj['GPS'][piexif.GPSIFD.GPSLatitude]=decToDmsRational(Math.abs(lat));
       exifObj['GPS'][piexif.GPSIFD.GPSLongitudeRef]=lng>=0?'E':'W';
       exifObj['GPS'][piexif.GPSIFD.GPSLongitude]=decToDmsRational(Math.abs(lng));
-      downloadUrl=piexif.insert(piexif.dump(exifObj),downloadUrl);
+      const modified=piexif.insert(piexif.dump(exifObj),e.target.result);
+      const arr=modified.split(','), bstr=atob(arr[1]);
+      const u8=new Uint8Array(bstr.length);
+      for(let i=0;i<bstr.length;i++) u8[i]=bstr.charCodeAt(i);
+      blob=new Blob([u8],{type:'image/jpeg'});
     }catch(err){ console.warn('EXIF write failed:',err); }
+    _photoBlobs[key]={blob,name:fn};
 
     L.marker(ll).addTo(photoLayer).bindPopup(`
       <div style="text-align:center">
         <img src="${imgURL}" style="max-width:220px;border-radius:8px;"><br>
         <div style="font-size:12px;margin-top:4px;">${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}</div>
-        <a href="${downloadUrl}" download="${fn}" style="display:inline-block;margin-top:6px;padding:5px 12px;background:#0066ff;color:white;border-radius:8px;font-size:12px;text-decoration:none;">💾 写真を保存</a>
+        <button onclick="savePhoto(${key})" style="margin-top:6px;padding:8px 16px;background:#0066ff;color:white;border-radius:8px;font-size:13px;border:none;cursor:pointer;">💾 写真を保存</button>
       </div>`).openPopup();
     map.setView(ll,Math.max(map.getZoom(),16));
     toast('写真ピンを追加（ポップアップから保存）',2500);
