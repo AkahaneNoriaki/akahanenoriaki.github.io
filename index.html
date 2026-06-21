@@ -304,6 +304,7 @@ html, body { height:100%; margin:0; }
 <input id="geojsonInput" type="file" accept=".geojson,.json" style="display:none">
 <input id="gpkgInput"    type="file" accept=".gpkg"          style="display:none">
 <input id="cameraInput"  type="file" accept="image/*" capture="environment" style="display:none">
+<input id="photoLoadInput" type="file" accept="image/*" multiple style="display:none">
 <input id="geotiffInput" type="file" accept=".tif,.tiff,.geotiff" style="display:none">
 
 <div id="bottomSheet">
@@ -352,6 +353,12 @@ html, body { height:100%; margin:0; }
       <div class="s-grid">
         <button class="s-btn" id="btnCamera">
           <span class="ico">📷</span>カメラ
+        </button>
+        <button class="s-btn" id="btnLoadPhotos">
+          <span class="ico">🖼️</span>写真読込
+        </button>
+        <button class="s-btn" id="btnClearPhotos" style="display:none">
+          <span class="ico">🗑️</span>写真クリア
         </button>
         <button class="s-btn" id="btnRecord">
           <span class="ico">🔴</span>記録開始
@@ -721,6 +728,66 @@ cameraInput.addEventListener('change',()=>{
   };
   reader.readAsDataURL(file);
 });
+
+/* =========================
+   写真読込（ジオタグ→ピン）
+========================= */
+const photoLoadInput=document.getElementById('photoLoadInput');
+let loadedPhotoMarkers=[];
+
+function dmsToDecimal(dms,ref){
+  const [d,m,s]=dms;
+  const dec=d[0]/d[1]+m[0]/m[1]/60+s[0]/s[1]/3600;
+  return (ref==='S'||ref==='W')?-dec:dec;
+}
+
+document.getElementById('btnLoadPhotos').onclick=()=>{ photoLoadInput.value=''; photoLoadInput.click(); closeSheet(); };
+
+photoLoadInput.addEventListener('change',async()=>{
+  const files=[...photoLoadInput.files]; if(!files.length) return;
+  let added=0, skipped=0;
+  for(const file of files){
+    await new Promise(resolve=>{
+      const reader=new FileReader();
+      reader.onload=e=>{
+        try{
+          const exif=piexif.load(e.target.result);
+          const gps=exif['GPS'];
+          if(!gps||!gps[piexif.GPSIFD.GPSLatitude]){ skipped++; resolve(); return; }
+          const lat=dmsToDecimal(gps[piexif.GPSIFD.GPSLatitude],gps[piexif.GPSIFD.GPSLatitudeRef]);
+          const lng=dmsToDecimal(gps[piexif.GPSIFD.GPSLongitude],gps[piexif.GPSIFD.GPSLongitudeRef]);
+          const imgURL=URL.createObjectURL(file);
+          const marker=L.marker([lat,lng],{
+            icon:L.divIcon({html:'<div style="font-size:22px;margin:-22px 0 0 -11px">🖼️</div>',iconSize:[22,22],className:''})
+          }).addTo(map).bindPopup(`
+            <div style="text-align:center">
+              <img src="${imgURL}" style="max-width:220px;border-radius:8px;"><br>
+              <div style="font-size:11px;margin-top:4px;color:#666">${file.name}</div>
+              <div style="font-size:11px;">${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
+            </div>`);
+          loadedPhotoMarkers.push(marker);
+          added++;
+        }catch(err){ skipped++; }
+        resolve();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  if(loadedPhotoMarkers.length>0) document.getElementById('btnClearPhotos').style.display='block';
+  if(added>0&&loadedPhotoMarkers.length>0){
+    const group=L.featureGroup(loadedPhotoMarkers);
+    map.fitBounds(group.getBounds(),{padding:[40,40]});
+  }
+  const msg=skipped>0?`${added}枚表示（${skipped}枚は位置情報なし）`:`${added}枚を地図に表示しました`;
+  toast(msg,3000);
+});
+
+document.getElementById('btnClearPhotos').onclick=()=>{
+  loadedPhotoMarkers.forEach(m=>map.removeLayer(m));
+  loadedPhotoMarkers=[];
+  document.getElementById('btnClearPhotos').style.display='none';
+  toast('写真ピンをクリアしました'); closeSheet();
+};
 
 /* =========================
    軌跡記録
