@@ -136,6 +136,20 @@ html, body { height:100%; margin:0; }
 #confirmBox .c-btns button { flex:1; padding:10px; border:none; border-radius:10px; font-size:14px; cursor:pointer; }
 #confirmBox .c-ok  { background:#0066ff; color:#fff; }
 #confirmBox .c-cancel { background:#f0f0f0; color:#333; }
+#lightbox {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,0.9); z-index:30000;
+  align-items:center; justify-content:center;
+  cursor:zoom-out;
+}
+#lightbox img {
+  max-width:96vw; max-height:96vh;
+  border-radius:8px; object-fit:contain;
+}
+.photo-thumb {
+  width:100%; height:140px; object-fit:cover;
+  border-radius:8px; cursor:zoom-in; display:block;
+}
 #toast {
   position:fixed; left:50%; bottom:60px; transform:translateX(-50%);
   background:rgba(0,0,0,0.75); color:white;
@@ -297,6 +311,7 @@ html, body { height:100%; margin:0; }
     </div>
   </div>
 </div>
+<div id="lightbox"><img id="lightboxImg" src=""></div>
 <div id="recBadge">● REC</div>
 <div id="measureBadge"></div>
 <div id="shareBadge">📍 共有したい場所をタップ</div>
@@ -449,6 +464,11 @@ function toast(msg, ms=2000){
   clearTimeout(t._t);
   t._t=setTimeout(()=>t.style.display='none', ms);
 }
+const _lb=document.getElementById('lightbox');
+const _lbImg=document.getElementById('lightboxImg');
+window.openPhoto=src=>{ _lbImg.src=src; _lb.style.display='flex'; };
+_lb.onclick=()=>{ _lb.style.display='none'; _lbImg.src=''; };
+
 function showConfirm(msg){
   return new Promise(resolve=>{
     const ov=document.getElementById('confirmOverlay');
@@ -719,7 +739,7 @@ cameraInput.addEventListener('change',()=>{
 
     L.marker(ll).addTo(photoLayer).bindPopup(`
       <div style="text-align:center">
-        <img src="${imgURL}" style="max-width:220px;border-radius:8px;"><br>
+        <img src="${imgURL}" class="photo-thumb" onclick="openPhoto('${imgURL}')"><br>
         <div style="font-size:12px;margin-top:4px;">${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}</div>
         <button onclick="savePhoto(${key})" style="margin-top:6px;padding:8px 16px;background:#0066ff;color:white;border-radius:8px;font-size:13px;border:none;cursor:pointer;">💾 ダウンロード</button>
       </div>`).openPopup();
@@ -761,7 +781,7 @@ photoLoadInput.addEventListener('change',async()=>{
             icon:L.divIcon({html:'<div style="font-size:22px;margin:-22px 0 0 -11px">🖼️</div>',iconSize:[22,22],className:''})
           }).addTo(map).bindPopup(`
             <div style="text-align:center">
-              <img src="${imgURL}" style="max-width:220px;border-radius:8px;"><br>
+              <img src="${imgURL}" class="photo-thumb" onclick="openPhoto('${imgURL}')"><br>
               <div style="font-size:11px;margin-top:4px;color:#666">${file.name}</div>
               <div style="font-size:11px;">${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
             </div>`);
