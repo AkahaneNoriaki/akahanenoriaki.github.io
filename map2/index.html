@@ -730,11 +730,11 @@ function jmaTime(intervalMin=5, lagMin=5){
 
 /* レイヤー定義 */
 const LAYER_DEFS={
-  rain:    {interval:5,  lag:5,  zoom:10, url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/rain/png`},
-  thunder: {interval:5,  lag:5,  zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/thnd/png`},
-  tornado: {interval:5,  lag:5,  zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/trnd/png`},
-  land:    {interval:10, lag:20, zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${t}/none/{z}/{x}/{y}/surf/land/png`},
-  flood:   {interval:10, lag:20, zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${t}/none/{z}/{x}/{y}/surf/flood/png`},
+  rain:    {type:'nowc',    prod:'rain', zoom:10, url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/rain/png`},
+  thunder: {type:'nowc',    prod:'thnd', zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/thnd/png`},
+  tornado: {type:'nowc',    prod:'trnd', zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/trnd/png`},
+  land:    {type:'kikikuru',prod:'land', zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${t}/none/{z}/{x}/{y}/surf/land/png`},
+  flood:   {type:'kikikuru',prod:'flood',zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${t}/none/{z}/{x}/{y}/surf/flood/png`},
 };
 const layerState={};
 Object.keys(LAYER_DEFS).forEach(k=>{ layerState[k]={on:false,layer:null,timer:null,errCount:0}; });
@@ -742,48 +742,62 @@ Object.keys(LAYER_DEFS).forEach(k=>{ layerState[k]={on:false,layer:null,timer:nu
 const CHK_MAP={rain:'chkLRain',thunder:'chkLThunder',tornado:'chkLTornado',land:'chkLLand',flood:'chkLFlood'};
 const LBL_MAP={rain:'lblLRain',thunder:'lblLThunder',tornado:'lblLTornado',land:'lblLLand',flood:'lblLFlood'};
 
-function updateLayer(key){
+/* JMA targetTimes API から実際の有効タイムスタンプを取得 */
+const _jmaTimes={};
+async function getJmaValidTime(type){
+  try{
+    const url=`https://www.jma.go.jp/bosai/jmatile/data/${type}/targetTimes_N1.json`;
+    const res=await fetch(url,{cache:'no-store'});
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const arr=await res.json();
+    if(!Array.isArray(arr)||!arr.length) throw new Error('empty');
+    /* 末尾が最新。validtime/basetime などフィールド名を許容 */
+    const last=arr[arr.length-1];
+    const t=typeof last==='string'?last:(last.validtime||last.time||last.basetime||'');
+    if(!/^\d{10,14}$/.test(t)) throw new Error(`unexpected: "${t}"`);
+    console.log(`[JMA targetTimes:${type}]`, t);
+    return t.slice(0,12)+'00'; // 14桁統一
+  }catch(e){
+    console.warn(`[JMA targetTimes:${type}] failed:`,e.message);
+    return null;
+  }
+}
+
+async function updateLayer(key){
   const def=LAYER_DEFS[key], st=layerState[key];
   if(!st.on) return;
-  const t=jmaTime(def.interval,def.lag);
+  /* JMA targetTimes から取得、失敗時は自前計算にフォールバック */
+  const validTime=await getJmaValidTime(def.type);
+  const t=validTime||jmaTime(5,10); // fallback: 10分ラグ
   const urlTpl=def.url(t);
-  console.log(`[JMA:${key}] time=${t}`);
-  console.log(`[JMA:${key}] template=${urlTpl}`);
+  console.log(`[JMA:${key}] t=${t} url=${urlTpl}`);
   if(st.layer) map.removeLayer(st.layer);
   st.errCount=0;
   const lbl=document.getElementById(LBL_MAP[key]);
   const lyr=L.tileLayer(urlTpl,{opacity:0.6,maxNativeZoom:def.zoom,maxZoom:22,attribution:'© 気象庁'});
   lyr.on('tileerror',(e)=>{
     st.errCount++;
-    const failUrl=e.url||(e.tile&&e.tile.src)||urlTpl;
-    if(st.errCount===1){
-      console.error(`[JMA:${key}] tileerror URL:`, failUrl);
+    const failUrl=e.url||(e.tile&&e.tile.src)||'';
+    if(st.errCount===1&&failUrl){
+      console.error(`[JMA:${key}] 404? URL:`,failUrl);
       fetch(failUrl)
-        .then(r=>{
-          console.error(`[JMA:${key}] HTTP ${r.status} ${r.statusText}`);
-          toast(`[${key}] HTTP ${r.status}`,4000);
-        })
-        .catch(err=>{
-          console.error(`[JMA:${key}] fetch失敗 (CORS?):`, err.message);
-          toast(`[${key}] ${err.message}`,4000);
-        });
+        .then(r=>{ console.error(`[JMA:${key}] HTTP ${r.status}`); toast(`[${key}] HTTP ${r.status}`,4000); })
+        .catch(err=>{ console.error(`[JMA:${key}]`,err.message); toast(`[${key}] ${err.message}`,4000); });
     }
-    if(st.errCount===3){
-      if(lbl) lbl.style.borderColor='#ff3b30';
-    }
+    if(st.errCount===3&&lbl) lbl.style.borderColor='#ff3b30';
   });
   lyr.on('tileload',()=>{ st.errCount=0; if(lbl) lbl.style.borderColor=''; });
   st.layer=lyr.addTo(map);
 }
 
-function applyLayerState(key){
+async function applyLayerState(key){
   const st=layerState[key];
-  const def=LAYER_DEFS[key];
   const lbl=document.getElementById(LBL_MAP[key]);
   if(lbl) lbl.classList.toggle('active',st.on);
   if(st.on){
-    updateLayer(key);
-    if(!st.timer) st.timer=setInterval(()=>updateLayer(key),def.interval*60*1000);
+    await updateLayer(key);
+    const def=LAYER_DEFS[key];
+    if(!st.timer) st.timer=setInterval(()=>updateLayer(key),5*60*1000);
   } else {
     clearInterval(st.timer); st.timer=null;
     if(st.layer){ map.removeLayer(st.layer); st.layer=null; }
@@ -807,7 +821,11 @@ async function fetchAmedas(){
     const timeRes=await fetch('https://www.jma.go.jp/bosai/amedas/data/latest_time.txt');
     if(!timeRes.ok) throw new Error(`latest_time HTTP ${timeRes.status}`);
     const rawTime=(await timeRes.text()).trim();
-    const timeStr=rawTime.replace(/[^0-9]/g,'');
+    /* "2026/06/28 08:30:00+9:00" のようなタイムゾーン付き文字列に対応
+       数字だけ抜くと+9:00が混入するので、日時部分だけ正規表現で抽出する */
+    const m=rawTime.match(/(\d{4})\D(\d{2})\D(\d{2})\D(\d{2}):(\d{2}):(\d{2})/);
+    if(!m) throw new Error(`time parse failed: "${rawTime}"`);
+    const timeStr=`${m[1]}${m[2]}${m[3]}${m[4]}${m[5]}${m[6]}`;
     console.log('[AMeDAS] latest_time raw:', rawTime, '→', timeStr);
     if(!_amedasTable){
       const tRes=await fetch('https://www.jma.go.jp/bosai/amedas/const/amedastable.json');
