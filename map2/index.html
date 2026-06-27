@@ -204,15 +204,20 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 }
 .wx-cell .lbl { font-size: 10px; color: #888; }
 .wx-cell .val { font-size: 14px; font-weight: bold; color: #222; margin-top: 2px; }
-#wxRadarRow {
-  display: flex; align-items: center; gap: 10px;
+#wxLayers {
+  display: grid; grid-template-columns: repeat(3,1fr); gap: 5px;
 }
-#btnRadar {
-  flex: 1; padding: 8px; border: 1.5px solid #0066ff;
-  border-radius: 10px; background: #fff; color: #0066ff;
-  font-size: 12px; cursor: pointer; font-family: sans-serif;
+.wx-layer-btn {
+  padding: 6px 4px; border: 1.5px solid #ddd; border-radius: 8px;
+  background: #fff; color: #444; font-size: 10px; cursor: pointer;
+  text-align: center; line-height: 1.4; font-family: sans-serif;
 }
-#btnRadar.on { background: #0066ff; color: #fff; }
+.wx-layer-btn .ico { font-size: 18px; display: block; }
+.wx-layer-btn.on { background: #0066ff; color: #fff; border-color: #0066ff; }
+#wxAmedas {
+  font-size: 11px; color: #555; border-top: 1px solid #eee;
+  padding-top: 8px; display: none;
+}
 #wxLoading { font-size: 13px; color: #888; text-align: center; padding: 8px 0; }
 </style>
 </head>
@@ -257,9 +262,15 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
       <div class="wx-cell"><div class="lbl">💨 風速</div><div class="val" id="wxWind">--</div></div>
       <div class="wx-cell"><div class="lbl">💧 湿度</div><div class="val" id="wxHumid">--</div></div>
     </div>
-    <div id="wxRadarRow">
-      <button id="btnRadar">🌧 雨量レーダー OFF</button>
+    <div id="wxLayers">
+      <button class="wx-layer-btn" id="btnLRain"><span class="ico">🌧</span>雨量現況</button>
+      <button class="wx-layer-btn" id="btnLThunder"><span class="ico">⚡</span>雷</button>
+      <button class="wx-layer-btn" id="btnLTornado"><span class="ico">🌪</span>竜巻確度</button>
+      <button class="wx-layer-btn" id="btnLLand"><span class="ico">⛰</span>土砂危険</button>
+      <button class="wx-layer-btn" id="btnLFlood"><span class="ico">💧</span>洪水危険</button>
+      <button class="wx-layer-btn" id="btnLAmedas"><span class="ico">📡</span>アメダス</button>
     </div>
+    <div id="wxAmedas"></div>
   </div>
 </div>
 <div id="csSliderWrap">
@@ -650,40 +661,112 @@ const WX_CODE={
 };
 
 const wxPanel=document.getElementById('wxPanel');
-let wxOpen=false, radarOn=false, radarLayer=null, radarTimer=null;
+let wxOpen=false;
 
-function getNowcastTime(){
+/* 時刻計算 */
+function jmaTime(intervalMin=5, lagMin=5){
   const now=new Date();
   const jst=new Date(now.getTime()+9*60*60*1000);
-  const m=Math.floor(jst.getUTCMinutes()/5)*5-5;
-  jst.setUTCMinutes(m<0?m+60:m,0,0);
-  if(m<0) jst.setUTCHours(jst.getUTCHours()-1);
+  const total=jst.getUTCHours()*60+jst.getUTCMinutes();
+  const floored=Math.floor(total/intervalMin)*intervalMin-lagMin;
+  const d=new Date(Date.UTC(jst.getUTCFullYear(),jst.getUTCMonth(),jst.getUTCDate(),0,floored<0?floored+1440:floored,0));
   const p=n=>String(n).padStart(2,'0');
-  return `${jst.getUTCFullYear()}${p(jst.getUTCMonth()+1)}${p(jst.getUTCDate())}${p(jst.getUTCHours())}${p(jst.getUTCMinutes())}00`;
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth()+1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}00`;
 }
 
-function updateRadar(){
-  if(!radarOn) return;
-  const t=getNowcastTime();
-  const url=`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/rain/png`;
-  if(radarLayer) map.removeLayer(radarLayer);
-  radarLayer=L.tileLayer(url,{opacity:0.6,maxNativeZoom:10,maxZoom:22,attribution:'© 気象庁'}).addTo(map);
+/* レイヤー定義 */
+const LAYER_DEFS={
+  rain:     {interval:5,  lag:5,  zoom:10, url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/rain/png`},
+  thunder:  {interval:5,  lag:5,  zoom:5,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/thnd/png`},
+  tornado:  {interval:5,  lag:5,  zoom:5,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/trnd/png`},
+  land:     {interval:10, lag:10, zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${t}/none/{z}/{x}/{y}/surf/land/png`},
+  flood:    {interval:10, lag:10, zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${t}/none/{z}/{x}/{y}/surf/flood/png`},
+};
+const layerState={};
+Object.keys(LAYER_DEFS).forEach(k=>{ layerState[k]={on:false,layer:null,timer:null}; });
+
+const BTN_MAP={rain:'btnLRain',thunder:'btnLThunder',tornado:'btnLTornado',land:'btnLLand',flood:'btnLFlood'};
+
+function updateLayer(key){
+  const def=LAYER_DEFS[key], st=layerState[key];
+  if(!st.on) return;
+  const t=jmaTime(def.interval,def.lag);
+  if(st.layer) map.removeLayer(st.layer);
+  st.layer=L.tileLayer(def.url(t),{opacity:0.6,maxNativeZoom:def.zoom,maxZoom:22,attribution:'© 気象庁'}).addTo(map);
 }
 
-function toggleRadar(){
-  radarOn=!radarOn;
-  const btn=document.getElementById('btnRadar');
-  btn.textContent=`🌧 雨量レーダー ${radarOn?'ON':'OFF'}`;
-  btn.classList.toggle('on',radarOn);
-  if(radarOn){
-    updateRadar();
-    radarTimer=setInterval(updateRadar,5*60*1000);
+function toggleLayer(key){
+  const st=layerState[key];
+  const def=LAYER_DEFS[key];
+  st.on=!st.on;
+  document.getElementById(BTN_MAP[key]).classList.toggle('on',st.on);
+  if(st.on){
+    updateLayer(key);
+    st.timer=setInterval(()=>updateLayer(key),def.interval*60*1000);
   } else {
-    clearInterval(radarTimer);
-    if(radarLayer){ map.removeLayer(radarLayer); radarLayer=null; }
+    clearInterval(st.timer);
+    if(st.layer){ map.removeLayer(st.layer); st.layer=null; }
   }
 }
-document.getElementById('btnRadar').onclick=toggleRadar;
+
+document.getElementById('btnLRain').onclick=()=>toggleLayer('rain');
+document.getElementById('btnLThunder').onclick=()=>toggleLayer('thunder');
+document.getElementById('btnLTornado').onclick=()=>toggleLayer('tornado');
+document.getElementById('btnLLand').onclick=()=>toggleLayer('land');
+document.getElementById('btnLFlood').onclick=()=>toggleLayer('flood');
+
+/* アメダス */
+let amedasOn=false, amedasMarkers=[], amedasTimer=null;
+let _amedasTable=null;
+
+async function fetchAmedas(){
+  try{
+    const timeRes=await fetch('https://www.jma.go.jp/bosai/amedas/data/latest_time.txt');
+    const timeStr=(await timeRes.text()).trim().replace(/[^0-9]/g,'');
+    const dataRes=await fetch(`https://www.jma.go.jp/bosai/amedas/data/map/${timeStr}.json`);
+    const data=await dataRes.json();
+    if(!_amedasTable){
+      const tRes=await fetch('https://www.jma.go.jp/bosai/amedas/const/amedastable.json');
+      _amedasTable=await tRes.json();
+    }
+    amedasMarkers.forEach(m=>map.removeLayer(m)); amedasMarkers=[];
+    const center=me?me.getLatLng():map.getCenter();
+    const stations=Object.entries(data).map(([code,d])=>{
+      const info=_amedasTable[code]; if(!info) return null;
+      const lat=info.lat[0]+info.lat[1]/60, lng=info.lon[0]+info.lon[1]/60;
+      return {code,info,d,lat,lng,dist:map.distance(center,L.latLng(lat,lng))};
+    }).filter(s=>s&&s.dist<60000).sort((a,b)=>a.dist-b.dist).slice(0,15);
+
+    stations.forEach(s=>{
+      const temp=s.d.temp?`${s.d.temp[0]}°C`:'--';
+      const rain=s.d.rain1h?`${s.d.rain1h[0]}mm/h`:'--';
+      const wind=s.d.wind?`${s.d.wind[0]}m/s`:'--';
+      const m=L.marker([s.lat,s.lng],{icon:L.divIcon({
+        html:`<div style="background:rgba(0,80,200,0.85);color:#fff;border-radius:5px;padding:2px 5px;font-size:10px;font-family:sans-serif;white-space:nowrap">${temp}</div>`,
+        className:'',iconAnchor:[20,10]
+      })}).addTo(map);
+      m.bindPopup(`<div style="font-size:12px;font-family:sans-serif"><b>📡 ${s.info.kjName||s.code}</b><br>🌡 ${temp}　🌧 ${rain}　💨 ${wind}</div>`);
+      amedasMarkers.push(m);
+    });
+    const p=n=>String(n).padStart(2,'0');
+    const now=new Date();
+    document.getElementById('wxAmedas').textContent=`📡 アメダス ${stations.length}地点 (${p(now.getHours())}:${p(now.getMinutes())} 更新)`;
+    document.getElementById('wxAmedas').style.display='block';
+  }catch(e){ toast('アメダス取得失敗',2500); console.error(e); }
+}
+
+document.getElementById('btnLAmedas').onclick=()=>{
+  amedasOn=!amedasOn;
+  document.getElementById('btnLAmedas').classList.toggle('on',amedasOn);
+  if(amedasOn){
+    fetchAmedas();
+    amedasTimer=setInterval(fetchAmedas,10*60*1000);
+  } else {
+    clearInterval(amedasTimer);
+    amedasMarkers.forEach(m=>map.removeLayer(m)); amedasMarkers=[];
+    document.getElementById('wxAmedas').style.display='none';
+  }
+};
 
 async function fetchWeather(lat,lng){
   document.getElementById('wxLoading').style.display='block';
