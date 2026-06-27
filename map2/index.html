@@ -176,50 +176,76 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
   bottom: calc(70px + env(safe-area-inset-bottom));
   left: 0; right: 0;
   z-index: 9100;
+  display: none;
+  font-family: sans-serif;
+}
+#wxScroll {
+  display: flex;
+  overflow-x: scroll;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+#wxScroll::-webkit-scrollbar { display: none; }
+.wx-card {
+  flex-shrink: 0;
+  width: 100vw;
+  scroll-snap-align: start;
   background: rgba(255,255,255,0.97);
   border-top: 1px solid #eee;
-  padding: 12px 16px 10px;
-  display: none;
-  flex-direction: column;
-  gap: 10px;
-  font-family: sans-serif;
+  padding: 10px 14px 8px;
   box-shadow: 0 -2px 10px rgba(0,0,0,0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 #wxHeader {
   display: flex; align-items: center; justify-content: space-between;
 }
 #wxTitle { font-size: 11px; color: #888; }
+#wxSwipeHint { font-size: 10px; color: #bbb; }
 #wxUpdated { font-size: 10px; color: #aaa; }
 #wxMain {
   display: flex; align-items: center; gap: 14px;
 }
-#wxIcon { font-size: 36px; line-height: 1; }
-#wxDesc { font-size: 15px; font-weight: bold; color: #222; }
-#wxTemp { font-size: 28px; font-weight: bold; color: #0066ff; line-height: 1; }
+#wxIcon { font-size: 34px; line-height: 1; }
+#wxDesc { font-size: 14px; font-weight: bold; color: #222; }
+#wxTemp { font-size: 26px; font-weight: bold; color: #0066ff; line-height: 1; }
 #wxGrid {
-  display: grid; grid-template-columns: repeat(3,1fr); gap: 6px;
-}
-.wx-cell {
-  background: #f5f7ff; border-radius: 10px;
-  padding: 7px 10px; text-align: center;
-}
-.wx-cell .lbl { font-size: 10px; color: #888; }
-.wx-cell .val { font-size: 14px; font-weight: bold; color: #222; margin-top: 2px; }
-#wxLayers {
   display: grid; grid-template-columns: repeat(3,1fr); gap: 5px;
 }
-.wx-layer-btn {
-  padding: 6px 4px; border: 1.5px solid #ddd; border-radius: 8px;
-  background: #fff; color: #444; font-size: 10px; cursor: pointer;
-  text-align: center; line-height: 1.4; font-family: sans-serif;
+.wx-cell {
+  background: #f5f7ff; border-radius: 8px;
+  padding: 5px 8px; text-align: center;
 }
-.wx-layer-btn .ico { font-size: 18px; display: block; }
-.wx-layer-btn.on { background: #0066ff; color: #fff; border-color: #0066ff; }
+.wx-cell .lbl { font-size: 9px; color: #888; }
+.wx-cell .val { font-size: 13px; font-weight: bold; color: #222; margin-top: 1px; }
+#wxLayers {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+}
+.wx-chk-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 10px;
+  border: 1.5px solid #ddd; border-radius: 8px;
+  cursor: pointer; font-size: 12px; color: #444;
+  background: #fff;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.wx-chk-item input[type="checkbox"] {
+  width: 15px; height: 15px;
+  accent-color: #0066ff;
+  cursor: pointer; flex-shrink: 0;
+}
+.wx-chk-item .ico { font-size: 15px; }
+.wx-chk-item.active {
+  background: #eef4ff; border-color: #0066ff; color: #0044cc;
+}
 #wxAmedas {
   font-size: 11px; color: #555; border-top: 1px solid #eee;
-  padding-top: 8px; display: none;
+  padding-top: 6px; display: none;
 }
-#wxLoading { font-size: 13px; color: #888; text-align: center; padding: 8px 0; }
+#wxLoading { font-size: 13px; color: #888; text-align: center; padding: 6px 0; }
 </style>
 </head>
 <body>
@@ -245,35 +271,45 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 </div>
 
 <div id="wxPanel">
-  <div id="wxHeader">
-    <span id="wxTitle">📍 現在地の天気</span>
-    <span id="wxUpdated"></span>
-  </div>
-  <div id="wxLoading">取得中...</div>
-  <div id="wxContent" style="display:none; flex-direction:column; gap:10px;">
-    <div id="wxMain">
-      <div id="wxIcon"></div>
-      <div>
-        <div id="wxDesc"></div>
-        <div id="wxTemp"></div>
+  <div id="wxScroll">
+    <!-- カード1: 天気情報 -->
+    <div class="wx-card" id="wxCard1">
+      <div id="wxHeader">
+        <span id="wxTitle">📍 現在地の天気</span>
+        <span id="wxSwipeHint">◀▶ スワイプ</span>
+        <span id="wxUpdated"></span>
+      </div>
+      <div id="wxLoading">取得中...</div>
+      <div id="wxContent" style="display:none; flex-direction:column; gap:7px;">
+        <div id="wxMain">
+          <div id="wxIcon"></div>
+          <div>
+            <div id="wxDesc"></div>
+            <div id="wxTemp"></div>
+          </div>
+        </div>
+        <div id="wxGrid">
+          <div class="wx-cell"><div class="lbl">🌧 降水量</div><div class="val" id="wxRain">--</div></div>
+          <div class="wx-cell"><div class="lbl">💨 風速</div><div class="val" id="wxWind">--</div></div>
+          <div class="wx-cell"><div class="lbl">💧 湿度</div><div class="val" id="wxHumid">--</div></div>
+        </div>
+        <div style="font-size:9px;color:#aaa;">今後6時間の降水量(棒)・気温(線)</div>
+        <canvas id="wxChart" height="55"></canvas>
       </div>
     </div>
-    <div id="wxGrid">
-      <div class="wx-cell"><div class="lbl">🌧 降水量</div><div class="val" id="wxRain">--</div></div>
-      <div class="wx-cell"><div class="lbl">💨 風速</div><div class="val" id="wxWind">--</div></div>
-      <div class="wx-cell"><div class="lbl">💧 湿度</div><div class="val" id="wxHumid">--</div></div>
+    <!-- カード2: レイヤ -->
+    <div class="wx-card" id="wxCard2">
+      <div style="font-size:11px;color:#888;font-weight:bold;margin-bottom:2px;">🗂 気象レイヤ</div>
+      <div id="wxLayers">
+        <label class="wx-chk-item" id="lblLRain"><input type="checkbox" id="chkLRain"><span class="ico">🌧</span><span>雨量現況</span></label>
+        <label class="wx-chk-item" id="lblLThunder"><input type="checkbox" id="chkLThunder"><span class="ico">⚡</span><span>雷</span></label>
+        <label class="wx-chk-item" id="lblLTornado"><input type="checkbox" id="chkLTornado"><span class="ico">🌪</span><span>竜巻確度</span></label>
+        <label class="wx-chk-item" id="lblLLand"><input type="checkbox" id="chkLLand"><span class="ico">⛰</span><span>土砂危険</span></label>
+        <label class="wx-chk-item" id="lblLFlood"><input type="checkbox" id="chkLFlood"><span class="ico">💧</span><span>洪水危険</span></label>
+        <label class="wx-chk-item" id="lblLAmedas"><input type="checkbox" id="chkLAmedas"><span class="ico">📡</span><span>アメダス</span></label>
+      </div>
+      <div id="wxAmedas"></div>
     </div>
-    <div style="font-size:10px;color:#888;margin-bottom:-4px;">今後6時間の降水量予報 (mm)</div>
-    <canvas id="wxChart" height="80"></canvas>
-    <div id="wxLayers">
-      <button class="wx-layer-btn" id="btnLRain"><span class="ico">🌧</span>雨量現況</button>
-      <button class="wx-layer-btn" id="btnLThunder"><span class="ico">⚡</span>雷</button>
-      <button class="wx-layer-btn" id="btnLTornado"><span class="ico">🌪</span>竜巻確度</button>
-      <button class="wx-layer-btn" id="btnLLand"><span class="ico">⛰</span>土砂危険</button>
-      <button class="wx-layer-btn" id="btnLFlood"><span class="ico">💧</span>洪水危険</button>
-      <button class="wx-layer-btn" id="btnLAmedas"><span class="ico">📡</span>アメダス</button>
-    </div>
-    <div id="wxAmedas"></div>
   </div>
 </div>
 <div id="csSliderWrap">
@@ -435,7 +471,7 @@ if(navigator.geolocation){
       } else {
         me.setLatLng(ll);
       }
-      if(follow) map.setView(ll,Math.max(map.getZoom(),16),{animate:true});
+      if(follow) map.panTo(ll,{animate:true});
       if(recording){
         trackPoints.push({lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toISOString()});
         const lls=trackPoints.map(p=>[p.lat,p.lng]);
@@ -455,7 +491,7 @@ btnFollow.onclick=()=>{
   btnFollow.querySelector('.ico').textContent=follow?'🧍':'🚶';
   btnFollow.lastChild.textContent=`追従 ${follow?'ON':'OFF'}`;
   btnFollow.classList.toggle('on',!follow);
-  if(follow&&me) map.setView(me.getLatLng(),Math.max(map.getZoom(),16));
+  if(follow&&me) map.panTo(me.getLatLng());
 };
 
 function updateTrackUI(){
@@ -688,7 +724,8 @@ const LAYER_DEFS={
 const layerState={};
 Object.keys(LAYER_DEFS).forEach(k=>{ layerState[k]={on:false,layer:null,timer:null,errCount:0}; });
 
-const BTN_MAP={rain:'btnLRain',thunder:'btnLThunder',tornado:'btnLTornado',land:'btnLLand',flood:'btnLFlood'};
+const CHK_MAP={rain:'chkLRain',thunder:'chkLThunder',tornado:'chkLTornado',land:'chkLLand',flood:'chkLFlood'};
+const LBL_MAP={rain:'lblLRain',thunder:'lblLThunder',tornado:'lblLTornado',land:'lblLLand',flood:'lblLFlood'};
 
 function updateLayer(key){
   const def=LAYER_DEFS[key], st=layerState[key];
@@ -696,55 +733,61 @@ function updateLayer(key){
   const t=jmaTime(def.interval,def.lag);
   if(st.layer) map.removeLayer(st.layer);
   st.errCount=0;
+  const lbl=document.getElementById(LBL_MAP[key]);
   const lyr=L.tileLayer(def.url(t),{opacity:0.6,maxNativeZoom:def.zoom,maxZoom:22,attribution:'© 気象庁'});
   lyr.on('tileerror',()=>{
     st.errCount++;
     if(st.errCount===3){
-      const btn=document.getElementById(BTN_MAP[key]);
-      btn.style.borderColor='#ff3b30';
-      toast(`${btn.textContent.trim()} タイル取得失敗`,3000);
+      if(lbl) lbl.style.borderColor='#ff3b30';
+      toast(`${lbl?lbl.textContent.trim():key} タイル取得失敗`,3000);
     }
   });
-  lyr.on('tileload',()=>{ st.errCount=0; document.getElementById(BTN_MAP[key]).style.borderColor=''; });
+  lyr.on('tileload',()=>{ st.errCount=0; if(lbl) lbl.style.borderColor=''; });
   st.layer=lyr.addTo(map);
 }
 
-function toggleLayer(key){
+function applyLayerState(key){
   const st=layerState[key];
   const def=LAYER_DEFS[key];
-  st.on=!st.on;
-  document.getElementById(BTN_MAP[key]).classList.toggle('on',st.on);
+  const lbl=document.getElementById(LBL_MAP[key]);
+  if(lbl) lbl.classList.toggle('active',st.on);
   if(st.on){
     updateLayer(key);
-    st.timer=setInterval(()=>updateLayer(key),def.interval*60*1000);
+    if(!st.timer) st.timer=setInterval(()=>updateLayer(key),def.interval*60*1000);
   } else {
-    clearInterval(st.timer);
+    clearInterval(st.timer); st.timer=null;
     if(st.layer){ map.removeLayer(st.layer); st.layer=null; }
   }
 }
 
-document.getElementById('btnLRain').onclick=()=>toggleLayer('rain');
-document.getElementById('btnLThunder').onclick=()=>toggleLayer('thunder');
-document.getElementById('btnLTornado').onclick=()=>toggleLayer('tornado');
-document.getElementById('btnLLand').onclick=()=>toggleLayer('land');
-document.getElementById('btnLFlood').onclick=()=>toggleLayer('flood');
+Object.keys(CHK_MAP).forEach(key=>{
+  document.getElementById(CHK_MAP[key]).addEventListener('change',function(){
+    layerState[key].on=this.checked;
+    applyLayerState(key);
+  });
+});
 
 /* アメダス */
 let amedasOn=false, amedasMarkers=[], amedasTimer=null;
 let _amedasTable=null;
 
 async function fetchAmedas(){
+  const amDiv=document.getElementById('wxAmedas');
   try{
     const timeRes=await fetch('https://www.jma.go.jp/bosai/amedas/data/latest_time.txt');
-    if(!timeRes.ok) throw new Error(`latest_time: ${timeRes.status}`);
-    const timeStr=(await timeRes.text()).trim().replace(/[^0-9]/g,'');
+    if(!timeRes.ok) throw new Error(`latest_time HTTP ${timeRes.status}`);
+    const rawTime=(await timeRes.text()).trim();
+    const timeStr=rawTime.replace(/[^0-9]/g,'');
+    console.log('[AMeDAS] latest_time raw:', rawTime, '→', timeStr);
     if(!_amedasTable){
       const tRes=await fetch('https://www.jma.go.jp/bosai/amedas/const/amedastable.json');
-      if(!tRes.ok) throw new Error(`amedastable: ${tRes.status}`);
+      if(!tRes.ok) throw new Error(`amedastable HTTP ${tRes.status}`);
       _amedasTable=await tRes.json();
     }
-    const dataRes=await fetch(`https://www.jma.go.jp/bosai/amedas/data/map/${timeStr}.json`);
-    if(!dataRes.ok) throw new Error(`map data: ${dataRes.status}`);
+    const mapUrl=`https://www.jma.go.jp/bosai/amedas/data/map/${timeStr}.json`;
+    console.log('[AMeDAS] fetching map:', mapUrl);
+    const dataRes=await fetch(mapUrl);
+    if(!dataRes.ok) throw new Error(`map data HTTP ${dataRes.status} (${mapUrl})`);
     const data=await dataRes.json();
     amedasMarkers.forEach(m=>map.removeLayer(m)); amedasMarkers=[];
     const center=me?me.getLatLng():map.getCenter();
@@ -760,7 +803,7 @@ async function fetchAmedas(){
 
     stations.forEach(s=>{
       const temp=s.d.temp?`${s.d.temp[0]}°C`:'--';
-      const rain=s.d.precipitation1h?`${s.d.precipitation1h[0]}mm/h`:'--';
+      const rain=s.d.precipitation1h?`${s.d.precipitation1h[0]}mm/h`:(s.d.precipitation10m?`${s.d.precipitation10m[0]}mm/10m`:'--');
       const wind=s.d.wind?`${s.d.wind[0]}m/s`:'--';
       const m=L.marker([s.lat,s.lng],{icon:L.divIcon({
         html:`<div style="background:rgba(0,80,200,0.85);color:#fff;border-radius:5px;padding:2px 5px;font-size:10px;font-family:sans-serif;white-space:nowrap">${temp}</div>`,
@@ -771,23 +814,30 @@ async function fetchAmedas(){
     });
     const p=n=>String(n).padStart(2,'0');
     const now=new Date();
-    document.getElementById('wxAmedas').textContent=`📡 アメダス ${stations.length}地点 (${p(now.getHours())}:${p(now.getMinutes())} 更新)`;
-    document.getElementById('wxAmedas').style.display='block';
-  }catch(e){ toast('アメダス取得失敗',2500); console.error(e); }
+    amDiv.textContent=`📡 アメダス ${stations.length}地点 (${p(now.getHours())}:${p(now.getMinutes())} 更新)`;
+    amDiv.style.display='block';
+    document.getElementById('lblLAmedas').style.borderColor='';
+  }catch(e){
+    console.error('[AMeDAS] 取得失敗:', e);
+    toast(`アメダス取得失敗: ${e.message}`,3500);
+    amDiv.textContent=`❌ ${e.message}`;
+    amDiv.style.display='block';
+    document.getElementById('lblLAmedas').style.borderColor='#ff3b30';
+  }
 }
 
-document.getElementById('btnLAmedas').onclick=()=>{
-  amedasOn=!amedasOn;
-  document.getElementById('btnLAmedas').classList.toggle('on',amedasOn);
+document.getElementById('chkLAmedas').addEventListener('change',function(){
+  amedasOn=this.checked;
+  document.getElementById('lblLAmedas').classList.toggle('active',amedasOn);
   if(amedasOn){
     fetchAmedas();
     amedasTimer=setInterval(fetchAmedas,10*60*1000);
   } else {
-    clearInterval(amedasTimer);
+    clearInterval(amedasTimer); amedasTimer=null;
     amedasMarkers.forEach(m=>map.removeLayer(m)); amedasMarkers=[];
     document.getElementById('wxAmedas').style.display='none';
   }
-};
+});
 
 let wxChart=null;
 
@@ -842,13 +892,13 @@ async function fetchWeather(lat,lng){
     });
 
     document.getElementById('wxLoading').style.display='none';
-    document.getElementById('wxContent').style.display='flex';
+    document.getElementById('wxContent').style.display='flex'; // flex-direction:column set inline
   }catch(e){ document.getElementById('wxLoading').textContent='取得に失敗しました'; }
 }
 
 document.getElementById('btnWx').onclick=()=>{
   wxOpen=!wxOpen;
-  wxPanel.style.display=wxOpen?'flex':'none';
+  wxPanel.style.display=wxOpen?'block':'none';
   document.getElementById('btnWx').classList.toggle('hi',wxOpen);
   if(wxOpen){
     const ll=me?me.getLatLng():map.getCenter();
