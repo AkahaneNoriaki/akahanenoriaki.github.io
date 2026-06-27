@@ -746,15 +746,30 @@ function updateLayer(key){
   const def=LAYER_DEFS[key], st=layerState[key];
   if(!st.on) return;
   const t=jmaTime(def.interval,def.lag);
+  const urlTpl=def.url(t);
+  console.log(`[JMA:${key}] time=${t}`);
+  console.log(`[JMA:${key}] template=${urlTpl}`);
   if(st.layer) map.removeLayer(st.layer);
   st.errCount=0;
   const lbl=document.getElementById(LBL_MAP[key]);
-  const lyr=L.tileLayer(def.url(t),{opacity:0.6,maxNativeZoom:def.zoom,maxZoom:22,attribution:'© 気象庁'});
-  lyr.on('tileerror',()=>{
+  const lyr=L.tileLayer(urlTpl,{opacity:0.6,maxNativeZoom:def.zoom,maxZoom:22,attribution:'© 気象庁'});
+  lyr.on('tileerror',(e)=>{
     st.errCount++;
+    const failUrl=e.url||(e.tile&&e.tile.src)||urlTpl;
+    if(st.errCount===1){
+      console.error(`[JMA:${key}] tileerror URL:`, failUrl);
+      fetch(failUrl)
+        .then(r=>{
+          console.error(`[JMA:${key}] HTTP ${r.status} ${r.statusText}`);
+          toast(`[${key}] HTTP ${r.status}`,4000);
+        })
+        .catch(err=>{
+          console.error(`[JMA:${key}] fetch失敗 (CORS?):`, err.message);
+          toast(`[${key}] ${err.message}`,4000);
+        });
+    }
     if(st.errCount===3){
       if(lbl) lbl.style.borderColor='#ff3b30';
-      toast(`${lbl?lbl.textContent.trim():key} タイル取得失敗`,3000);
     }
   });
   lyr.on('tileload',()=>{ st.errCount=0; if(lbl) lbl.style.borderColor=''; });
