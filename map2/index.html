@@ -176,39 +176,27 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
   bottom: calc(70px + env(safe-area-inset-bottom));
   left: 0; right: 0;
   z-index: 9100;
-  display: none;
-  font-family: sans-serif;
-}
-#wxScroll {
-  display: flex;
-  overflow-x: scroll;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-#wxScroll::-webkit-scrollbar { display: none; }
-.wx-card {
-  flex-shrink: 0;
-  width: 100vw;
-  scroll-snap-align: start;
   background: rgba(255,255,255,0.97);
   border-top: 1px solid #eee;
   padding: 10px 14px 8px;
-  box-shadow: 0 -2px 10px rgba(0,0,0,0.12);
-  display: flex;
+  display: none;
   flex-direction: column;
   gap: 8px;
+  font-family: sans-serif;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.12);
+  max-height: 70vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 #wxHeader {
   display: flex; align-items: center; justify-content: space-between;
 }
 #wxTitle { font-size: 11px; color: #888; }
-#wxSwipeHint { font-size: 10px; color: #bbb; }
 #wxUpdated { font-size: 10px; color: #aaa; }
 #wxMain {
-  display: flex; align-items: center; gap: 14px;
+  display: flex; align-items: center; gap: 12px;
 }
-#wxIcon { font-size: 34px; line-height: 1; }
+#wxIcon { font-size: 32px; line-height: 1; }
 #wxDesc { font-size: 14px; font-weight: bold; color: #222; }
 #wxTemp { font-size: 26px; font-weight: bold; color: #0066ff; line-height: 1; }
 #wxGrid {
@@ -220,12 +208,16 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 }
 .wx-cell .lbl { font-size: 9px; color: #888; }
 .wx-cell .val { font-size: 13px; font-weight: bold; color: #222; margin-top: 1px; }
+#wxLayerLabel {
+  font-size: 10px; color: #999; font-weight: bold;
+  border-top: 1px solid #eee; padding-top: 6px; margin-top: 2px;
+}
 #wxLayers {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 5px;
 }
 .wx-chk-item {
   display: flex; align-items: center; gap: 6px;
-  padding: 7px 10px;
+  padding: 6px 10px;
   border: 1.5px solid #ddd; border-radius: 8px;
   cursor: pointer; font-size: 12px; color: #444;
   background: #fff;
@@ -237,13 +229,13 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
   accent-color: #0066ff;
   cursor: pointer; flex-shrink: 0;
 }
-.wx-chk-item .ico { font-size: 15px; }
+.wx-chk-item .ico { font-size: 14px; }
 .wx-chk-item.active {
   background: #eef4ff; border-color: #0066ff; color: #0044cc;
 }
 #wxAmedas {
-  font-size: 11px; color: #555; border-top: 1px solid #eee;
-  padding-top: 6px; display: none;
+  font-size: 11px; color: #555;
+  padding-top: 4px; display: none;
 }
 #wxLoading { font-size: 13px; color: #888; text-align: center; padding: 6px 0; }
 </style>
@@ -271,45 +263,36 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 </div>
 
 <div id="wxPanel">
-  <div id="wxScroll">
-    <!-- カード1: 天気情報 -->
-    <div class="wx-card" id="wxCard1">
-      <div id="wxHeader">
-        <span id="wxTitle">📍 現在地の天気</span>
-        <span id="wxSwipeHint">◀▶ スワイプ</span>
-        <span id="wxUpdated"></span>
-      </div>
-      <div id="wxLoading">取得中...</div>
-      <div id="wxContent" style="display:none; flex-direction:column; gap:7px;">
-        <div id="wxMain">
-          <div id="wxIcon"></div>
-          <div>
-            <div id="wxDesc"></div>
-            <div id="wxTemp"></div>
-          </div>
-        </div>
-        <div id="wxGrid">
-          <div class="wx-cell"><div class="lbl">🌧 降水量</div><div class="val" id="wxRain">--</div></div>
-          <div class="wx-cell"><div class="lbl">💨 風速</div><div class="val" id="wxWind">--</div></div>
-          <div class="wx-cell"><div class="lbl">💧 湿度</div><div class="val" id="wxHumid">--</div></div>
-        </div>
-        <div style="font-size:9px;color:#aaa;">今後6時間の降水量(棒)・気温(線)</div>
-        <canvas id="wxChart" height="55"></canvas>
+  <div id="wxHeader">
+    <span id="wxTitle">📍 現在地の天気</span>
+    <span id="wxUpdated"></span>
+  </div>
+  <div id="wxLoading">取得中...</div>
+  <div id="wxContent" style="display:none; flex-direction:column; gap:7px;">
+    <div id="wxMain">
+      <div id="wxIcon"></div>
+      <div>
+        <div id="wxDesc"></div>
+        <div id="wxTemp"></div>
       </div>
     </div>
-    <!-- カード2: レイヤ -->
-    <div class="wx-card" id="wxCard2">
-      <div style="font-size:11px;color:#888;font-weight:bold;margin-bottom:2px;">🗂 気象レイヤ</div>
-      <div id="wxLayers">
-        <label class="wx-chk-item" id="lblLRain"><input type="checkbox" id="chkLRain"><span class="ico">🌧</span><span>雨量現況</span></label>
-        <label class="wx-chk-item" id="lblLThunder"><input type="checkbox" id="chkLThunder"><span class="ico">⚡</span><span>雷</span></label>
-        <label class="wx-chk-item" id="lblLTornado"><input type="checkbox" id="chkLTornado"><span class="ico">🌪</span><span>竜巻確度</span></label>
-        <label class="wx-chk-item" id="lblLLand"><input type="checkbox" id="chkLLand"><span class="ico">⛰</span><span>土砂危険</span></label>
-        <label class="wx-chk-item" id="lblLFlood"><input type="checkbox" id="chkLFlood"><span class="ico">💧</span><span>洪水危険</span></label>
-        <label class="wx-chk-item" id="lblLAmedas"><input type="checkbox" id="chkLAmedas"><span class="ico">📡</span><span>アメダス</span></label>
-      </div>
-      <div id="wxAmedas"></div>
+    <div id="wxGrid">
+      <div class="wx-cell"><div class="lbl">🌧 降水量</div><div class="val" id="wxRain">--</div></div>
+      <div class="wx-cell"><div class="lbl">💨 風速</div><div class="val" id="wxWind">--</div></div>
+      <div class="wx-cell"><div class="lbl">💧 湿度</div><div class="val" id="wxHumid">--</div></div>
     </div>
+    <div style="font-size:9px;color:#aaa;">今後6時間の降水量(棒)・気温(線)</div>
+    <canvas id="wxChart" height="55"></canvas>
+    <div id="wxLayerLabel">🗂 気象レイヤ</div>
+    <div id="wxLayers">
+      <label class="wx-chk-item" id="lblLRain"><input type="checkbox" id="chkLRain"><span class="ico">🌧</span><span>雨量現況</span></label>
+      <label class="wx-chk-item" id="lblLThunder"><input type="checkbox" id="chkLThunder"><span class="ico">⚡</span><span>雷</span></label>
+      <label class="wx-chk-item" id="lblLTornado"><input type="checkbox" id="chkLTornado"><span class="ico">🌪</span><span>竜巻確度</span></label>
+      <label class="wx-chk-item" id="lblLLand"><input type="checkbox" id="chkLLand"><span class="ico">⛰</span><span>土砂危険</span></label>
+      <label class="wx-chk-item" id="lblLFlood"><input type="checkbox" id="chkLFlood"><span class="ico">💧</span><span>洪水危険</span></label>
+      <label class="wx-chk-item" id="lblLAmedas"><input type="checkbox" id="chkLAmedas"><span class="ico">📡</span><span>アメダス</span></label>
+    </div>
+    <div id="wxAmedas"></div>
   </div>
 </div>
 <div id="csSliderWrap">
@@ -898,7 +881,7 @@ async function fetchWeather(lat,lng){
 
 document.getElementById('btnWx').onclick=()=>{
   wxOpen=!wxOpen;
-  wxPanel.style.display=wxOpen?'block':'none';
+  wxPanel.style.display=wxOpen?'flex':'none';
   document.getElementById('btnWx').classList.toggle('hi',wxOpen);
   if(wxOpen){
     const ll=me?me.getLatLng():map.getCenter();
