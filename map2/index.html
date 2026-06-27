@@ -728,13 +728,15 @@ function jmaTime(intervalMin=5, lagMin=5){
   return `${d.getUTCFullYear()}${p(d.getUTCMonth()+1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}00`;
 }
 
-/* レイヤー定義 */
+/* レイヤー定義
+   正しいURL形式: /data/{type}/{basetime}/none/{validtime}/surf/{element}/{z}/{x}/{y}.png
+   ※ 要素名が座標より前、basetime と validtime の2つが必要 */
 const LAYER_DEFS={
-  rain:    {type:'nowc',    prod:'rain', zoom:10, url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/rain/png`},
-  thunder: {type:'nowc',    prod:'thnd', zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/thnd/png`},
-  tornado: {type:'nowc',    prod:'trnd', zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/trnd/png`},
-  land:    {type:'kikikuru',prod:'land', zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${t}/none/{z}/{x}/{y}/surf/land/png`},
-  flood:   {type:'kikikuru',prod:'flood',zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${t}/none/{z}/{x}/{y}/surf/flood/png`},
+  rain:    {type:'nowc',     zoom:10, url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/hrpns/{z}/{x}/{y}.png`},
+  thunder: {type:'nowc',     zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/thnd/{z}/{x}/{y}.png`},
+  tornado: {type:'nowc',     zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/trnd/{z}/{x}/{y}.png`},
+  land:    {type:'kikikuru', zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${bt}/none/${vt}/surf/land/{z}/{x}/{y}.png`},
+  flood:   {type:'kikikuru', zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${bt}/none/${vt}/surf/flood/{z}/{x}/{y}.png`},
 };
 const layerState={};
 Object.keys(LAYER_DEFS).forEach(k=>{ layerState[k]={on:false,layer:null,timer:null,errCount:0}; });
@@ -742,8 +744,7 @@ Object.keys(LAYER_DEFS).forEach(k=>{ layerState[k]={on:false,layer:null,timer:nu
 const CHK_MAP={rain:'chkLRain',thunder:'chkLThunder',tornado:'chkLTornado',land:'chkLLand',flood:'chkLFlood'};
 const LBL_MAP={rain:'lblLRain',thunder:'lblLThunder',tornado:'lblLTornado',land:'lblLLand',flood:'lblLFlood'};
 
-/* JMA targetTimes API から実際の有効タイムスタンプを取得 */
-const _jmaTimes={};
+/* JMA targetTimes API から {basetime, validtime} を取得 */
 async function getJmaValidTime(type){
   try{
     const url=`https://www.jma.go.jp/bosai/jmatile/data/${type}/targetTimes_N1.json`;
@@ -751,12 +752,13 @@ async function getJmaValidTime(type){
     if(!res.ok) throw new Error(`HTTP ${res.status}`);
     const arr=await res.json();
     if(!Array.isArray(arr)||!arr.length) throw new Error('empty');
-    /* 末尾が最新。validtime/basetime などフィールド名を許容 */
     const last=arr[arr.length-1];
-    const t=typeof last==='string'?last:(last.validtime||last.time||last.basetime||'');
-    if(!/^\d{10,14}$/.test(t)) throw new Error(`unexpected: "${t}"`);
-    console.log(`[JMA targetTimes:${type}]`, t);
-    return t.slice(0,12)+'00'; // 14桁統一
+    if(typeof last==='string') return {basetime:last, validtime:last};
+    const bt=last.basetime||last.time||'';
+    const vt=last.validtime||bt;
+    if(!bt) throw new Error(`no time field: ${JSON.stringify(last)}`);
+    console.log(`[JMA targetTimes:${type}] bt=${bt} vt=${vt} elements=`,last.elements);
+    return {basetime:bt, validtime:vt};
   }catch(e){
     console.warn(`[JMA targetTimes:${type}] failed:`,e.message);
     return null;
@@ -766,11 +768,15 @@ async function getJmaValidTime(type){
 async function updateLayer(key){
   const def=LAYER_DEFS[key], st=layerState[key];
   if(!st.on) return;
-  /* JMA targetTimes から取得、失敗時は自前計算にフォールバック */
-  const validTime=await getJmaValidTime(def.type);
-  const t=validTime||jmaTime(5,10); // fallback: 10分ラグ
-  const urlTpl=def.url(t);
-  console.log(`[JMA:${key}] t=${t} url=${urlTpl}`);
+  const times=await getJmaValidTime(def.type);
+  let urlTpl;
+  if(times){
+    urlTpl=def.url(times.basetime, times.validtime);
+  } else {
+    const t=jmaTime(5,10);
+    urlTpl=def.url(t,t);
+  }
+  console.log(`[JMA:${key}] url=${urlTpl}`);
   if(st.layer) map.removeLayer(st.layer);
   st.errCount=0;
   const lbl=document.getElementById(LBL_MAP[key]);
