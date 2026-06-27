@@ -152,6 +152,68 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
   display: none;
 }
 #btnAddrClear:active { background: #e0e0e0; }
+
+/* ─── 確認ダイアログ ────────────────────────── */
+#confirmOverlay {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,0.45); z-index:20000;
+  align-items:center; justify-content:center;
+}
+#confirmBox {
+  background:#fff; border-radius:16px; padding:20px 20px 14px;
+  max-width:280px; width:88%; text-align:center; font-size:14px;
+  line-height:1.6; font-family:sans-serif;
+}
+#confirmBox .c-btns { display:flex; gap:10px; margin-top:14px; }
+#confirmBox .c-btns button { flex:1; padding:10px; border:none; border-radius:10px; font-size:14px; cursor:pointer; }
+#confirmBox .c-ok { background:#0066ff; color:#fff; }
+#confirmBox .c-cancel { background:#f0f0f0; color:#333; }
+
+/* ─── 天気ダッシュボード ───────────────────── */
+#wxPanel {
+  position: fixed;
+  bottom: calc(70px + env(safe-area-inset-bottom));
+  left: 0; right: 0;
+  z-index: 9100;
+  background: rgba(255,255,255,0.97);
+  border-top: 1px solid #eee;
+  padding: 12px 16px 10px;
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  font-family: sans-serif;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.12);
+}
+#wxHeader {
+  display: flex; align-items: center; justify-content: space-between;
+}
+#wxTitle { font-size: 11px; color: #888; }
+#wxUpdated { font-size: 10px; color: #aaa; }
+#wxMain {
+  display: flex; align-items: center; gap: 14px;
+}
+#wxIcon { font-size: 36px; line-height: 1; }
+#wxDesc { font-size: 15px; font-weight: bold; color: #222; }
+#wxTemp { font-size: 28px; font-weight: bold; color: #0066ff; line-height: 1; }
+#wxGrid {
+  display: grid; grid-template-columns: repeat(3,1fr); gap: 6px;
+}
+.wx-cell {
+  background: #f5f7ff; border-radius: 10px;
+  padding: 7px 10px; text-align: center;
+}
+.wx-cell .lbl { font-size: 10px; color: #888; }
+.wx-cell .val { font-size: 14px; font-weight: bold; color: #222; margin-top: 2px; }
+#wxRadarRow {
+  display: flex; align-items: center; gap: 10px;
+}
+#btnRadar {
+  flex: 1; padding: 8px; border: 1.5px solid #0066ff;
+  border-radius: 10px; background: #fff; color: #0066ff;
+  font-size: 12px; cursor: pointer; font-family: sans-serif;
+}
+#btnRadar.on { background: #0066ff; color: #fff; }
+#wxLoading { font-size: 13px; color: #888; text-align: center; padding: 8px 0; }
 </style>
 </head>
 <body>
@@ -165,6 +227,41 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 <div id="recBadge">● REC</div>
 <div id="toast"></div>
 <div id="cacheBar"></div>
+
+<div id="confirmOverlay">
+  <div id="confirmBox">
+    <div id="confirmMsg"></div>
+    <div class="c-btns">
+      <button class="c-cancel" id="confirmCancel">キャンセル</button>
+      <button class="c-ok" id="confirmOk">続行</button>
+    </div>
+  </div>
+</div>
+
+<div id="wxPanel">
+  <div id="wxHeader">
+    <span id="wxTitle">📍 現在地の天気</span>
+    <span id="wxUpdated"></span>
+  </div>
+  <div id="wxLoading">取得中...</div>
+  <div id="wxContent" style="display:none; flex-direction:column; gap:10px;">
+    <div id="wxMain">
+      <div id="wxIcon"></div>
+      <div>
+        <div id="wxDesc"></div>
+        <div id="wxTemp"></div>
+      </div>
+    </div>
+    <div id="wxGrid">
+      <div class="wx-cell"><div class="lbl">🌧 降水量</div><div class="val" id="wxRain">--</div></div>
+      <div class="wx-cell"><div class="lbl">💨 風速</div><div class="val" id="wxWind">--</div></div>
+      <div class="wx-cell"><div class="lbl">💧 湿度</div><div class="val" id="wxHumid">--</div></div>
+    </div>
+    <div id="wxRadarRow">
+      <button id="btnRadar">🌧 雨量レーダー OFF</button>
+    </div>
+  </div>
+</div>
 <div id="csSliderWrap">
   <span>CS立体図 透過度</span>
   <input id="csSlider" type="range" min="0" max="100" value="100">
@@ -227,6 +324,13 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
   <button class="b-btn" id="btnAddrBtn">
     <span class="ico">📮</span>住所検索
   </button>
+
+  <div style="width:1px;background:#eee;margin:8px 2px;flex-shrink:0"></div>
+
+  <!-- 天気 -->
+  <button class="b-btn" id="btnWx">
+    <span class="ico">🌤</span>天気
+  </button>
 </div>
 
 <script>
@@ -235,6 +339,17 @@ function toast(msg, ms=2500){
   const t=document.getElementById('toast');
   t.textContent=msg; t.style.display='block';
   clearTimeout(t._t); t._t=setTimeout(()=>t.style.display='none',ms);
+}
+function showConfirm(msg){
+  return new Promise(resolve=>{
+    const ov=document.getElementById('confirmOverlay');
+    document.getElementById('confirmMsg').textContent=msg;
+    ov.style.display='flex';
+    const ok=document.getElementById('confirmOk');
+    const cancel=document.getElementById('confirmCancel');
+    const done=r=>{ ov.style.display='none'; ok.onclick=null; cancel.onclick=null; resolve(r); };
+    ok.onclick=()=>done(true); cancel.onclick=()=>done(false);
+  });
 }
 
 /* ── Map ──────────────────────────────────── */
@@ -434,7 +549,7 @@ function* tileUrls(b){
 async function runCache(bounds){
   if(!('caches' in window)){ toast('このブラウザはキャッシュ非対応'); return; }
   const total=tileCount(bounds);
-  if(!confirm(`約${total}枚のタイルをキャッシュします\n（約${Math.round(total*35/1024)}MB想定）\n続行しますか？`)) return;
+  if(!await showConfirm(`約${total}枚のタイルをキャッシュします\n（約${Math.round(total*35/1024)}MB想定）\n続行しますか？`)) return;
   const urls=[...tileUrls(bounds)];
   const cache=await caches.open(TILE_CACHE);
   const bar=document.getElementById('cacheBar');
@@ -459,7 +574,7 @@ document.getElementById('btnCacheGeotiff').onclick=()=>{
 };
 document.getElementById('btnClearCache').onclick=async()=>{
   if(!('caches' in window)) return;
-  if(!confirm('タイルキャッシュをすべて削除しますか？')) return;
+  if(!await showConfirm('タイルキャッシュをすべて削除しますか？')) return;
   await caches.delete(TILE_CACHE);
   toast('タイルキャッシュをクリアしました');
 };
@@ -521,6 +636,85 @@ document.getElementById('btnAddrClear').onclick=()=>{
   map.closePopup();
   document.getElementById('btnAddrClear').style.display='none';
   toast('ピンを削除しました');
+};
+
+/* ── 天気ダッシュボード ───────────────────── */
+const WX_CODE={
+  0:['☀️','快晴'],1:['🌤','晴れ'],2:['⛅','晴れ時々曇り'],3:['☁️','曇り'],
+  45:['🌫','霧'],48:['🌫','霧'],51:['🌦','霧雨'],53:['🌦','霧雨'],55:['🌦','霧雨'],
+  61:['🌧','雨'],63:['🌧','雨'],65:['🌧','大雨'],
+  71:['🌨','雪'],73:['🌨','雪'],75:['🌨','大雪'],77:['🌨','霧雪'],
+  80:['🌦','にわか雨'],81:['🌦','にわか雨'],82:['🌧','激しいにわか雨'],
+  85:['🌨','にわか雪'],86:['🌨','にわか雪'],
+  95:['⛈','雷雨'],96:['⛈','激しい雷雨'],99:['⛈','激しい雷雨']
+};
+
+const wxPanel=document.getElementById('wxPanel');
+let wxOpen=false, radarOn=false, radarLayer=null, radarTimer=null;
+
+function getNowcastTime(){
+  const now=new Date();
+  const jst=new Date(now.getTime()+9*60*60*1000);
+  const m=Math.floor(jst.getUTCMinutes()/5)*5-5;
+  jst.setUTCMinutes(m<0?m+60:m,0,0);
+  if(m<0) jst.setUTCHours(jst.getUTCHours()-1);
+  const p=n=>String(n).padStart(2,'0');
+  return `${jst.getUTCFullYear()}${p(jst.getUTCMonth()+1)}${p(jst.getUTCDate())}${p(jst.getUTCHours())}${p(jst.getUTCMinutes())}00`;
+}
+
+function updateRadar(){
+  if(!radarOn) return;
+  const t=getNowcastTime();
+  const url=`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/rain/png`;
+  if(radarLayer) map.removeLayer(radarLayer);
+  radarLayer=L.tileLayer(url,{opacity:0.6,maxNativeZoom:10,maxZoom:22,attribution:'© 気象庁'}).addTo(map);
+}
+
+function toggleRadar(){
+  radarOn=!radarOn;
+  const btn=document.getElementById('btnRadar');
+  btn.textContent=`🌧 雨量レーダー ${radarOn?'ON':'OFF'}`;
+  btn.classList.toggle('on',radarOn);
+  if(radarOn){
+    updateRadar();
+    radarTimer=setInterval(updateRadar,5*60*1000);
+  } else {
+    clearInterval(radarTimer);
+    if(radarLayer){ map.removeLayer(radarLayer); radarLayer=null; }
+  }
+}
+document.getElementById('btnRadar').onclick=toggleRadar;
+
+async function fetchWeather(lat,lng){
+  document.getElementById('wxLoading').style.display='block';
+  document.getElementById('wxContent').style.display='none';
+  try{
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,precipitation,windspeed_10m,winddirection_10m,relativehumidity_2m,weathercode&timezone=Asia%2FTokyo&forecast_days=1`;
+    const res=await fetch(url);
+    const d=await res.json();
+    const c=d.current;
+    const [icon,desc]=WX_CODE[c.weathercode]||['🌡','--'];
+    document.getElementById('wxIcon').textContent=icon;
+    document.getElementById('wxDesc').textContent=desc;
+    document.getElementById('wxTemp').textContent=`${c.temperature_2m}°C`;
+    document.getElementById('wxRain').textContent=`${c.precipitation}mm`;
+    document.getElementById('wxWind').textContent=`${c.windspeed_10m}m/s`;
+    document.getElementById('wxHumid').textContent=`${c.relativehumidity_2m}%`;
+    const now=new Date(); const p=n=>String(n).padStart(2,'0');
+    document.getElementById('wxUpdated').textContent=`${p(now.getHours())}:${p(now.getMinutes())} 更新`;
+    document.getElementById('wxLoading').style.display='none';
+    document.getElementById('wxContent').style.display='flex';
+  }catch(e){ document.getElementById('wxLoading').textContent='取得に失敗しました'; }
+}
+
+document.getElementById('btnWx').onclick=()=>{
+  wxOpen=!wxOpen;
+  wxPanel.style.display=wxOpen?'flex':'none';
+  document.getElementById('btnWx').classList.toggle('hi',wxOpen);
+  if(wxOpen){
+    const ll=me?me.getLatLng():map.getCenter();
+    fetchWeather(ll.lat,ll.lng);
+  }
 };
 </script>
 </body>
