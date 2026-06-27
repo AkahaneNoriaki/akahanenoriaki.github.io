@@ -666,27 +666,27 @@ const WX_CODE={
 const wxPanel=document.getElementById('wxPanel');
 let wxOpen=false;
 
-/* 時刻計算 */
+/* 時刻計算（JST基準、Date.UTCの自然な日付繰り越しを利用） */
 function jmaTime(intervalMin=5, lagMin=5){
   const now=new Date();
   const jst=new Date(now.getTime()+9*60*60*1000);
   const total=jst.getUTCHours()*60+jst.getUTCMinutes();
   const floored=Math.floor(total/intervalMin)*intervalMin-lagMin;
-  const d=new Date(Date.UTC(jst.getUTCFullYear(),jst.getUTCMonth(),jst.getUTCDate(),0,floored<0?floored+1440:floored,0));
+  const d=new Date(Date.UTC(jst.getUTCFullYear(),jst.getUTCMonth(),jst.getUTCDate(),0,floored,0));
   const p=n=>String(n).padStart(2,'0');
   return `${d.getUTCFullYear()}${p(d.getUTCMonth()+1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}00`;
 }
 
 /* レイヤー定義 */
 const LAYER_DEFS={
-  rain:     {interval:5,  lag:5,  zoom:10, url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/rain/png`},
-  thunder:  {interval:5,  lag:5,  zoom:5,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/thnd/png`},
-  tornado:  {interval:5,  lag:5,  zoom:5,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/trnd/png`},
-  land:     {interval:10, lag:10, zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${t}/none/{z}/{x}/{y}/surf/land/png`},
-  flood:    {interval:10, lag:10, zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${t}/none/{z}/{x}/{y}/surf/flood/png`},
+  rain:    {interval:5,  lag:5,  zoom:10, url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/rain/png`},
+  thunder: {interval:5,  lag:5,  zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/thnd/png`},
+  tornado: {interval:5,  lag:5,  zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${t}/none/{z}/{x}/{y}/surf/trnd/png`},
+  land:    {interval:10, lag:20, zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${t}/none/{z}/{x}/{y}/surf/land/png`},
+  flood:   {interval:10, lag:20, zoom:9,  url:t=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${t}/none/{z}/{x}/{y}/surf/flood/png`},
 };
 const layerState={};
-Object.keys(LAYER_DEFS).forEach(k=>{ layerState[k]={on:false,layer:null,timer:null}; });
+Object.keys(LAYER_DEFS).forEach(k=>{ layerState[k]={on:false,layer:null,timer:null,errCount:0}; });
 
 const BTN_MAP={rain:'btnLRain',thunder:'btnLThunder',tornado:'btnLTornado',land:'btnLLand',flood:'btnLFlood'};
 
@@ -695,7 +695,18 @@ function updateLayer(key){
   if(!st.on) return;
   const t=jmaTime(def.interval,def.lag);
   if(st.layer) map.removeLayer(st.layer);
-  st.layer=L.tileLayer(def.url(t),{opacity:0.6,maxNativeZoom:def.zoom,maxZoom:22,attribution:'© 気象庁'}).addTo(map);
+  st.errCount=0;
+  const lyr=L.tileLayer(def.url(t),{opacity:0.6,maxNativeZoom:def.zoom,maxZoom:22,attribution:'© 気象庁'});
+  lyr.on('tileerror',()=>{
+    st.errCount++;
+    if(st.errCount===3){
+      const btn=document.getElementById(BTN_MAP[key]);
+      btn.style.borderColor='#ff3b30';
+      toast(`${btn.textContent.trim()} タイル取得失敗`,3000);
+    }
+  });
+  lyr.on('tileload',()=>{ st.errCount=0; document.getElementById(BTN_MAP[key]).style.borderColor=''; });
+  st.layer=lyr.addTo(map);
 }
 
 function toggleLayer(key){
@@ -725,24 +736,31 @@ let _amedasTable=null;
 async function fetchAmedas(){
   try{
     const timeRes=await fetch('https://www.jma.go.jp/bosai/amedas/data/latest_time.txt');
+    if(!timeRes.ok) throw new Error(`latest_time: ${timeRes.status}`);
     const timeStr=(await timeRes.text()).trim().replace(/[^0-9]/g,'');
-    const dataRes=await fetch(`https://www.jma.go.jp/bosai/amedas/data/map/${timeStr}.json`);
-    const data=await dataRes.json();
     if(!_amedasTable){
       const tRes=await fetch('https://www.jma.go.jp/bosai/amedas/const/amedastable.json');
+      if(!tRes.ok) throw new Error(`amedastable: ${tRes.status}`);
       _amedasTable=await tRes.json();
     }
+    const dataRes=await fetch(`https://www.jma.go.jp/bosai/amedas/data/map/${timeStr}.json`);
+    if(!dataRes.ok) throw new Error(`map data: ${dataRes.status}`);
+    const data=await dataRes.json();
     amedasMarkers.forEach(m=>map.removeLayer(m)); amedasMarkers=[];
     const center=me?me.getLatLng():map.getCenter();
     const stations=Object.entries(data).map(([code,d])=>{
-      const info=_amedasTable[code]; if(!info) return null;
+      const info=_amedasTable[code];
+      if(!info||!info.lat||!info.lon||!Array.isArray(info.lat)) return null;
       const lat=info.lat[0]+info.lat[1]/60, lng=info.lon[0]+info.lon[1]/60;
+      if(isNaN(lat)||isNaN(lng)) return null;
       return {code,info,d,lat,lng,dist:map.distance(center,L.latLng(lat,lng))};
     }).filter(s=>s&&s.dist<60000).sort((a,b)=>a.dist-b.dist).slice(0,15);
 
+    if(stations.length===0){ toast('周辺60km以内にアメダス観測点なし',3000); return; }
+
     stations.forEach(s=>{
       const temp=s.d.temp?`${s.d.temp[0]}°C`:'--';
-      const rain=s.d.rain1h?`${s.d.rain1h[0]}mm/h`:'--';
+      const rain=s.d.precipitation1h?`${s.d.precipitation1h[0]}mm/h`:'--';
       const wind=s.d.wind?`${s.d.wind[0]}m/s`:'--';
       const m=L.marker([s.lat,s.lng],{icon:L.divIcon({
         html:`<div style="background:rgba(0,80,200,0.85);color:#fff;border-radius:5px;padding:2px 5px;font-size:10px;font-family:sans-serif;white-space:nowrap">${temp}</div>`,
