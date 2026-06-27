@@ -170,29 +170,57 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 #confirmBox .c-ok { background:#0066ff; color:#fff; }
 #confirmBox .c-cancel { background:#f0f0f0; color:#333; }
 
-/* ─── 天気ダッシュボード ───────────────────── */
+/* ─── 天気ダッシュボード（ドラッグ移動可能） ── */
 #wxPanel {
   position: fixed;
-  bottom: calc(70px + env(safe-area-inset-bottom));
-  left: 0; right: 0;
+  top: 56px; left: 10px;
   z-index: 9100;
   background: rgba(255,255,255,0.97);
-  border-top: 1px solid #eee;
-  padding: 10px 14px 8px;
+  border: 1px solid rgba(0,0,0,0.13);
+  border-radius: 14px;
   display: none;
   flex-direction: column;
-  gap: 8px;
   font-family: sans-serif;
-  box-shadow: 0 -2px 10px rgba(0,0,0,0.12);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+  width: min(300px, calc(100vw - 20px));
   max-height: 70vh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
+  touch-action: none;
 }
-#wxHeader {
+#wxHandle {
   display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 12px 6px;
+  background: #f4f4f4;
+  border-radius: 14px 14px 0 0;
+  border-bottom: 1px solid #e8e8e8;
+  cursor: grab;
+  user-select: none; -webkit-user-select: none;
+  gap: 8px;
 }
-#wxTitle { font-size: 11px; color: #888; }
-#wxUpdated { font-size: 10px; color: #aaa; }
+#wxHandle:active { cursor: grabbing; }
+#wxHandleGrip {
+  display: flex; flex-direction: column; gap: 3px; flex-shrink: 0;
+}
+#wxHandleGrip span {
+  display: block; width: 20px; height: 2px;
+  background: #bbb; border-radius: 1px;
+}
+#wxTitle { font-size: 11px; color: #888; flex: 1; }
+#wxUpdated { font-size: 10px; color: #aaa; white-space: nowrap; }
+#wxClose {
+  flex-shrink: 0; width: 20px; height: 20px;
+  background: #ddd; border: none; border-radius: 50%;
+  font-size: 12px; line-height: 20px; text-align: center;
+  cursor: pointer; color: #666; padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+#wxClose:active { background: #bbb; }
+#wxBody {
+  padding: 10px 12px 10px;
+  display: flex; flex-direction: column; gap: 8px;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  max-height: calc(70vh - 36px);
+}
 #wxMain {
   display: flex; align-items: center; gap: 12px;
 }
@@ -263,36 +291,40 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 </div>
 
 <div id="wxPanel">
-  <div id="wxHeader">
+  <div id="wxHandle">
+    <div id="wxHandleGrip"><span></span><span></span><span></span></div>
     <span id="wxTitle">📍 現在地の天気</span>
     <span id="wxUpdated"></span>
+    <button id="wxClose">✕</button>
   </div>
-  <div id="wxLoading">取得中...</div>
-  <div id="wxContent" style="display:none; flex-direction:column; gap:7px;">
-    <div id="wxMain">
-      <div id="wxIcon"></div>
-      <div>
-        <div id="wxDesc"></div>
-        <div id="wxTemp"></div>
+  <div id="wxBody">
+    <div id="wxLoading">取得中...</div>
+    <div id="wxContent" style="display:none; flex-direction:column; gap:7px;">
+      <div id="wxMain">
+        <div id="wxIcon"></div>
+        <div>
+          <div id="wxDesc"></div>
+          <div id="wxTemp"></div>
+        </div>
       </div>
+      <div id="wxGrid">
+        <div class="wx-cell"><div class="lbl">🌧 降水量</div><div class="val" id="wxRain">--</div></div>
+        <div class="wx-cell"><div class="lbl">💨 風速</div><div class="val" id="wxWind">--</div></div>
+        <div class="wx-cell"><div class="lbl">💧 湿度</div><div class="val" id="wxHumid">--</div></div>
+      </div>
+      <div style="font-size:9px;color:#aaa;">今後6時間の降水量(棒)・気温(線)</div>
+      <canvas id="wxChart" height="55"></canvas>
+      <div id="wxLayerLabel">🗂 気象レイヤ</div>
+      <div id="wxLayers">
+        <label class="wx-chk-item" id="lblLRain"><input type="checkbox" id="chkLRain"><span class="ico">🌧</span><span>雨量現況</span></label>
+        <label class="wx-chk-item" id="lblLThunder"><input type="checkbox" id="chkLThunder"><span class="ico">⚡</span><span>雷</span></label>
+        <label class="wx-chk-item" id="lblLTornado"><input type="checkbox" id="chkLTornado"><span class="ico">🌪</span><span>竜巻確度</span></label>
+        <label class="wx-chk-item" id="lblLLand"><input type="checkbox" id="chkLLand"><span class="ico">⛰</span><span>土砂危険</span></label>
+        <label class="wx-chk-item" id="lblLFlood"><input type="checkbox" id="chkLFlood"><span class="ico">💧</span><span>洪水危険</span></label>
+        <label class="wx-chk-item" id="lblLAmedas"><input type="checkbox" id="chkLAmedas"><span class="ico">📡</span><span>アメダス</span></label>
+      </div>
+      <div id="wxAmedas"></div>
     </div>
-    <div id="wxGrid">
-      <div class="wx-cell"><div class="lbl">🌧 降水量</div><div class="val" id="wxRain">--</div></div>
-      <div class="wx-cell"><div class="lbl">💨 風速</div><div class="val" id="wxWind">--</div></div>
-      <div class="wx-cell"><div class="lbl">💧 湿度</div><div class="val" id="wxHumid">--</div></div>
-    </div>
-    <div style="font-size:9px;color:#aaa;">今後6時間の降水量(棒)・気温(線)</div>
-    <canvas id="wxChart" height="55"></canvas>
-    <div id="wxLayerLabel">🗂 気象レイヤ</div>
-    <div id="wxLayers">
-      <label class="wx-chk-item" id="lblLRain"><input type="checkbox" id="chkLRain"><span class="ico">🌧</span><span>雨量現況</span></label>
-      <label class="wx-chk-item" id="lblLThunder"><input type="checkbox" id="chkLThunder"><span class="ico">⚡</span><span>雷</span></label>
-      <label class="wx-chk-item" id="lblLTornado"><input type="checkbox" id="chkLTornado"><span class="ico">🌪</span><span>竜巻確度</span></label>
-      <label class="wx-chk-item" id="lblLLand"><input type="checkbox" id="chkLLand"><span class="ico">⛰</span><span>土砂危険</span></label>
-      <label class="wx-chk-item" id="lblLFlood"><input type="checkbox" id="chkLFlood"><span class="ico">💧</span><span>洪水危険</span></label>
-      <label class="wx-chk-item" id="lblLAmedas"><input type="checkbox" id="chkLAmedas"><span class="ico">📡</span><span>アメダス</span></label>
-    </div>
-    <div id="wxAmedas"></div>
   </div>
 </div>
 <div id="csSliderWrap">
@@ -879,15 +911,64 @@ async function fetchWeather(lat,lng){
   }catch(e){ document.getElementById('wxLoading').textContent='取得に失敗しました'; }
 }
 
-document.getElementById('btnWx').onclick=()=>{
-  wxOpen=!wxOpen;
-  wxPanel.style.display=wxOpen?'flex':'none';
-  document.getElementById('btnWx').classList.toggle('hi',wxOpen);
-  if(wxOpen){
-    const ll=me?me.getLatLng():map.getCenter();
-    fetchWeather(ll.lat,ll.lng);
+function openWxPanel(){
+  wxOpen=true;
+  wxPanel.style.display='flex';
+  document.getElementById('btnWx').classList.add('hi');
+  const ll=me?me.getLatLng():map.getCenter();
+  fetchWeather(ll.lat,ll.lng);
+}
+function closeWxPanel(){
+  wxOpen=false;
+  wxPanel.style.display='none';
+  document.getElementById('btnWx').classList.remove('hi');
+}
+
+document.getElementById('btnWx').onclick=()=>{ wxOpen?closeWxPanel():openWxPanel(); };
+document.getElementById('wxClose').onclick=closeWxPanel;
+
+/* ── パネルドラッグ移動 ──────────────────── */
+(()=>{
+  const handle=document.getElementById('wxHandle');
+  let drag=null;
+
+  function startDrag(cx,cy){
+    const r=wxPanel.getBoundingClientRect();
+    drag={ox:cx-r.left, oy:cy-r.top};
   }
-};
+  function moveDrag(cx,cy){
+    if(!drag) return;
+    let x=cx-drag.ox, y=cy-drag.oy;
+    const pw=wxPanel.offsetWidth, ph=wxPanel.offsetHeight;
+    x=Math.max(0, Math.min(window.innerWidth-pw, x));
+    y=Math.max(0, Math.min(window.innerHeight-ph, y));
+    wxPanel.style.left=x+'px';
+    wxPanel.style.top=y+'px';
+  }
+  function endDrag(){ drag=null; }
+
+  /* タッチ */
+  handle.addEventListener('touchstart', e=>{
+    const t=e.touches[0];
+    startDrag(t.clientX,t.clientY);
+  },{passive:true});
+  handle.addEventListener('touchmove', e=>{
+    if(!drag) return;
+    e.preventDefault();
+    const t=e.touches[0];
+    moveDrag(t.clientX,t.clientY);
+  },{passive:false});
+  handle.addEventListener('touchend', endDrag,{passive:true});
+
+  /* マウス（PC） */
+  handle.addEventListener('mousedown', e=>{
+    if(e.target===document.getElementById('wxClose')) return;
+    startDrag(e.clientX,e.clientY);
+    handle.style.cursor='grabbing';
+  });
+  document.addEventListener('mousemove', e=>{ if(drag) moveDrag(e.clientX,e.clientY); });
+  document.addEventListener('mouseup', ()=>{ endDrag(); handle.style.cursor='grab'; });
+})();
 </script>
 </body>
 </html>
