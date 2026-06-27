@@ -11,6 +11,7 @@
 <meta name="theme-color" content="#111111">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://unpkg.com/georaster"></script>
 <script src="https://unpkg.com/georaster-layer-for-leaflet/dist/georaster-layer-for-leaflet.min.js"></script>
 <style>
@@ -262,6 +263,8 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
       <div class="wx-cell"><div class="lbl">💨 風速</div><div class="val" id="wxWind">--</div></div>
       <div class="wx-cell"><div class="lbl">💧 湿度</div><div class="val" id="wxHumid">--</div></div>
     </div>
+    <div style="font-size:10px;color:#888;margin-bottom:-4px;">今後6時間の降水量予報 (mm)</div>
+    <canvas id="wxChart" height="80"></canvas>
     <div id="wxLayers">
       <button class="wx-layer-btn" id="btnLRain"><span class="ico">🌧</span>雨量現況</button>
       <button class="wx-layer-btn" id="btnLThunder"><span class="ico">⚡</span>雷</button>
@@ -768,11 +771,15 @@ document.getElementById('btnLAmedas').onclick=()=>{
   }
 };
 
+let wxChart=null;
+
 async function fetchWeather(lat,lng){
   document.getElementById('wxLoading').style.display='block';
   document.getElementById('wxContent').style.display='none';
   try{
-    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,precipitation,windspeed_10m,winddirection_10m,relativehumidity_2m,weathercode&timezone=Asia%2FTokyo&forecast_days=1`;
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}`
+      +`&current=temperature_2m,precipitation,windspeed_10m,winddirection_10m,relativehumidity_2m,weathercode`
+      +`&hourly=precipitation,temperature_2m&timezone=Asia%2FTokyo&forecast_days=1`;
     const res=await fetch(url);
     const d=await res.json();
     const c=d.current;
@@ -785,6 +792,37 @@ async function fetchWeather(lat,lng){
     document.getElementById('wxHumid').textContent=`${c.relativehumidity_2m}%`;
     const now=new Date(); const p=n=>String(n).padStart(2,'0');
     document.getElementById('wxUpdated').textContent=`${p(now.getHours())}:${p(now.getMinutes())} 更新`;
+
+    /* 今後6時間グラフ */
+    const nowHour=now.getHours();
+    const labels=[], rain=[], temp=[];
+    for(let i=0;i<6;i++){
+      const h=(nowHour+i)%24;
+      labels.push(`${h}時`);
+      rain.push(d.hourly.precipitation[nowHour+i]??0);
+      temp.push(d.hourly.temperature_2m[nowHour+i]??null);
+    }
+    const ctx=document.getElementById('wxChart');
+    if(wxChart) wxChart.destroy();
+    wxChart=new Chart(ctx,{
+      type:'bar',
+      data:{
+        labels,
+        datasets:[
+          {label:'降水量(mm)',data:rain,backgroundColor:'rgba(0,102,255,0.5)',borderColor:'rgba(0,102,255,0.8)',borderWidth:1,yAxisID:'y'},
+          {label:'気温(°C)',data:temp,type:'line',borderColor:'rgba(255,100,0,0.8)',backgroundColor:'transparent',borderWidth:2,pointRadius:3,tension:0.3,yAxisID:'y2'}
+        ]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:true,
+        plugins:{legend:{display:false}},
+        scales:{
+          y:{beginAtZero:true,position:'left',ticks:{font:{size:9},maxTicksLimit:4},grid:{color:'rgba(0,0,0,0.06)'}},
+          y2:{position:'right',ticks:{font:{size:9},maxTicksLimit:4,callback:v=>v+'°'},grid:{display:false}}
+        }
+      }
+    });
+
     document.getElementById('wxLoading').style.display='none';
     document.getElementById('wxContent').style.display='flex';
   }catch(e){ document.getElementById('wxLoading').textContent='取得に失敗しました'; }
