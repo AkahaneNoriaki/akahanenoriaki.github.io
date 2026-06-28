@@ -863,9 +863,9 @@ async function fetchAmedas(){
       const rain=s.d.precipitation1h?`${s.d.precipitation1h[0]}mm/h`:(s.d.precipitation10m?`${s.d.precipitation10m[0]}mm/10m`:'--');
       const wind=s.d.wind?`${s.d.wind[0]}m/s`:'--';
       /* 気温で背景色を変える */
-      const bg=tv===null?'#888':tv>=30?'#c62828':tv>=25?'#e65100':tv>=15?'#1565c0':tv>=5?'#0277bd':'#4a148c';
+      const col=tv===null?'#888':tv>=30?'#c62828':tv>=25?'#e65100':tv>=15?'#1565c0':tv>=5?'#0277bd':'#4a148c';
       const m=L.marker([s.lat,s.lng],{icon:L.divIcon({
-        html:`<div style="background:${bg};color:#fff;border-radius:6px;padding:3px 8px;font-size:13px;font-family:sans-serif;font-weight:bold;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.35)">${temp}</div>`,
+        html:`<div style="background:#fff;color:${col};border:2px solid ${col};border-radius:6px;padding:2px 7px;font-size:13px;font-family:sans-serif;font-weight:bold;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.25)">${temp}</div>`,
         className:'',iconAnchor:[22,12]
       })}).addTo(map);
       m.bindPopup(`<div style="font-size:12px;font-family:sans-serif"><b>📡 ${s.info.kjName||s.code}</b><br>🌡 ${temp}　🌧 ${rain}　💨 ${wind}</div>`);
