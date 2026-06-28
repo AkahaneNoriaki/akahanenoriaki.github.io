@@ -749,7 +749,9 @@ const LBL_MAP={rain:'lblLRain',thunder:'lblLThunder',tornado:'lblLTornado',land:
 /* JMA targetTimes API から {basetime, validtime} を取得 */
 async function getJmaValidTime(type){
   try{
-    const url=`https://www.jma.go.jp/bosai/jmatile/data/${type}/targetTimes_N1.json`;
+    /* nowc → targetTimes_N1.json, risk → targetTimes.json (kikuchan/jmamap より) */
+    const file=type==='risk'?'targetTimes.json':'targetTimes_N1.json';
+    const url=`https://www.jma.go.jp/bosai/jmatile/data/${type}/${file}`;
     const res=await fetch(url,{cache:'no-store'});
     if(!res.ok) throw new Error(`HTTP ${res.status}`);
     const arr=await res.json();
