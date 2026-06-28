@@ -320,7 +320,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
         <label class="wx-chk-item" id="lblLRain"><input type="checkbox" id="chkLRain"><span class="ico">🌧</span><span>雨量現況</span></label>
         <label class="wx-chk-item" id="lblLLand"><input type="checkbox" id="chkLLand"><span class="ico">⛰</span><span>土砂危険</span></label>
         <label class="wx-chk-item" id="lblLFlood"><input type="checkbox" id="chkLFlood"><span class="ico">🌊</span><span>浸水危険</span></label>
-        <label class="wx-chk-item" id="lblLRiver"><input type="checkbox" id="chkLRiver"><span class="ico">🏞</span><span>河川水位</span></label>
+        <label class="wx-chk-item" id="lblLRiver"><input type="checkbox" id="chkLRiver"><span class="ico">🏞</span><span>河川危険度</span></label>
         <label class="wx-chk-item" id="lblLAmedas"><input type="checkbox" id="chkLAmedas"><span class="ico">📡</span><span>アメダス</span></label>
       </div>
       <div id="wxAmedas"></div>
@@ -732,17 +732,18 @@ function jmaTime(intervalMin=5, lagMin=5){
    URL形式: /data/{type}/{basetime}/none/{validtime}/surf/{element}/{z}/{x}/{y}.png
    要素名はkikuchan/jmamapライブラリより確認:
      nowc: hrpns(雨), thns(雷), trns(竜巻)
-     risk: land(土砂), inund(浸水) ※flood はベクタータイル(PBF)のため除外 */
+     risk elements: land(土砂), inund(浸水), flood(洪水危険度) */
 const LAYER_DEFS={
   rain:  {type:'nowc', zoom:10, tf:['targetTimes_N1.json'], url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/hrpns/{z}/{x}/{y}.png`},
   land:  {type:'risk', zoom:9,  tf:['targetTimes.json'],    url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/risk/${bt}/none/${vt}/surf/land/{z}/{x}/{y}.png`},
   flood: {type:'risk', zoom:9,  tf:['targetTimes.json'],    url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/risk/${bt}/none/${vt}/surf/inund/{z}/{x}/{y}.png`},
+  river: {type:'risk', zoom:9,  tf:['targetTimes.json'],    url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/risk/${bt}/none/${vt}/surf/flood/{z}/{x}/{y}.png`},
 };
 const layerState={};
 Object.keys(LAYER_DEFS).forEach(k=>{ layerState[k]={on:false,layer:null,timer:null,errCount:0}; });
 
-const CHK_MAP={rain:'chkLRain',land:'chkLLand',flood:'chkLFlood'};
-const LBL_MAP={rain:'lblLRain',land:'lblLLand',flood:'lblLFlood'};
+const CHK_MAP={rain:'chkLRain',land:'chkLLand',flood:'chkLFlood',river:'chkLRiver'};
+const LBL_MAP={rain:'lblLRain',land:'lblLLand',flood:'lblLFlood',river:'lblLRiver'};
 
 /* JMA targetTimes API から {basetime, validtime} を取得
    candidates を順に試して最初に成功したものを返す */
@@ -897,62 +898,7 @@ document.getElementById('chkLAmedas').addEventListener('change',function(){
   }
 });
 
-/* 河川水位（国土交通省 川の防災情報） */
-let riverOn=false, riverMarkers=[], riverTimer=null;
-
-async function fetchRiverLevel(){
-  riverMarkers.forEach(m=>map.removeLayer(m)); riverMarkers=[];
-  const lbl=document.getElementById('lblLRiver');
-  try{
-    const b=map.getBounds();
-    const url=`https://www.river.go.jp/kawabou/ipJsoFcVnList.do`
-      +`?output=json&type=WL&ob=1`
-      +`&lat1=${b.getSouth().toFixed(4)}&lon1=${b.getWest().toFixed(4)}`
-      +`&lat2=${b.getNorth().toFixed(4)}&lon2=${b.getEast().toFixed(4)}`;
-    const res=await fetch(url,{mode:'cors'});
-    if(!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json=await res.json();
-    const list=Array.isArray(json)?json:(json.list||json.stations||json.data||[]);
-    if(!list.length){ toast('周辺の水位観測所なし',2500); return; }
-    let shown=0;
-    list.forEach(st=>{
-      const lat=parseFloat(st.lat||st.latitude||0);
-      const lng=parseFloat(st.lon||st.longitude||st.lng||0);
-      if(!lat||!lng) return;
-      const lv=Math.min(parseInt(st.alarmLevel||st.alarm_level||st.level||0)||0,3);
-      const colors=['#43a047','#fbc02d','#ef6c00','#c62828'];
-      const statuses=['正常','注意','警戒','危険'];
-      const wl=st.waterLevel!=null?`${parseFloat(st.waterLevel).toFixed(2)}m`
-               :st.water_level!=null?`${parseFloat(st.water_level).toFixed(2)}m`:'--';
-      const name=st.name||st.stationName||st.station_name||'水位観測所';
-      const mk=L.marker([lat,lng],{icon:L.divIcon({
-        html:`<div style="background:${colors[lv]};color:#fff;border-radius:6px;padding:3px 7px;font-size:12px;font-family:sans-serif;font-weight:bold;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.35)">${wl}</div>`,
-        className:'',iconAnchor:[20,12]
-      })}).addTo(map);
-      mk.bindPopup(`<div style="font-size:12px;font-family:sans-serif"><b>🏞 ${name}</b><br>水位: ${wl}　状態: ${statuses[lv]}</div>`);
-      riverMarkers.push(mk); shown++;
-    });
-    if(lbl) lbl.style.borderColor='';
-    if(shown) toast(`河川水位 ${shown}地点`,2000);
-    else toast('水位データなし',2500);
-  }catch(e){
-    console.error('[River] 取得失敗:',e);
-    toast(`河川水位: ${e.message}`,3500);
-    if(lbl) lbl.style.borderColor='#ff3b30';
-  }
-}
-
-document.getElementById('chkLRiver').addEventListener('change',function(){
-  riverOn=this.checked;
-  document.getElementById('lblLRiver').classList.toggle('active',riverOn);
-  if(riverOn){
-    fetchRiverLevel();
-    riverTimer=setInterval(fetchRiverLevel,10*60*1000);
-  } else {
-    clearInterval(riverTimer); riverTimer=null;
-    riverMarkers.forEach(m=>map.removeLayer(m)); riverMarkers=[];
-  }
-});
+/* chkLRiver は LAYER_DEFS の river エントリで CHK_MAP/LBL_MAP 経由で処理される */
 
 let wxChart=null;
 
@@ -1030,7 +976,6 @@ document.getElementById('wxRefresh').onclick=()=>{
   const ll=me?me.getLatLng():map.getCenter();
   fetchWeather(ll.lat,ll.lng);
   if(amedasOn) fetchAmedas();
-  if(riverOn) fetchRiverLevel();
   Object.keys(LAYER_DEFS).forEach(k=>{ if(layerState[k].on) updateLayer(k); });
 };
 
