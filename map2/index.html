@@ -734,11 +734,11 @@ function jmaTime(intervalMin=5, lagMin=5){
      nowc: hrpns(雨), thns(雷), trns(竜巻)
      risk: land(土砂), inund(浸水) ※flood はベクタータイル(PBF)のため除外 */
 const LAYER_DEFS={
-  rain:    {type:'nowc', zoom:10, url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/hrpns/{z}/{x}/{y}.png`},
-  thunder: {type:'nowc', zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/thns/{z}/{x}/{y}.png`},
-  tornado: {type:'nowc', zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/trns/{z}/{x}/{y}.png`},
-  land:    {type:'risk', zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/risk/${bt}/none/${vt}/surf/land/{z}/{x}/{y}.png`},
-  flood:   {type:'risk', zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/risk/${bt}/none/${vt}/surf/inund/{z}/{x}/{y}.png`},
+  rain:    {type:'nowc', zoom:10, tf:['targetTimes_N1.json'], url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/hrpns/{z}/{x}/{y}.png`},
+  thunder: {type:'nowc', zoom:9,  tf:['targetTimes_N3.json','targetTimes_N2.json','targetTimes_N1.json'], url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/thns/{z}/{x}/{y}.png`},
+  tornado: {type:'nowc', zoom:9,  tf:['targetTimes_N3.json','targetTimes_N2.json','targetTimes_N1.json'], url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/trns/{z}/{x}/{y}.png`},
+  land:    {type:'risk', zoom:9,  tf:['targetTimes.json'], url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/risk/${bt}/none/${vt}/surf/land/{z}/{x}/{y}.png`},
+  flood:   {type:'risk', zoom:9,  tf:['targetTimes.json'], url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/risk/${bt}/none/${vt}/surf/inund/{z}/{x}/{y}.png`},
 };
 const layerState={};
 Object.keys(LAYER_DEFS).forEach(k=>{ layerState[k]={on:false,layer:null,timer:null,errCount:0}; });
@@ -746,33 +746,32 @@ Object.keys(LAYER_DEFS).forEach(k=>{ layerState[k]={on:false,layer:null,timer:nu
 const CHK_MAP={rain:'chkLRain',thunder:'chkLThunder',tornado:'chkLTornado',land:'chkLLand',flood:'chkLFlood'};
 const LBL_MAP={rain:'lblLRain',thunder:'lblLThunder',tornado:'lblLTornado',land:'lblLLand',flood:'lblLFlood'};
 
-/* JMA targetTimes API から {basetime, validtime} を取得 */
-async function getJmaValidTime(type){
-  try{
-    /* nowc → targetTimes_N1.json, risk → targetTimes.json (kikuchan/jmamap より) */
-    const file=type==='risk'?'targetTimes.json':'targetTimes_N1.json';
-    const url=`https://www.jma.go.jp/bosai/jmatile/data/${type}/${file}`;
-    const res=await fetch(url,{cache:'no-store'});
-    if(!res.ok) throw new Error(`HTTP ${res.status}`);
-    const arr=await res.json();
-    if(!Array.isArray(arr)||!arr.length) throw new Error('empty');
-    const last=arr[arr.length-1];
-    if(typeof last==='string') return {basetime:last, validtime:last};
-    const bt=last.basetime||last.time||'';
-    const vt=last.validtime||bt;
-    if(!bt) throw new Error(`no time field: ${JSON.stringify(last)}`);
-    console.log(`[JMA targetTimes:${type}] bt=${bt} vt=${vt} elements=`,last.elements);
-    return {basetime:bt, validtime:vt};
-  }catch(e){
-    console.warn(`[JMA targetTimes:${type}] failed:`,e.message);
-    return null;
+/* JMA targetTimes API から {basetime, validtime} を取得
+   candidates を順に試して最初に成功したものを返す */
+async function getJmaValidTime(type, candidates){
+  for(const file of (candidates||['targetTimes_N1.json'])){
+    try{
+      const url=`https://www.jma.go.jp/bosai/jmatile/data/${type}/${file}`;
+      const res=await fetch(url,{cache:'no-store'});
+      if(!res.ok){ console.warn(`[JMA ${type}/${file}] HTTP ${res.status}`); continue; }
+      const arr=await res.json();
+      if(!Array.isArray(arr)||!arr.length) continue;
+      const last=arr[arr.length-1];
+      if(typeof last==='string') return {basetime:last, validtime:last};
+      const bt=last.basetime||last.time||'';
+      const vt=last.validtime||bt;
+      if(!bt) continue;
+      console.log(`[JMA ${type}/${file}] bt=${bt} vt=${vt} elements=`,last.elements);
+      return {basetime:bt, validtime:vt};
+    }catch(e){ console.warn(`[JMA ${type}/${file}]`,e.message); }
   }
+  return null;
 }
 
 async function updateLayer(key){
   const def=LAYER_DEFS[key], st=layerState[key];
   if(!st.on) return;
-  const times=await getJmaValidTime(def.type);
+  const times=await getJmaValidTime(def.type, def.tf);
   let urlTpl;
   if(times){
     urlTpl=def.url(times.basetime, times.validtime);
