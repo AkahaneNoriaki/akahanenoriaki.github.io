@@ -16,6 +16,7 @@
 <script src="https://unpkg.com/proj4/dist/proj4.js"></script>
 <script src="https://unpkg.com/georaster"></script>
 <script src="https://unpkg.com/georaster-layer-for-leaflet/dist/georaster-layer-for-leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
 <style>
 html, body { height:100%; margin:0; }
@@ -295,6 +296,63 @@ html, body { height:100%; margin:0; }
   display: none;
 }
 #btnAddrClear:active { background: #e0e0e0; }
+
+/* ─── 天気ダッシュボード ─────────────────────────── */
+#wxPanel {
+  position:fixed; top:10px; left:10px; z-index:9100;
+  background:rgba(255,255,255,0.97); border:1px solid rgba(0,0,0,0.13);
+  border-radius:14px; display:none; flex-direction:column;
+  font-family:sans-serif; box-shadow:0 4px 20px rgba(0,0,0,0.18);
+  width:min(300px,calc(100vw - 20px)); max-height:70vh;
+  overflow:hidden; touch-action:none;
+}
+@media (min-width:768px){
+  #wxPanel { left:210px; }
+  body.sidebar-right #wxPanel { left:10px; }
+}
+#wxHandle {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:7px 12px 6px; background:#f4f4f4;
+  border-radius:14px 14px 0 0; border-bottom:1px solid #e8e8e8;
+  cursor:grab; user-select:none; -webkit-user-select:none; gap:8px;
+}
+#wxHandle:active { cursor:grabbing; }
+#wxHandleGrip { display:flex; flex-direction:column; gap:3px; flex-shrink:0; }
+#wxHandleGrip span { display:block; width:20px; height:2px; background:#bbb; border-radius:1px; }
+#wxTitle { font-size:11px; color:#888; flex:1; }
+#wxUpdated { font-size:10px; color:#aaa; white-space:nowrap; }
+#wxRefresh,#wxClose {
+  flex-shrink:0; width:22px; height:22px; background:#ddd; border:none;
+  border-radius:50%; font-size:12px; line-height:22px; text-align:center;
+  cursor:pointer; color:#666; padding:0; -webkit-tap-highlight-color:transparent;
+}
+#wxRefresh:active,#wxClose:active { background:#bbb; }
+#wxBody {
+  padding:10px 12px; display:flex; flex-direction:column; gap:8px;
+  overflow-y:auto; -webkit-overflow-scrolling:touch; max-height:calc(70vh - 36px);
+}
+#wxMain { display:flex; align-items:center; gap:12px; }
+#wxIcon { font-size:32px; line-height:1; }
+#wxDesc { font-size:14px; font-weight:bold; color:#222; }
+#wxTemp { font-size:26px; font-weight:bold; color:#0066ff; line-height:1; }
+#wxGrid { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; }
+.wx-cell { background:#f5f7ff; border-radius:8px; padding:5px 8px; text-align:center; }
+.wx-cell .lbl { font-size:9px; color:#888; }
+.wx-cell .val { font-size:13px; font-weight:bold; color:#222; margin-top:1px; }
+#wxLayerLabel { font-size:10px; color:#999; font-weight:bold; border-top:1px solid #eee; padding-top:6px; margin-top:2px; }
+#wxLayers { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+.wx-chk-item {
+  display:flex; align-items:center; gap:6px; padding:6px 10px;
+  border:1.5px solid #ddd; border-radius:8px; cursor:pointer;
+  font-size:12px; color:#444; background:#fff;
+  -webkit-tap-highlight-color:transparent;
+  transition:background 0.15s,border-color 0.15s,color 0.15s;
+}
+.wx-chk-item input[type="checkbox"] { width:15px; height:15px; accent-color:#0066ff; cursor:pointer; flex-shrink:0; }
+.wx-chk-item .ico { font-size:14px; }
+.wx-chk-item.active { background:#eef4ff; border-color:#0066ff; color:#0044cc; }
+#wxAmedas { font-size:11px; color:#555; padding-top:4px; display:none; }
+#wxLoading { font-size:13px; color:#888; text-align:center; padding:6px 0; }
 </style>
 </head>
 
@@ -444,6 +502,52 @@ html, body { height:100%; margin:0; }
       </div>
     </div>
 
+    <!-- 気象情報 -->
+    <div class="s-section">
+      <div class="s-title">気象情報</div>
+      <div class="s-grid">
+        <button class="s-btn" id="btnWx">
+          <span class="ico">🌤</span>天気
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 天気ダッシュボード -->
+<div id="wxPanel">
+  <div id="wxHandle">
+    <div id="wxHandleGrip"><span></span><span></span><span></span></div>
+    <span id="wxTitle">📍 現在地の天気</span>
+    <span id="wxUpdated"></span>
+    <button id="wxRefresh" title="更新">🔄</button>
+    <button id="wxClose">✕</button>
+  </div>
+  <div id="wxBody">
+    <div id="wxLoading">取得中...</div>
+    <div id="wxContent" style="display:none;flex-direction:column;gap:7px;">
+      <div id="wxMain">
+        <div id="wxIcon"></div>
+        <div><div id="wxDesc"></div><div id="wxTemp"></div></div>
+      </div>
+      <div id="wxGrid">
+        <div class="wx-cell"><div class="lbl">🌧 降水量</div><div class="val" id="wxRain">--</div></div>
+        <div class="wx-cell"><div class="lbl">💨 風速</div><div class="val" id="wxWind">--</div></div>
+        <div class="wx-cell"><div class="lbl">💧 湿度</div><div class="val" id="wxHumid">--</div></div>
+      </div>
+      <div style="font-size:9px;color:#aaa;">今後6時間の降水量(棒)・気温(線)</div>
+      <canvas id="wxChart" height="55"></canvas>
+      <div id="wxLayerLabel">🗂 気象レイヤ</div>
+      <div id="wxLayers">
+        <label class="wx-chk-item" id="lblLRain"><input type="checkbox" id="chkLRain"><span class="ico">🌧</span><span>雨量現況</span></label>
+        <label class="wx-chk-item" id="lblLLand"><input type="checkbox" id="chkLLand"><span class="ico">⛰</span><span>土砂危険</span></label>
+        <label class="wx-chk-item" id="lblLFlood"><input type="checkbox" id="chkLFlood"><span class="ico">🌊</span><span>浸水危険</span></label>
+        <label class="wx-chk-item" id="lblLRiver"><input type="checkbox" id="chkLRiver"><span class="ico">🏞</span><span>河川危険度</span></label>
+        <label class="wx-chk-item" id="lblLAmedas"><input type="checkbox" id="chkLAmedas"><span class="ico">📡</span><span>アメダス</span></label>
+      </div>
+      <div id="wxAmedas"></div>
+    </div>
   </div>
 </div>
 
@@ -1326,6 +1430,249 @@ L.control.scale({imperial:false, position:'bottomright'}).addTo(map);
    初期レイアウト適用
 ========================= */
 applyLayout();
+
+/* =========================
+   天気ダッシュボード
+========================= */
+const WX_CODE={
+  0:['☀️','快晴'],1:['🌤','晴れ'],2:['⛅','晴れ時々曇り'],3:['☁️','曇り'],
+  45:['🌫','霧'],48:['🌫','霧'],51:['🌦','霧雨'],53:['🌦','霧雨'],55:['🌦','霧雨'],
+  61:['🌧','雨'],63:['🌧','雨'],65:['🌧','大雨'],
+  71:['🌨','雪'],73:['🌨','雪'],75:['🌨','大雪'],77:['🌨','霧雪'],
+  80:['🌦','にわか雨'],81:['🌦','にわか雨'],82:['🌧','激しいにわか雨'],
+  85:['🌨','にわか雪'],86:['🌨','にわか雪'],
+  95:['⛈','雷雨'],96:['⛈','激しい雷雨'],99:['⛈','激しい雷雨']
+};
+
+const wxPanel=document.getElementById('wxPanel');
+let wxOpen=false;
+
+function jmaTime(intervalMin=5,lagMin=5){
+  const now=new Date(), jst=new Date(now.getTime()+9*3600000);
+  const total=jst.getUTCHours()*60+jst.getUTCMinutes();
+  const floored=Math.floor(total/intervalMin)*intervalMin-lagMin;
+  const d=new Date(Date.UTC(jst.getUTCFullYear(),jst.getUTCMonth(),jst.getUTCDate(),0,floored,0));
+  const p=n=>String(n).padStart(2,'0');
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth()+1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}00`;
+}
+
+const WX_LAYER_DEFS={
+  rain:  {type:'nowc',zoom:10,tf:['targetTimes_N1.json'],url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/hrpns/{z}/{x}/{y}.png`},
+  land:  {type:'risk',zoom:9, tf:['targetTimes.json'],   url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/risk/${bt}/none/${vt}/surf/land/{z}/{x}/{y}.png`},
+  flood: {type:'risk',zoom:9, tf:['targetTimes.json'],   url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/risk/${bt}/none/${vt}/surf/inund/{z}/{x}/{y}.png`},
+  river: {type:'risk',zoom:9, tf:['targetTimes.json'],   url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/risk/${bt}/none/${vt}/surf/flood/{z}/{x}/{y}.png`},
+};
+const wxLayerState={};
+Object.keys(WX_LAYER_DEFS).forEach(k=>{ wxLayerState[k]={on:false,layer:null,timer:null,errCount:0}; });
+const WX_CHK_MAP={rain:'chkLRain',land:'chkLLand',flood:'chkLFlood',river:'chkLRiver'};
+const WX_LBL_MAP={rain:'lblLRain',land:'lblLLand',flood:'lblLFlood',river:'lblLRiver'};
+
+async function getJmaValidTime(type,candidates){
+  for(const file of (candidates||['targetTimes_N1.json'])){
+    try{
+      const res=await fetch(`https://www.jma.go.jp/bosai/jmatile/data/${type}/${file}`,{cache:'no-store'});
+      if(!res.ok) continue;
+      const arr=await res.json();
+      if(!Array.isArray(arr)||!arr.length) continue;
+      const last=arr[arr.length-1];
+      if(typeof last==='string') return {basetime:last,validtime:last};
+      const bt=last.basetime||last.time||'';
+      const vt=last.validtime||bt;
+      if(bt) return {basetime:bt,validtime:vt};
+    }catch(e){}
+  }
+  return null;
+}
+
+async function wxUpdateLayer(key){
+  const def=WX_LAYER_DEFS[key], st=wxLayerState[key];
+  if(!st.on) return;
+  const times=await getJmaValidTime(def.type,def.tf);
+  const t=jmaTime(5,10);
+  const urlTpl=times?def.url(times.basetime,times.validtime):def.url(t,t);
+  if(st.layer) map.removeLayer(st.layer);
+  st.errCount=0;
+  const lbl=document.getElementById(WX_LBL_MAP[key]);
+  const lyr=L.tileLayer(urlTpl,{opacity:0.6,maxNativeZoom:def.zoom,maxZoom:22,attribution:'© 気象庁'});
+  lyr.on('tileerror',()=>{
+    st.errCount++;
+    if(st.errCount===3&&lbl) lbl.style.borderColor='#ff3b30';
+  });
+  lyr.on('tileload',()=>{ st.errCount=0; if(lbl) lbl.style.borderColor=''; });
+  st.layer=lyr.addTo(map);
+}
+
+async function wxApplyLayerState(key){
+  const st=wxLayerState[key];
+  const lbl=document.getElementById(WX_LBL_MAP[key]);
+  if(lbl) lbl.classList.toggle('active',st.on);
+  if(st.on){
+    await wxUpdateLayer(key);
+    if(!st.timer) st.timer=setInterval(()=>wxUpdateLayer(key),5*60*1000);
+  } else {
+    clearInterval(st.timer); st.timer=null;
+    if(st.layer){ map.removeLayer(st.layer); st.layer=null; }
+  }
+}
+
+Object.keys(WX_CHK_MAP).forEach(key=>{
+  document.getElementById(WX_CHK_MAP[key]).addEventListener('change',function(){
+    wxLayerState[key].on=this.checked;
+    wxApplyLayerState(key);
+  });
+});
+
+/* アメダス */
+let amedasOn=false, amedasMarkers=[], amedasTimer=null, _amedasTable=null;
+
+async function fetchAmedas(){
+  const amDiv=document.getElementById('wxAmedas');
+  try{
+    const timeRes=await fetch('https://www.jma.go.jp/bosai/amedas/data/latest_time.txt');
+    if(!timeRes.ok) throw new Error(`latest_time HTTP ${timeRes.status}`);
+    const rawTime=(await timeRes.text()).trim();
+    const m=rawTime.match(/(\d{4})\D(\d{2})\D(\d{2})\D(\d{2}):(\d{2}):(\d{2})/);
+    if(!m) throw new Error(`time parse failed: "${rawTime}"`);
+    const timeStr=`${m[1]}${m[2]}${m[3]}${m[4]}${m[5]}${m[6]}`;
+    if(!_amedasTable){
+      const tRes=await fetch('https://www.jma.go.jp/bosai/amedas/const/amedastable.json');
+      if(!tRes.ok) throw new Error(`amedastable HTTP ${tRes.status}`);
+      _amedasTable=await tRes.json();
+    }
+    const dataRes=await fetch(`https://www.jma.go.jp/bosai/amedas/data/map/${timeStr}.json`);
+    if(!dataRes.ok) throw new Error(`map data HTTP ${dataRes.status}`);
+    const data=await dataRes.json();
+    amedasMarkers.forEach(mk=>map.removeLayer(mk)); amedasMarkers=[];
+    const center=me?me.getLatLng():map.getCenter();
+    const stations=Object.entries(data).map(([code,d])=>{
+      const info=_amedasTable[code];
+      if(!info||!info.lat||!info.lon||!Array.isArray(info.lat)) return null;
+      const lat=info.lat[0]+info.lat[1]/60, lng=info.lon[0]+info.lon[1]/60;
+      if(isNaN(lat)||isNaN(lng)) return null;
+      return {code,info,d,lat,lng,dist:map.distance(center,L.latLng(lat,lng))};
+    }).filter(s=>s&&s.dist<60000).sort((a,b)=>a.dist-b.dist).slice(0,15);
+    if(!stations.length){ toast('周辺60km以内にアメダス観測点なし',3000); return; }
+    stations.forEach(s=>{
+      const tv=s.d.temp?s.d.temp[0]:null;
+      const temp=tv!==null?`${tv}°C`:'--';
+      const rain=s.d.precipitation1h?`${s.d.precipitation1h[0]}mm/h`:(s.d.precipitation10m?`${s.d.precipitation10m[0]}mm/10m`:'--');
+      const wind=s.d.wind?`${s.d.wind[0]}m/s`:'--';
+      const col=tv===null?'#888':tv>=30?'#c62828':tv>=25?'#e65100':tv>=15?'#1565c0':tv>=5?'#0277bd':'#4a148c';
+      const mk=L.marker([s.lat,s.lng],{icon:L.divIcon({
+        html:`<div style="background:#fff;color:${col};border:2px solid ${col};border-radius:6px;padding:2px 7px;font-size:13px;font-family:sans-serif;font-weight:bold;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.25)">${temp}</div>`,
+        className:'',iconAnchor:[22,12]
+      })}).addTo(map);
+      mk.bindPopup(`<div style="font-size:12px;font-family:sans-serif"><b>📡 ${s.info.kjName||s.code}</b><br>🌡 ${temp}　🌧 ${rain}　💨 ${wind}</div>`);
+      amedasMarkers.push(mk);
+    });
+    const p=n=>String(n).padStart(2,'0'), now=new Date();
+    amDiv.textContent=`📡 アメダス ${stations.length}地点 (${p(now.getHours())}:${p(now.getMinutes())} 更新)`;
+    amDiv.style.display='block';
+    document.getElementById('lblLAmedas').style.borderColor='';
+  }catch(e){
+    console.error('[AMeDAS]',e);
+    toast(`アメダス取得失敗: ${e.message}`,3500);
+    document.getElementById('wxAmedas').textContent=`❌ ${e.message}`;
+    document.getElementById('wxAmedas').style.display='block';
+    document.getElementById('lblLAmedas').style.borderColor='#ff3b30';
+  }
+}
+
+document.getElementById('chkLAmedas').addEventListener('change',function(){
+  amedasOn=this.checked;
+  document.getElementById('lblLAmedas').classList.toggle('active',amedasOn);
+  if(amedasOn){ fetchAmedas(); amedasTimer=setInterval(fetchAmedas,10*60*1000); }
+  else{ clearInterval(amedasTimer); amedasTimer=null; amedasMarkers.forEach(mk=>map.removeLayer(mk)); amedasMarkers=[]; document.getElementById('wxAmedas').style.display='none'; }
+});
+
+/* 天気取得 */
+let wxChart=null;
+async function fetchWeather(lat,lng){
+  document.getElementById('wxLoading').style.display='block';
+  document.getElementById('wxContent').style.display='none';
+  try{
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}`
+      +`&current=temperature_2m,precipitation,windspeed_10m,relativehumidity_2m,weathercode`
+      +`&hourly=precipitation,temperature_2m&timezone=Asia%2FTokyo&forecast_days=1`;
+    const d=await (await fetch(url)).json();
+    const c=d.current;
+    const [icon,desc]=WX_CODE[c.weathercode]||['🌡','--'];
+    document.getElementById('wxIcon').textContent=icon;
+    document.getElementById('wxDesc').textContent=desc;
+    document.getElementById('wxTemp').textContent=`${c.temperature_2m}°C`;
+    document.getElementById('wxRain').textContent=`${c.precipitation}mm`;
+    document.getElementById('wxWind').textContent=`${c.windspeed_10m}m/s`;
+    document.getElementById('wxHumid').textContent=`${c.relativehumidity_2m}%`;
+    const now=new Date(), p=n=>String(n).padStart(2,'0');
+    document.getElementById('wxUpdated').textContent=`${p(now.getHours())}:${p(now.getMinutes())} 更新`;
+    const nowHour=now.getHours(), labels=[], rain=[], temp=[];
+    for(let i=0;i<6;i++){
+      labels.push(`${(nowHour+i)%24}時`);
+      rain.push(d.hourly.precipitation[nowHour+i]??0);
+      temp.push(d.hourly.temperature_2m[nowHour+i]??null);
+    }
+    if(wxChart) wxChart.destroy();
+    wxChart=new Chart(document.getElementById('wxChart'),{
+      type:'bar',
+      data:{labels,datasets:[
+        {label:'降水量(mm)',data:rain,backgroundColor:'rgba(0,102,255,0.5)',borderColor:'rgba(0,102,255,0.8)',borderWidth:1,yAxisID:'y'},
+        {label:'気温(°C)',data:temp,type:'line',borderColor:'rgba(255,100,0,0.8)',backgroundColor:'transparent',borderWidth:2,pointRadius:3,tension:0.3,yAxisID:'y2'}
+      ]},
+      options:{
+        responsive:true,maintainAspectRatio:true,
+        plugins:{legend:{display:false}},
+        scales:{
+          y:{beginAtZero:true,position:'left',ticks:{font:{size:9},maxTicksLimit:4},grid:{color:'rgba(0,0,0,0.06)'}},
+          y2:{position:'right',ticks:{font:{size:9},maxTicksLimit:4,callback:v=>v+'°'},grid:{display:false}}
+        }
+      }
+    });
+    document.getElementById('wxLoading').style.display='none';
+    document.getElementById('wxContent').style.display='flex';
+  }catch(e){ document.getElementById('wxLoading').textContent='取得に失敗しました'; }
+}
+
+function openWxPanel(){
+  wxOpen=true; wxPanel.style.display='flex';
+  document.getElementById('btnWx').classList.add('hi');
+  const ll=me?me.getLatLng():map.getCenter();
+  fetchWeather(ll.lat,ll.lng);
+  closeSheet();
+}
+function closeWxPanel(){
+  wxOpen=false; wxPanel.style.display='none';
+  document.getElementById('btnWx').classList.remove('hi');
+}
+
+document.getElementById('btnWx').onclick=()=>{ wxOpen?closeWxPanel():openWxPanel(); };
+document.getElementById('wxClose').onclick=closeWxPanel;
+document.getElementById('wxRefresh').onclick=()=>{
+  const ll=me?me.getLatLng():map.getCenter();
+  fetchWeather(ll.lat,ll.lng);
+  if(amedasOn) fetchAmedas();
+  Object.keys(WX_LAYER_DEFS).forEach(k=>{ if(wxLayerState[k].on) wxUpdateLayer(k); });
+};
+
+/* パネルドラッグ */
+(()=>{
+  const handle=document.getElementById('wxHandle');
+  let drag=null;
+  function startDrag(cx,cy){ const r=wxPanel.getBoundingClientRect(); drag={ox:cx-r.left,oy:cy-r.top}; }
+  function moveDrag(cx,cy){
+    if(!drag) return;
+    let x=cx-drag.ox, y=cy-drag.oy;
+    x=Math.max(0,Math.min(window.innerWidth-wxPanel.offsetWidth,x));
+    y=Math.max(0,Math.min(window.innerHeight-wxPanel.offsetHeight,y));
+    wxPanel.style.left=x+'px'; wxPanel.style.top=y+'px';
+  }
+  function endDrag(){ drag=null; }
+  handle.addEventListener('touchstart',e=>{ startDrag(e.touches[0].clientX,e.touches[0].clientY); },{passive:true});
+  handle.addEventListener('touchmove',e=>{ if(!drag)return; e.preventDefault(); moveDrag(e.touches[0].clientX,e.touches[0].clientY); },{passive:false});
+  handle.addEventListener('touchend',endDrag,{passive:true});
+  handle.addEventListener('mousedown',e=>{ if(e.target===document.getElementById('wxClose')||e.target===document.getElementById('wxRefresh'))return; startDrag(e.clientX,e.clientY); handle.style.cursor='grabbing'; });
+  document.addEventListener('mousemove',e=>{ if(drag) moveDrag(e.clientX,e.clientY); });
+  document.addEventListener('mouseup',()=>{ endDrag(); handle.style.cursor='grab'; });
+})();
 
 /* =========================
    共有URLパラメータ読み込み
