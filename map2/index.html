@@ -320,7 +320,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
         <label class="wx-chk-item" id="lblLThunder"><input type="checkbox" id="chkLThunder"><span class="ico">⚡</span><span>雷</span></label>
         <label class="wx-chk-item" id="lblLTornado"><input type="checkbox" id="chkLTornado"><span class="ico">🌪</span><span>竜巻確度</span></label>
         <label class="wx-chk-item" id="lblLLand"><input type="checkbox" id="chkLLand"><span class="ico">⛰</span><span>土砂危険</span></label>
-        <label class="wx-chk-item" id="lblLFlood"><input type="checkbox" id="chkLFlood"><span class="ico">💧</span><span>洪水危険</span></label>
+        <label class="wx-chk-item" id="lblLFlood"><input type="checkbox" id="chkLFlood"><span class="ico">🌊</span><span>浸水危険</span></label>
         <label class="wx-chk-item" id="lblLAmedas"><input type="checkbox" id="chkLAmedas"><span class="ico">📡</span><span>アメダス</span></label>
       </div>
       <div id="wxAmedas"></div>
@@ -729,14 +729,16 @@ function jmaTime(intervalMin=5, lagMin=5){
 }
 
 /* レイヤー定義
-   正しいURL形式: /data/{type}/{basetime}/none/{validtime}/surf/{element}/{z}/{x}/{y}.png
-   ※ 要素名が座標より前、basetime と validtime の2つが必要 */
+   URL形式: /data/{type}/{basetime}/none/{validtime}/surf/{element}/{z}/{x}/{y}.png
+   要素名はkikuchan/jmamapライブラリより確認:
+     nowc: hrpns(雨), thns(雷), trns(竜巻)
+     risk: land(土砂), inund(浸水) ※flood はベクタータイル(PBF)のため除外 */
 const LAYER_DEFS={
-  rain:    {type:'nowc',     zoom:10, url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/hrpns/{z}/{x}/{y}.png`},
-  thunder: {type:'nowc',     zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/thnd/{z}/{x}/{y}.png`},
-  tornado: {type:'nowc',     zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/trnd/{z}/{x}/{y}.png`},
-  land:    {type:'kikikuru', zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${bt}/none/${vt}/surf/land/{z}/{x}/{y}.png`},
-  flood:   {type:'kikikuru', zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/kikikuru/${bt}/none/${vt}/surf/flood/{z}/{x}/{y}.png`},
+  rain:    {type:'nowc', zoom:10, url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/hrpns/{z}/{x}/{y}.png`},
+  thunder: {type:'nowc', zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/thns/{z}/{x}/{y}.png`},
+  tornado: {type:'nowc', zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/trns/{z}/{x}/{y}.png`},
+  land:    {type:'risk', zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/risk/${bt}/none/${vt}/surf/land/{z}/{x}/{y}.png`},
+  flood:   {type:'risk', zoom:9,  url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/risk/${bt}/none/${vt}/surf/inund/{z}/{x}/{y}.png`},
 };
 const layerState={};
 Object.keys(LAYER_DEFS).forEach(k=>{ layerState[k]={on:false,layer:null,timer:null,errCount:0}; });
