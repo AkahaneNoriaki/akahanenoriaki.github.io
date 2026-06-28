@@ -315,7 +315,8 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
       </div>
       <div style="font-size:9px;color:#aaa;">今後6時間の降水量(棒)・気温(線)</div>
       <canvas id="wxChart" height="55"></canvas>
-      <div id="wxLayerLabel">🗂 気象レイヤ</div>
+      <div style="font-size:9px;color:#ccc;text-align:right;">出典: <a href="https://open-meteo.com" target="_blank" style="color:#ccc;">Open-Meteo</a></div>
+      <div id="wxLayerLabel">🗂 気象レイヤ <span style="font-weight:normal;color:#bbb;">© 気象庁</span></div>
       <div id="wxLayers">
         <label class="wx-chk-item" id="lblLRain"><input type="checkbox" id="chkLRain"><span class="ico">🌧</span><span>雨量現況</span></label>
         <label class="wx-chk-item" id="lblLLand"><input type="checkbox" id="chkLLand"><span class="ico">⛰</span><span>土砂危険</span></label>
@@ -324,6 +325,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
         <label class="wx-chk-item" id="lblLAmedas"><input type="checkbox" id="chkLAmedas"><span class="ico">📡</span><span>アメダス</span></label>
       </div>
       <div id="wxAmedas"></div>
+      <div style="font-size:9px;color:#ccc;text-align:right;margin-top:2px;">AMeDAS: <a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" style="color:#ccc;">気象庁</a></div>
     </div>
   </div>
 </div>
