@@ -268,7 +268,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 #wxLoading { font-size: 13px; color: #888; text-align: center; padding: 6px 0; }
 
 /* ─── AMeDASデータグリッド ──────────────────── */
-#amedasDataGrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
+#amedasDataGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 .am-cell { background: #f0f7ff; border-radius: 8px; padding: 5px 8px; text-align: center; }
 .am-cell .lbl { font-size: 9px; color: #668; }
 .am-cell .val { font-size: 14px; font-weight: bold; color: #224; margin-top: 2px; }
@@ -278,6 +278,23 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 .am-cell .val.t-cold { color: #4a148c; }
 .am-cell.rain-alert { background: #fff0f0; }
 .am-cell.rain-alert .lbl { color: #c00; }
+/* タップ可能セル */
+.wx-cell, .am-cell { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.wx-cell:active { background: #e0e8ff; }
+.am-cell:active { background: #d8eeff; }
+#wxMain { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+/* チャートモーダル */
+#chartModal {
+  position: fixed; inset: 0; z-index: 9200;
+  background: rgba(0,0,0,0.5);
+  display: none; align-items: center; justify-content: center;
+}
+#chartBox {
+  background: #fff; border-radius: 16px; padding: 16px;
+  width: min(340px, calc(100vw - 20px));
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  font-family: sans-serif;
+}
 </style>
 </head>
 <body>
@@ -313,7 +330,9 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
   <div id="wxBody">
     <div id="wxLoading">取得中...</div>
     <div id="wxContent" style="display:none; flex-direction:column; gap:7px;">
-      <div id="wxMain">
+      <!-- 今後の予報 -->
+      <div style="font-size:10px;color:#999;font-weight:bold;letter-spacing:0.5px;">☁️ 今後の予報</div>
+      <div id="wxMain" title="気温グラフ">
         <div id="wxIcon"></div>
         <div>
           <div id="wxDesc"></div>
@@ -321,33 +340,30 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
         </div>
       </div>
       <div id="wxGrid">
-        <div class="wx-cell"><div class="lbl">🌧 降水量</div><div class="val" id="wxRain">--</div></div>
-        <div class="wx-cell"><div class="lbl">💨 風速</div><div class="val" id="wxWind">--</div></div>
-        <div class="wx-cell"><div class="lbl">💧 湿度</div><div class="val" id="wxHumid">--</div></div>
+        <div class="wx-cell" id="wxCellRain"><div class="lbl">🌧 降水量</div><div class="val" id="wxRain">--</div></div>
+        <div class="wx-cell" id="wxCellWind"><div class="lbl">💨 風速</div><div class="val" id="wxWind">--</div></div>
+        <div class="wx-cell" id="wxCellHumid"><div class="lbl">💧 湿度</div><div class="val" id="wxHumid">--</div></div>
       </div>
+      <div style="font-size:9px;color:#bbb;">↑ タップで今後24時間グラフ</div>
       <div style="font-size:9px;color:#aaa;">今後6時間の降水量(棒)・気温(線)</div>
       <canvas id="wxChart" height="55"></canvas>
       <div style="font-size:9px;color:#ccc;text-align:right;">出典: <a href="https://open-meteo.com" target="_blank" style="color:#ccc;">Open-Meteo</a></div>
-      <!-- AMeDASセクション -->
-      <div id="wxAmedasLoading" style="font-size:11px;color:#888;text-align:center;display:none;padding:2px 0;border-top:1px solid #eee;padding-top:6px;">📡 AMeDAS 取得中...</div>
+      <!-- 現在の気象情報 -->
+      <div id="wxAmedasLoading" style="font-size:11px;color:#888;text-align:center;display:none;padding:6px 0;border-top:1px solid #eee;">📡 取得中...</div>
       <div id="wxAmedasSection" style="display:none; flex-direction:column; gap:6px;">
-        <div style="font-size:11px;font-weight:bold;color:#336;border-top:1px solid #eee;padding-top:6px;">
-          📡 <span id="amStationName">--</span><span id="amDistBadge" style="font-size:10px;font-weight:normal;color:#888;margin-left:6px;"></span>
-        </div>
+        <div style="font-size:10px;color:#999;font-weight:bold;letter-spacing:0.5px;border-top:1px solid #eee;padding-top:6px;">📡 現在の気象情報</div>
+        <div style="font-size:11px;color:#336;"><span id="amStationName">--</span><span id="amDistBadge" style="font-size:10px;color:#888;margin-left:6px;"></span></div>
         <div id="amedasDataGrid">
-          <div class="am-cell"><div class="lbl">🌧 1h雨量</div><div class="val" id="amRain1h">--</div></div>
-          <div class="am-cell"><div class="lbl">⏱ 10m雨量</div><div class="val" id="amRain10m">--</div></div>
-          <div class="am-cell"><div class="lbl">📅 24h雨量</div><div class="val" id="amRain24h">--</div></div>
+          <div class="am-cell" id="amCellTemp"><div class="lbl">🌡 気温</div><div class="val" id="amTemp">--</div></div>
+          <div class="am-cell" id="amCellHumid"><div class="lbl">💧 湿度</div><div class="val" id="amHumid">--</div></div>
+          <div class="am-cell" id="amCellRain1h"><div class="lbl">🌧 1h雨量</div><div class="val" id="amRain1h">--</div></div>
+          <div class="am-cell" id="amCellRain10m"><div class="lbl">⏱ 10m雨量</div><div class="val" id="amRain10m">--</div></div>
+          <div class="am-cell" id="amCellRain24h"><div class="lbl">📅 24h雨量</div><div class="val" id="amRain24h">--</div></div>
+          <div class="am-cell" id="amCellWind"><div class="lbl">💨 風速</div><div class="val" id="amWind">--</div></div>
+          <div class="am-cell" id="amCellWindDir"><div class="lbl">🧭 風向</div><div class="val" id="amWindDir">--</div></div>
+          <div class="am-cell" id="amCellSnow"><div class="lbl">🌨 積雪深</div><div class="val" id="amSnow">--</div></div>
         </div>
-        <button id="amPrecipBtn" style="font-size:11px;background:#eef4ff;border:1px solid #ccd;border-radius:8px;padding:5px 10px;cursor:pointer;color:#336;width:100%;-webkit-tap-highlight-color:transparent;">📊 過去24時間の降水グラフ</button>
-        <div id="amChartSection" style="display:none;flex-direction:column;gap:4px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-size:9px;color:#668;">過去24時間の降水量 (mm/h)</span>
-            <button id="amChartClose" style="background:none;border:none;font-size:12px;cursor:pointer;color:#aaa;padding:2px 6px;line-height:1;">✕</button>
-          </div>
-          <div id="amChartLoading" style="font-size:11px;color:#888;text-align:center;padding:4px 0;">取得中...</div>
-          <canvas id="amPrecipCanvas" height="65" style="display:none;"></canvas>
-        </div>
+        <div style="font-size:9px;color:#bbb;">↑ タップで過去24時間グラフ</div>
         <div style="font-size:9px;color:#ccc;text-align:right;">出典: <a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" style="color:#ccc;">気象庁 AMeDAS</a></div>
       </div>
       <!-- レイヤー -->
@@ -361,6 +377,19 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
       </div>
       <div id="wxAmedas"></div>
     </div>
+  </div>
+</div>
+
+<!-- チャートモーダル -->
+<div id="chartModal">
+  <div id="chartBox">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <span id="chartModalTitle" style="font-size:13px;font-weight:bold;color:#222;"></span>
+      <button id="chartModalClose" style="background:#eee;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:13px;line-height:26px;padding:0;flex-shrink:0;">✕</button>
+    </div>
+    <div id="chartModalLoading" style="text-align:center;color:#888;padding:20px 0;font-size:13px;">取得中...</div>
+    <canvas id="chartModalCanvas" height="100" style="display:none;"></canvas>
+    <div id="chartModalSource" style="font-size:9px;color:#bbb;text-align:right;margin-top:6px;"></div>
   </div>
 </div>
 
@@ -860,28 +889,47 @@ Object.keys(CHK_MAP).forEach(key=>{
 const WIND_DIR=['静穏','北北東','北東','東北東','東','東南東','南東','南南東','南','南南西','南西','西南西','西','西北西','北西','北北西','北'];
 
 let _currentAmedasStation=null;
-let amPrecipChart=null;
+let _wxHourly=null, _wxForecastHour=0;
+let _modalChart=null;
 
 function showAmedasDetail(s){
   _currentAmedasStation=s;
   document.getElementById('wxAmedasLoading').style.display='none';
   const sec=document.getElementById('wxAmedasSection');
   sec.style.display='flex';
-  /* グラフを閉じてリセット */
-  document.getElementById('amChartSection').style.display='none';
-
   const name=s.info.kjName||s.code;
   const dist=s.dist>=1000?`${(s.dist/1000).toFixed(1)}km`:`${Math.round(s.dist)}m`;
   document.getElementById('amStationName').textContent=name;
   document.getElementById('amDistBadge').textContent=`現在地から約 ${dist}`;
 
+  /* 気温 */
+  const tv=s.d.temp?s.d.temp[0]:null;
+  const tempEl=document.getElementById('amTemp');
+  tempEl.textContent=tv!==null?`${tv}°C`:'--';
+  tempEl.className='val'+(tv===null?'':tv>=30?' t-hot':tv>=25?' t-warm':tv<=5?' t-cold':tv<=15?' t-cool':'');
+  /* 湿度 */
+  document.getElementById('amHumid').textContent=s.d.humidity?`${s.d.humidity[0]}%`:'--';
+  /* 雨量 */
   const r1h=s.d.precipitation1h?s.d.precipitation1h[0]:null;
   const rain1El=document.getElementById('amRain1h').parentElement;
   document.getElementById('amRain1h').textContent=r1h!==null?`${r1h}mm`:'--';
   rain1El.className='am-cell'+(r1h!==null&&r1h>=10?' rain-alert':'');
-
   document.getElementById('amRain10m').textContent=s.d.precipitation10m?`${s.d.precipitation10m[0]}mm`:'--';
   document.getElementById('amRain24h').textContent=s.d.precipitation24h?`${s.d.precipitation24h[0]}mm`:'--';
+  /* 風 */
+  document.getElementById('amWind').textContent=s.d.wind?`${s.d.wind[0]}m/s`:'--';
+  document.getElementById('amWindDir').textContent=s.d.wind?(WIND_DIR[s.d.wind[1]]||'--'):'--';
+  /* 積雪 */
+  document.getElementById('amSnow').textContent=s.d.snow?`${s.d.snow[0]}cm`:'--';
+
+  /* セルタップ → 過去24時間グラフ */
+  document.getElementById('amCellTemp').onclick=()=>fetchAmedasChart('temp','過去24時間の気温');
+  document.getElementById('amCellHumid').onclick=()=>fetchAmedasChart('humid','過去24時間の湿度');
+  document.getElementById('amCellRain1h').onclick=()=>fetchAmedasChart('rain','過去24時間の降水量');
+  document.getElementById('amCellRain10m').onclick=()=>fetchAmedasChart('rain','過去24時間の降水量');
+  document.getElementById('amCellRain24h').onclick=()=>fetchAmedasChart('rain','過去24時間の降水量');
+  document.getElementById('amCellWind').onclick=()=>fetchAmedasChart('wind','過去24時間の風速');
+  document.getElementById('amCellSnow').onclick=()=>fetchAmedasChart('snow','過去24時間の積雪深');
 }
 
 /* アメダス */
@@ -1005,98 +1053,133 @@ async function fetchAmedasForLocation(lat,lng){
   }
 }
 
-/* ── AMeDAS 過去24時間降水グラフ ─────────── */
+/* ── チャートモーダル ────────────────────── */
+function showChartModal(title, labels, datasets, source){
+  document.getElementById('chartModalTitle').textContent=title;
+  document.getElementById('chartModalSource').textContent=source?`出典: ${source}`:'';
+  document.getElementById('chartModalLoading').style.display='none';
+  const canvas=document.getElementById('chartModalCanvas');
+  canvas.style.display='block';
+  if(_modalChart) _modalChart.destroy();
+  const type=datasets[0].type||'bar';
+  _modalChart=new Chart(canvas,{
+    type,
+    data:{ labels, datasets },
+    options:{
+      responsive:true, maintainAspectRatio:true,
+      plugins:{ legend:{ display:datasets.length>1 } },
+      scales:{
+        x:{ ticks:{ font:{ size:8 }, maxTicksLimit:8 }, grid:{ display:false } },
+        y:{ beginAtZero:true, ticks:{ font:{ size:9 }, maxTicksLimit:5 }, grid:{ color:'rgba(0,0,0,0.06)' } }
+      }
+    }
+  });
+  document.getElementById('chartModal').style.display='flex';
+}
+
+function showForecastChart(field, title, chartType){
+  if(!_wxHourly) return;
+  document.getElementById('chartModalTitle').textContent=title;
+  document.getElementById('chartModalLoading').style.display='block';
+  document.getElementById('chartModalLoading').textContent='読み込み中...';
+  document.getElementById('chartModalCanvas').style.display='none';
+  document.getElementById('chartModal').style.display='flex';
+  const labels=[], data=[];
+  for(let i=0;i<24;i++){
+    const h=(_wxForecastHour+i)%24;
+    labels.push(`${h}時`);
+    data.push(_wxHourly[field]?.[_wxForecastHour+i]??null);
+  }
+  const col=field==='precipitation'?'rgba(0,102,255,0.55)':field==='temperature_2m'?'rgba(255,100,0,0.8)':field==='windspeed_10m'?'rgba(80,180,0,0.8)':'rgba(0,160,200,0.8)';
+  showChartModal(title, labels, [{
+    data, type:chartType||'bar',
+    backgroundColor:col, borderColor:col, borderWidth:2,
+    fill:false, tension:0.3, pointRadius:2, spanGaps:true
+  }], 'Open-Meteo');
+}
+
+/* ── AMeDAS 過去24時間グラフ ─────────────── */
+const AM_CHART_VARS={
+  rain:  { field:'precipitation10m', agg:'sum',  idx:0, col:'rgba(0,102,255,0.55)', type:'bar'  },
+  temp:  { field:'temp',             agg:'last', idx:0, col:'rgba(255,100,0,0.8)',  type:'line' },
+  humid: { field:'humidity',         agg:'last', idx:0, col:'rgba(0,160,200,0.8)', type:'line' },
+  wind:  { field:'wind',             agg:'avg',  idx:0, col:'rgba(80,180,0,0.8)',  type:'line' },
+  snow:  { field:'snow',             agg:'last', idx:0, col:'rgba(150,200,255,0.7)', type:'bar' },
+};
+
 function getPrecipFileList(){
-  /* JSTの現在時刻から遡って8本(=24時間分)の3時間ファイルリストを生成 */
   const now=new Date();
   const jst=new Date(now.getTime()+9*60*60*1000);
-  const h=jst.getUTCHours();
-  const latestH3=Math.floor(h/3)*3; /* 直近の3時間境界 */
+  const latestH3=Math.floor(jst.getUTCHours()/3)*3;
   const files=[];
   for(let i=7;i>=0;i--){
     const d=new Date(Date.UTC(jst.getUTCFullYear(),jst.getUTCMonth(),jst.getUTCDate(),latestH3-i*3,0,0));
-    const ymd=`${d.getUTCFullYear()}${String(d.getUTCMonth()+1).padStart(2,'0')}${String(d.getUTCDate()).padStart(2,'0')}`;
-    const hh=String(d.getUTCHours()).padStart(2,'0');
-    files.push({ymd,hh});
+    files.push({
+      ymd:`${d.getUTCFullYear()}${String(d.getUTCMonth()+1).padStart(2,'0')}${String(d.getUTCDate()).padStart(2,'0')}`,
+      hh:String(d.getUTCHours()).padStart(2,'0')
+    });
   }
   return files;
 }
 
-async function fetchPrecipChart(){
-  const station=_currentAmedasStation;
-  if(!station) return;
-  const sec=document.getElementById('amChartSection');
-  const loading=document.getElementById('amChartLoading');
-  const canvas=document.getElementById('amPrecipCanvas');
-  sec.style.display='flex';
-  loading.style.display='block';
-  loading.textContent='取得中...';
-  canvas.style.display='none';
+async function fetchAmedasChart(varKey, title){
+  const cfg=AM_CHART_VARS[varKey];
+  if(!cfg||!_currentAmedasStation) return;
+  document.getElementById('chartModalTitle').textContent=title;
+  document.getElementById('chartModalLoading').style.display='block';
+  document.getElementById('chartModalLoading').textContent='取得中...';
+  document.getElementById('chartModalCanvas').style.display='none';
+  document.getElementById('chartModal').style.display='flex';
   try{
-    const files=getPrecipFileList();
-    const code=station.code;
-    /* 8ファイルを並列取得 */
-    const results=await Promise.all(files.map(async({ymd,hh})=>{
+    const code=_currentAmedasStation.code;
+    const results=await Promise.all(getPrecipFileList().map(async({ymd,hh})=>{
       try{
         const res=await fetch(`https://www.jma.go.jp/bosai/amedas/data/point/${code}/${ymd}_${hh}.json`);
         return res.ok?await res.json():null;
       }catch{ return null; }
     }));
-    /* 時別雨量に集計（10分値を合算） */
-    const hourly={}; /* "HH" → mm */
+    const hourly={}, cnt={};
     results.forEach(data=>{
       if(!data) return;
       Object.entries(data).forEach(([ts,d])=>{
-        const v=d.precipitation10m?d.precipitation10m[0]:null;
+        const raw=d[cfg.field];
+        const v=raw?raw[cfg.idx]:null;
         if(v===null||v===undefined||v<0) return;
         const hh=ts.slice(8,10);
-        hourly[hh]=(hourly[hh]||0)+v;
+        if(cfg.agg==='sum'){ hourly[hh]=(hourly[hh]||0)+v; }
+        else if(cfg.agg==='avg'){ hourly[hh]=(hourly[hh]||0)+v; cnt[hh]=(cnt[hh]||0)+1; }
+        else { hourly[hh]=v; }
       });
     });
-    /* 24時間分のラベルとデータを構築（古い順） */
+    if(cfg.agg==='avg') Object.keys(hourly).forEach(h=>{ if(cnt[h]) hourly[h]=Math.round(hourly[h]/cnt[h]*10)/10; });
     const now=new Date();
     const jst=new Date(now.getTime()+9*60*60*1000);
     const curH=jst.getUTCHours();
-    const labels=[],rainData=[];
+    const labels=[], vals=[];
     for(let i=23;i>=0;i--){
       const h=((curH-i)+24)%24;
       labels.push(`${h}時`);
-      rainData.push(Math.round((hourly[String(h).padStart(2,'0')]||0)*10)/10);
+      const v=hourly[String(h).padStart(2,'0')];
+      vals.push(v!==undefined?Math.round(v*10)/10:null);
     }
-    loading.style.display='none';
-    canvas.style.display='block';
-    if(amPrecipChart) amPrecipChart.destroy();
-    amPrecipChart=new Chart(canvas,{
-      type:'bar',
-      data:{
-        labels,
-        datasets:[{
-          data:rainData,
-          backgroundColor:'rgba(0,102,255,0.55)',
-          borderColor:'rgba(0,102,255,0.8)',
-          borderWidth:1
-        }]
-      },
-      options:{
-        responsive:true,maintainAspectRatio:true,
-        plugins:{legend:{display:false}},
-        scales:{
-          x:{ticks:{font:{size:8},maxTicksLimit:8},grid:{display:false}},
-          y:{beginAtZero:true,ticks:{font:{size:9},maxTicksLimit:4},grid:{color:'rgba(0,0,0,0.06)'}}
-        }
-      }
-    });
+    showChartModal(title, labels, [{
+      data:vals, type:cfg.type,
+      backgroundColor:cfg.col, borderColor:cfg.col,
+      borderWidth:2, fill:false, tension:0.3, pointRadius:2, spanGaps:true
+    }], '気象庁 AMeDAS');
   }catch(e){
-    console.error('[PrecipChart]',e);
-    loading.textContent=`❌ ${e.message}`;
+    console.error('[AmedasChart]',e);
+    document.getElementById('chartModalLoading').textContent=`❌ ${e.message}`;
   }
 }
 
-document.getElementById('amPrecipBtn').onclick=fetchPrecipChart;
-document.getElementById('amChartClose').onclick=()=>{
-  document.getElementById('amChartSection').style.display='none';
-  if(amPrecipChart){ amPrecipChart.destroy(); amPrecipChart=null; }
+document.getElementById('chartModalClose').onclick=()=>{
+  document.getElementById('chartModal').style.display='none';
+  if(_modalChart){ _modalChart.destroy(); _modalChart=null; }
 };
+document.getElementById('chartModal').addEventListener('click',e=>{
+  if(e.target===document.getElementById('chartModal')) document.getElementById('chartModalClose').click();
+});
 
 async function fetchWeather(lat,lng){
   document.getElementById('wxLoading').style.display='block';
@@ -1104,10 +1187,12 @@ async function fetchWeather(lat,lng){
   try{
     const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}`
       +`&current=temperature_2m,precipitation,windspeed_10m,winddirection_10m,relativehumidity_2m,weathercode`
-      +`&hourly=precipitation,temperature_2m&timezone=Asia%2FTokyo&forecast_days=1`;
+      +`&hourly=precipitation,temperature_2m,windspeed_10m,relativehumidity_2m&timezone=Asia%2FTokyo&forecast_days=1`;
     const res=await fetch(url);
     const d=await res.json();
     const c=d.current;
+    _wxHourly=d.hourly;
+    _wxForecastHour=new Date().getHours();
     const [icon,desc]=WX_CODE[c.weathercode]||['🌡','--'];
     document.getElementById('wxIcon').textContent=icon;
     document.getElementById('wxDesc').textContent=desc;
@@ -1117,6 +1202,12 @@ async function fetchWeather(lat,lng){
     document.getElementById('wxHumid').textContent=`${c.relativehumidity_2m}%`;
     const now=new Date(); const p=n=>String(n).padStart(2,'0');
     document.getElementById('wxUpdated').textContent=`${p(now.getHours())}:${p(now.getMinutes())} 更新`;
+
+    /* 予報セルクリック → 今後24時間グラフ */
+    document.getElementById('wxMain').onclick=()=>showForecastChart('temperature_2m','今後24時間の気温','line');
+    document.getElementById('wxCellRain').onclick=()=>showForecastChart('precipitation','今後24時間の降水量','bar');
+    document.getElementById('wxCellWind').onclick=()=>showForecastChart('windspeed_10m','今後24時間の風速','line');
+    document.getElementById('wxCellHumid').onclick=()=>showForecastChart('relativehumidity_2m','今後24時間の湿度','line');
 
     /* 今後6時間グラフ */
     const nowHour=now.getHours();
@@ -1149,7 +1240,7 @@ async function fetchWeather(lat,lng){
     });
 
     document.getElementById('wxLoading').style.display='none';
-    document.getElementById('wxContent').style.display='flex'; // flex-direction:column set inline
+    document.getElementById('wxContent').style.display='flex';
     fetchAmedasForLocation(lat,lng);
   }catch(e){ document.getElementById('wxLoading').textContent='取得に失敗しました'; }
 }
