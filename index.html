@@ -739,6 +739,7 @@ let sidebarSide=localStorage.getItem('sidebarSide')||'left';
 function applySidebarSide(){
   const right=sidebarSide==='right';
   document.body.classList.toggle('sidebar-right', right);
+  if(typeof zoomCtrl!=='undefined') zoomCtrl.setPosition(right?'topleft':'topright');
   const btn=document.getElementById('btnSideSwitch');
   if(btn) btn.title=right?'サイドバーを左へ':'サイドバーを右へ';
 }
@@ -771,7 +772,8 @@ document.getElementById('map').addEventListener('click',()=>{ if(measuring||shar
 /* =========================
    Map
 ========================= */
-const map=L.map('map',{maxZoom:22}).setView([36.2,138.0],12);
+const map=L.map('map',{maxZoom:22,zoomControl:false}).setView([36.2,138.0],12);
+const zoomCtrl=L.control.zoom({position:'topright'}).addTo(map);
 const gsiStd=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
   {maxNativeZoom:18,maxZoom:22,attribution:'© 地理院'});
 const gsiPhoto=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',
