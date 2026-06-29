@@ -336,10 +336,10 @@ html, body { height:100%; margin:0; }
   transition:max-height 0.28s cubic-bezier(0.4,0,0.2,1), padding 0.28s cubic-bezier(0.4,0,0.2,1);
 }
 #wxPanel.collapsed #wxBody { max-height:0 !important; padding-top:0 !important; padding-bottom:0 !important; overflow:hidden; }
-#wxMain { display:flex; align-items:center; gap:12px; }
-#wxIcon { font-size:32px; line-height:1; }
-#wxDesc { font-size:14px; font-weight:bold; color:#222; }
-#wxTemp { font-size:26px; font-weight:bold; color:#0066ff; line-height:1; }
+#wxMain { display:flex; align-items:center; gap:10px; }
+#wxIcon { font-size:28px; line-height:1; flex-shrink:0; }
+#wxDesc { font-size:11px; color:#555; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#wxTemp { font-size:16px; font-weight:bold; color:#0066ff; line-height:1.3; }
 #wxGrid { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; }
 .wx-cell { background:#f5f7ff; border-radius:8px; padding:5px 8px; text-align:center; }
 .wx-cell .lbl { font-size:9px; color:#888; }
@@ -657,7 +657,6 @@ html, body { height:100%; margin:0; }
           <div class="am-cell" id="amCellWind"><div class="lbl">💨 風速</div><div class="val" id="amWind">--</div></div>
           <div class="am-cell" id="amCellWindDir"><div class="lbl">🧭 風向</div><div class="val" id="amWindDir">--</div></div>
           <div class="am-cell" id="amCellSnow"><div class="lbl">🌨 積雪深</div><div class="val" id="amSnow">--</div></div>
-          <div class="am-cell" id="amCellMorn" style="grid-column:1/-1"><div class="lbl">🌅 今朝6時の気温（最低気温の参考）</div><div class="val" id="amMornTemp">--</div></div>
         </div>
         <div style="font-size:9px;color:#bbb;">↑ タップで過去24時間グラフ</div>
         <div style="font-size:9px;color:#ccc;text-align:right;">出典: <a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" style="color:#ccc;">気象庁 AMeDAS</a></div>
@@ -1658,23 +1657,31 @@ function showAmedasDetail(s){
   document.getElementById('amCellWind').onclick=()=>fetchAmedasChart('wind','過去24時間の風速');
   document.getElementById('amCellWindDir').onclick=()=>fetchAmedasChart('winddir','過去24時間の風向（頻度）');
   document.getElementById('amCellSnow').onclick=()=>fetchAmedasChart('snow','過去24時間の積雪深');
-  document.getElementById('amCellMorn').onclick=()=>showMorning6AMChart();
-  /* 今朝6時の気温を非同期取得 */
+  /* 今朝6時の気温を非同期取得→最低気温セルに反映 */
   (async()=>{
-    const mEl=document.getElementById('amMornTemp'); mEl.textContent='取得中...';
     const jst=new Date(new Date().getTime()+9*3600000);
     const p=n=>String(n).padStart(2,'0');
     const ymd=`${jst.getUTCFullYear()}${p(jst.getUTCMonth()+1)}${p(jst.getUTCDate())}`;
     try{
       const r=await fetch(`https://www.jma.go.jp/bosai/amedas/data/point/${s.code}/${ymd}_06.json`);
-      if(!r.ok){ mEl.textContent='--'; return; }
+      if(!r.ok) return;
       const data=await r.json();
       const key=Object.keys(data).sort().find(k=>k.slice(8,10)==='06'&&parseInt(k.slice(10,12))<=10);
       const t=key&&data[key].temp?data[key].temp[0]:null;
+      if(t===null) return;
       _amedasMorningTemp=t;
-      mEl.textContent=t!==null?`${t}°C`:'--';
-      mEl.className='val'+(t===null?'':t>=30?' t-hot':t>=25?' t-warm':t<=5?' t-cold':t<=15?' t-cool':'');
-    }catch{ mEl.textContent='--'; }
+      const humEl=document.getElementById('wxHumid');
+      /* JMAの最低気温がない(--表示)ときだけ朝6時で補完 */
+      if(humEl&&humEl.textContent==='--'){
+        humEl.textContent=`${t}°C`;
+        humEl.className='val'+(t>=30?' t-hot':t>=25?' t-warm':t<=5?' t-cold':t<=15?' t-cool':'');
+        const lbl=document.getElementById('wxCellHumid').querySelector('.lbl');
+        if(lbl) lbl.textContent='🌅 今朝6時';
+        /* wxTemp の最低部分も更新 */
+        const tEl=document.getElementById('wxTemp');
+        if(tEl) tEl.textContent=tEl.textContent.replace('↓--°','↓'+t+'°');
+      }
+    }catch{}
   })();
 }
 
@@ -2107,7 +2114,8 @@ async function fetchWeather(lat,lng){
     const ts0=shortTerm.timeSeries[0], ts1=shortTerm.timeSeries[1], ts2=shortTerm.timeSeries[2];
     const area0=ts0.areas[0];
     const todayCode=area0.weatherCodes?.[0]||'100';
-    const todayWeather=(area0.weathers?.[0]||'').replace(/\s+/g,' ').trim().slice(0,20);
+    const _wx=(area0.weathers?.[0]||'').replace(/\s+/g,' ').trim();
+    const todayWeather=_wx.length>12?_wx.slice(0,12)+'…':_wx;
     const pops=ts1.areas[0].pops||[];
     const maxPop=pops.filter(p=>p!=='').map(Number).reduce((m,v)=>Math.max(m,v),-1);
     const tempArea=ts2.areas[0];
@@ -2115,10 +2123,13 @@ async function fetchWeather(lat,lng){
     const todayMax=maxArr.find(v=>v!=='')||null, todayMin=minArr.find(v=>v!=='')||null;
     document.getElementById('wxIcon').textContent=jmaCodeIcon(todayCode);
     document.getElementById('wxDesc').textContent=todayWeather||'--';
-    document.getElementById('wxTemp').textContent=todayMax?`最高 ${todayMax}°C`:'--';
+    document.getElementById('wxTemp').textContent=`↑${todayMax||'--'}° / ↓${todayMin||'--'}°`;
     document.getElementById('wxRain').textContent=maxPop>=0?`${maxPop}%`:'--';
     document.getElementById('wxWind').textContent=todayMax?`${todayMax}°C`:'--';
     document.getElementById('wxHumid').textContent=todayMin?`${todayMin}°C`:'--';
+    /* 最低気温ラベルをリセット（再取得時のため） */
+    const _lbl=document.getElementById('wxCellHumid').querySelector('.lbl');
+    if(_lbl) _lbl.textContent='🌡 最低気温';
     /* 3日間カード */
     const dayCards=document.getElementById('wxDayCards'); dayCards.innerHTML='';
     ['今日','明日','明後日'].forEach((name,i)=>{
