@@ -292,18 +292,32 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 .wx-cell:active { background: #e0e8ff; }
 .am-cell:active { background: #d8eeff; }
 #wxMain { cursor: pointer; -webkit-tap-highlight-color: transparent; }
-/* チャートモーダル */
-#chartModal {
-  position: fixed; inset: 0; z-index: 9200;
-  background: rgba(0,0,0,0.5);
-  display: none; align-items: center; justify-content: center;
+/* チャートウィンドウ（複数表示対応） */
+.cw-win {
+  position: fixed;
+  background: #fff; border-radius: 14px; overflow: hidden;
+  width: min(300px, calc(100vw - 20px));
+  box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+  font-family: sans-serif; touch-action: none;
 }
-#chartBox {
-  background: #fff; border-radius: 16px; padding: 16px;
-  width: min(340px, calc(100vw - 20px));
-  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-  font-family: sans-serif;
+.cw-handle {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px;
+  background: #f4f4f4; border-bottom: 1px solid #eee;
+  cursor: grab; user-select: none; -webkit-user-select: none;
 }
+.cw-handle:active { cursor: grabbing; }
+.cw-title { font-size: 12px; font-weight: bold; color: #222; flex: 1; line-height: 1.3; }
+.cw-close {
+  background: #ddd; border: none; border-radius: 50%;
+  width: 22px; height: 22px; cursor: pointer; font-size: 12px;
+  line-height: 22px; padding: 0; flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.cw-close:active { background: #bbb; }
+.cw-body { padding: 10px 12px 8px; }
+.cw-loading { color: #888; font-size: 12px; text-align: center; padding: 16px 0; }
+.cw-source { font-size: 9px; color: #bbb; text-align: right; margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -390,18 +404,6 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
   </div>
 </div>
 
-<!-- チャートモーダル -->
-<div id="chartModal">
-  <div id="chartBox">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <span id="chartModalTitle" style="font-size:13px;font-weight:bold;color:#222;"></span>
-      <button id="chartModalClose" style="background:#eee;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:13px;line-height:26px;padding:0;flex-shrink:0;">✕</button>
-    </div>
-    <div id="chartModalLoading" style="text-align:center;color:#888;padding:20px 0;font-size:13px;">取得中...</div>
-    <canvas id="chartModalCanvas" height="100" style="display:none;"></canvas>
-    <div id="chartModalSource" style="font-size:9px;color:#bbb;text-align:right;margin-top:6px;"></div>
-  </div>
-</div>
 
 <div id="csSliderWrap">
   <span>CS立体図 透過度</span>
@@ -929,7 +931,7 @@ Object.keys(CHK_MAP).forEach(key=>{
 const WIND_DIR=['静穏','北北東','北東','東北東','東','東南東','南東','南南東','南','南南西','南西','西南西','西','西北西','北西','北北西','北'];
 
 let _currentAmedasStation=null;
-let _modalChart=null;
+let _cwCounter=0;
 
 function showAmedasDetail(s){
   _currentAmedasStation=s;
@@ -1093,89 +1095,139 @@ async function fetchAmedasForLocation(lat,lng){
   }
 }
 
-/* ── チャートモーダル ────────────────────── */
-function showChartModal(title, labels, datasets, source){
-  document.getElementById('chartModalTitle').textContent=title;
-  document.getElementById('chartModalSource').textContent=source?`出典: ${source}`:'';
-  document.getElementById('chartModalLoading').style.display='none';
-  const canvas=document.getElementById('chartModalCanvas');
-  canvas.style.display='block';
-  if(_modalChart) _modalChart.destroy();
-  const type=datasets[0].type||'bar';
-  _modalChart=new Chart(canvas,{
-    type,
-    data:{ labels, datasets },
-    options:{
-      responsive:true, maintainAspectRatio:true,
-      plugins:{ legend:{ display:datasets.length>1 } },
-      scales:{
-        x:{ ticks:{ font:{ size:8 }, maxTicksLimit:8 }, grid:{ display:false } },
-        y:{ beginAtZero:true, ticks:{ font:{ size:9 }, maxTicksLimit:5 }, grid:{ color:'rgba(0,0,0,0.06)' } }
-      }
-    }
+/* ── チャートウィンドウ（複数表示対応） ─── */
+function openChartWindow(title){
+  _cwCounter++;
+  const offset=(_cwCounter-1)%6;
+  const win=document.createElement('div');
+  win.className='cw-win';
+  win.style.cssText=`top:${56+offset*24}px;left:${10+offset*14}px;z-index:${9200+_cwCounter};`;
+  win.innerHTML=
+    `<div class="cw-handle">`
+    +`<span class="cw-title">${title}</span>`
+    +`<button class="cw-close">✕</button>`
+    +`</div>`
+    +`<div class="cw-body">`
+    +`<div class="cw-loading">取得中...</div>`
+    +`<canvas class="cw-canvas" height="100" style="display:none;"></canvas>`
+    +`<div class="cw-source"></div>`
+    +`</div>`;
+  document.body.appendChild(win);
+
+  let chart=null;
+  const handle=win.querySelector('.cw-handle');
+
+  /* 前面に出す */
+  win.addEventListener('pointerdown',()=>{ win.style.zIndex=9200+(++_cwCounter); });
+
+  /* 閉じる */
+  win.querySelector('.cw-close').addEventListener('click',e=>{
+    e.stopPropagation();
+    if(chart) chart.destroy();
+    win.remove();
   });
-  document.getElementById('chartModal').style.display='flex';
+
+  /* ドラッグ（タッチ・マウス共通） */
+  let drag=null;
+  handle.addEventListener('touchstart',e=>{
+    const t=e.touches[0]; const r=win.getBoundingClientRect();
+    drag={ox:t.clientX-r.left,oy:t.clientY-r.top};
+  },{passive:true});
+  handle.addEventListener('touchmove',e=>{
+    if(!drag) return; e.preventDefault();
+    const t=e.touches[0];
+    let x=t.clientX-drag.ox, y=t.clientY-drag.oy;
+    x=Math.max(0,Math.min(window.innerWidth-win.offsetWidth,x));
+    y=Math.max(0,Math.min(window.innerHeight-win.offsetHeight,y));
+    win.style.left=x+'px'; win.style.top=y+'px';
+  },{passive:false});
+  handle.addEventListener('touchend',()=>drag=null,{passive:true});
+  handle.addEventListener('mousedown',e=>{
+    if(e.target===win.querySelector('.cw-close')) return;
+    const r=win.getBoundingClientRect();
+    drag={ox:e.clientX-r.left,oy:e.clientY-r.top};
+    handle.style.cursor='grabbing';
+  });
+  document.addEventListener('mousemove',e=>{
+    if(!drag) return;
+    let x=e.clientX-drag.ox, y=e.clientY-drag.oy;
+    x=Math.max(0,Math.min(window.innerWidth-win.offsetWidth,x));
+    y=Math.max(0,Math.min(window.innerHeight-win.offsetHeight,y));
+    win.style.left=x+'px'; win.style.top=y+'px';
+  });
+  document.addEventListener('mouseup',()=>{ drag=null; handle.style.cursor='grab'; });
+
+  return {
+    setChart(labels,datasets,source){
+      win.querySelector('.cw-loading').style.display='none';
+      const canvas=win.querySelector('.cw-canvas');
+      canvas.style.display='block';
+      if(source) win.querySelector('.cw-source').textContent=`出典: ${source}`;
+      if(chart) chart.destroy();
+      const type=datasets[0].type||'bar';
+      chart=new Chart(canvas,{
+        type,
+        data:{labels,datasets},
+        options:{
+          responsive:true,maintainAspectRatio:true,
+          plugins:{legend:{display:datasets.length>1}},
+          scales:{
+            x:{ticks:{font:{size:8},maxTicksLimit:8},grid:{display:false}},
+            y:{beginAtZero:true,ticks:{font:{size:9},maxTicksLimit:5},grid:{color:'rgba(0,0,0,0.06)'}}
+          }
+        }
+      });
+    },
+    setError(msg){
+      win.querySelector('.cw-loading').textContent=`❌ ${msg}`;
+    }
+  };
+}
+
+function showChartModal(title,labels,datasets,source){
+  const w=openChartWindow(title);
+  w.setChart(labels,datasets,source);
 }
 
 /* 気象庁予報 POPグラフ */
 function showJmaPOPChart(title){
-  if(!_jmaForecast) return;
+  const w=openChartWindow(title||'降水確率');
+  if(!_jmaForecast){ w.setError('データなし'); return; }
   try{
     const ts1=_jmaForecast[0].timeSeries[1];
     const defs=ts1.timeDefines;
     const pops=ts1.areas[0].pops;
     const labels=defs.map(t=>{
       const d=new Date(t);
-      const jh=d.getUTCHours()+9; const jd=d.getUTCDate()+(jh>=24?1:0);
-      const h=(jh%24);
-      return `${String(jd).slice(-2)}日${String(h).padStart(2,'0')}時`;
+      const jh=d.getUTCHours()+9; const h=jh%24;
+      const jd=new Date(d.getTime()+9*3600000);
+      return `${jd.getUTCMonth()+1}/${jd.getUTCDate()} ${String(h).padStart(2,'0')}時`;
     });
     const data=pops.map(p=>p===''?null:Number(p));
-    showChartModal(title||'降水確率', labels, [{
-      data, type:'bar',
-      backgroundColor:'rgba(0,102,255,0.55)', borderColor:'rgba(0,102,255,0.8)', borderWidth:1
-    }], '気象庁');
-  }catch(e){ document.getElementById('chartModalLoading').textContent=`❌ ${e.message}`; }
+    w.setChart(labels,[{data,type:'bar',backgroundColor:'rgba(0,102,255,0.55)',borderColor:'rgba(0,102,255,0.8)',borderWidth:1}],'気象庁');
+  }catch(e){ w.setError(e.message); }
 }
 
 /* 気象庁予報 気温グラフ（日別最高/最低） */
 function showJmaTempChart(title){
-  if(!_jmaForecast) return;
+  const w=openChartWindow(title||'気温予報');
+  if(!_jmaForecast){ w.setError('データなし'); return; }
   try{
     const ts2=_jmaForecast[0].timeSeries[2];
-    const defs=ts2.timeDefines;
     const area=ts2.areas[0];
     const maxArr=area.tempsMax||area.temps||[];
     const minArr=area.tempsMin||[];
-    const labels=defs.map(t=>{
-      const d=new Date(t);
-      const jd=new Date(d.getTime()+9*3600000);
+    const labels=ts2.timeDefines.map(t=>{
+      const jd=new Date(new Date(t).getTime()+9*3600000);
       return `${jd.getUTCMonth()+1}/${jd.getUTCDate()}`;
     });
-    const datasets=[{
-      label:'最高',data:maxArr.map(v=>v===''?null:Number(v)),type:'bar',
-      backgroundColor:'rgba(255,80,0,0.5)',borderColor:'rgba(255,80,0,0.9)',borderWidth:1
-    }];
-    if(minArr.length){
-      datasets.push({
-        label:'最低',data:minArr.map(v=>v===''?null:Number(v)),type:'bar',
-        backgroundColor:'rgba(0,100,255,0.5)',borderColor:'rgba(0,100,255,0.9)',borderWidth:1
-      });
-    }
-    showChartModal(title||'気温予報', labels, datasets, '気象庁');
-  }catch(e){ document.getElementById('chartModalLoading').textContent=`❌ ${e.message}`; }
+    const datasets=[{label:'最高',data:maxArr.map(v=>v===''?null:Number(v)),type:'bar',backgroundColor:'rgba(255,80,0,0.5)',borderColor:'rgba(255,80,0,0.9)',borderWidth:1}];
+    if(minArr.length) datasets.push({label:'最低',data:minArr.map(v=>v===''?null:Number(v)),type:'bar',backgroundColor:'rgba(0,100,255,0.5)',borderColor:'rgba(0,100,255,0.9)',borderWidth:1});
+    w.setChart(labels,datasets,'気象庁');
+  }catch(e){ w.setError(e.message); }
 }
 
-function showForecastChart(field, title, chartType){
-  document.getElementById('chartModalTitle').textContent=title||'予報';
-  document.getElementById('chartModalLoading').style.display='block';
-  document.getElementById('chartModalLoading').textContent='読み込み中...';
-  document.getElementById('chartModalCanvas').style.display='none';
-  document.getElementById('chartModal').style.display='flex';
-  if(!_jmaForecast){
-    document.getElementById('chartModalLoading').textContent='データなし';
-    return;
-  }
+function showForecastChart(field,title){
   if(field==='pop') showJmaPOPChart(title);
   else showJmaTempChart(title);
 }
@@ -1211,11 +1263,7 @@ function getFileList(count=8){
 async function fetchAmedasChart(varKey, title){
   const cfg=AM_CHART_VARS[varKey];
   if(!cfg||!_currentAmedasStation) return;
-  document.getElementById('chartModalTitle').textContent=title;
-  document.getElementById('chartModalLoading').style.display='block';
-  document.getElementById('chartModalLoading').textContent='取得中...';
-  document.getElementById('chartModalCanvas').style.display='none';
-  document.getElementById('chartModal').style.display='flex';
+  const w=openChartWindow(title);
   try{
     const code=_currentAmedasStation.code;
     const results=await Promise.all(getFileList(cfg.files).map(async({ymd,hh})=>{
@@ -1239,10 +1287,7 @@ async function fetchAmedasChart(varKey, title){
       });
       const labels=WIND_DIR.slice(1).concat(['静穏']); /* 北北東〜北 + 静穏 */
       const vals=freq.slice(1).concat([freq[0]]);
-      showChartModal(title, labels, [{
-        data:vals, type:'bar',
-        backgroundColor:cfg.col, borderColor:cfg.col, borderWidth:1
-      }], '気象庁 AMeDAS');
+      w.setChart(labels,[{data:vals,type:'bar',backgroundColor:cfg.col,borderColor:cfg.col,borderWidth:1}],'気象庁 AMeDAS');
       return;
     }
 
@@ -1257,10 +1302,7 @@ async function fetchAmedasChart(varKey, title){
           entries.push({label:`${ts.slice(8,10)}:${ts.slice(10,12)}`, v:Math.round(v*10)/10});
         });
       });
-      showChartModal(title, entries.map(e=>e.label), [{
-        data:entries.map(e=>e.v), type:'bar',
-        backgroundColor:cfg.col, borderColor:cfg.col, borderWidth:1
-      }], '気象庁 AMeDAS');
+      w.setChart(entries.map(e=>e.label),[{data:entries.map(e=>e.v),type:'bar',backgroundColor:cfg.col,borderColor:cfg.col,borderWidth:1}],'気象庁 AMeDAS');
       return;
     }
 
@@ -1296,21 +1338,16 @@ async function fetchAmedasChart(varKey, title){
         vals.push(rounded);
       }
     }
-    showChartModal(title, labels, [{
-      data:vals, type:cfg.type,
-      backgroundColor:cfg.col, borderColor:cfg.col,
-      borderWidth:2, fill:cfg.agg==='cumsum', tension:0.3, pointRadius:2, spanGaps:true
-    }], '気象庁 AMeDAS');
+    w.setChart(labels,[{
+      data:vals,type:cfg.type,
+      backgroundColor:cfg.col,borderColor:cfg.col,
+      borderWidth:2,fill:cfg.agg==='cumsum',tension:0.3,pointRadius:2,spanGaps:true
+    }],'気象庁 AMeDAS');
   }catch(e){
     console.error('[AmedasChart]',e);
-    document.getElementById('chartModalLoading').textContent=`❌ ${e.message}`;
+    w.setError(e.message);
   }
 }
-
-document.getElementById('chartModalClose').onclick=()=>{
-  document.getElementById('chartModal').style.display='none';
-  if(_modalChart){ _modalChart.destroy(); _modalChart=null; }
-};
 
 async function fetchWeather(lat,lng){
   document.getElementById('wxLoading').style.display='block';
