@@ -1770,7 +1770,10 @@ function _openChartFloat(title){
   const offset=(_cwCounter-1)%6;
   const win=document.createElement('div');
   win.className='cw-win';
-  win.style.cssText=`top:${56+offset*26}px;left:${10+offset*16}px;z-index:${9200+_cwCounter};`;
+  const pr=wxPanel.getBoundingClientRect();
+  const cx=Math.min(pr.right+10+offset*16, window.innerWidth-310);
+  const cy=Math.max(pr.top+offset*26, 10);
+  win.style.cssText=`top:${cy}px;left:${cx}px;z-index:${9200+_cwCounter};`;
   win.innerHTML=`<div class="cw-handle"><span class="cw-title">${title}</span><button class="cw-close">✕</button></div>`
     +`<div class="cw-body"><div class="cw-loading">取得中...</div><canvas class="cw-canvas" height="110" style="display:none;"></canvas><div class="cw-source"></div></div>`;
   document.body.appendChild(win);
