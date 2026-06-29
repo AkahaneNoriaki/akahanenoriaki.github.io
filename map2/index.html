@@ -1049,6 +1049,43 @@ document.getElementById('chkLAmedas').addEventListener('change',function(){
 
 let wxChart=null;
 
+/* ダッシュボードの位置に基づいて最寄りのAMeDAS観測点を取得して表示 */
+async function fetchAmedasForLocation(lat,lng){
+  document.getElementById('amedasLoading').style.display='block';
+  document.getElementById('amedasLoading').textContent='取得中...';
+  document.getElementById('amedasContent').style.display='none';
+  amedasPanel.style.display='flex';
+  try{
+    const timeRes=await fetch('https://www.jma.go.jp/bosai/amedas/data/latest_time.txt');
+    if(!timeRes.ok) throw new Error(`latest_time HTTP ${timeRes.status}`);
+    const rawTime=(await timeRes.text()).trim();
+    const tm=rawTime.match(/(\d{4})\D(\d{2})\D(\d{2})\D(\d{2}):(\d{2}):(\d{2})/);
+    if(!tm) throw new Error('time parse failed');
+    const timeStr=`${tm[1]}${tm[2]}${tm[3]}${tm[4]}${tm[5]}${tm[6]}`;
+    if(!_amedasTable){
+      const tRes=await fetch('https://www.jma.go.jp/bosai/amedas/const/amedastable.json');
+      if(!tRes.ok) throw new Error(`amedastable HTTP ${tRes.status}`);
+      _amedasTable=await tRes.json();
+    }
+    const dataRes=await fetch(`https://www.jma.go.jp/bosai/amedas/data/map/${timeStr}.json`);
+    if(!dataRes.ok) throw new Error(`map data HTTP ${dataRes.status}`);
+    const data=await dataRes.json();
+    const ref=L.latLng(lat,lng);
+    const nearest=Object.entries(data).map(([code,d])=>{
+      const info=_amedasTable[code];
+      if(!info||!info.lat||!info.lon||!Array.isArray(info.lat)) return null;
+      const slat=info.lat[0]+info.lat[1]/60, slng=info.lon[0]+info.lon[1]/60;
+      if(isNaN(slat)||isNaN(slng)) return null;
+      return {code,info,d,lat:slat,lng:slng,dist:map.distance(ref,L.latLng(slat,slng))};
+    }).filter(s=>s).sort((a,b)=>a.dist-b.dist)[0];
+    if(nearest) showAmedasDetail(nearest);
+    else throw new Error('観測点が見つかりません');
+  }catch(e){
+    console.error('[AMeDAS loc]',e);
+    document.getElementById('amedasLoading').textContent=`❌ ${e.message}`;
+  }
+}
+
 async function fetchWeather(lat,lng){
   document.getElementById('wxLoading').style.display='block';
   document.getElementById('wxContent').style.display='none';
@@ -1101,6 +1138,7 @@ async function fetchWeather(lat,lng){
 
     document.getElementById('wxLoading').style.display='none';
     document.getElementById('wxContent').style.display='flex'; // flex-direction:column set inline
+    fetchAmedasForLocation(lat,lng);
   }catch(e){ document.getElementById('wxLoading').textContent='取得に失敗しました'; }
 }
 
@@ -1115,6 +1153,7 @@ function closeWxPanel(){
   wxOpen=false;
   wxPanel.style.display='none';
   document.getElementById('btnWx').classList.remove('hi');
+  closeAmedasPanel();
 }
 
 document.getElementById('btnWx').onclick=()=>{ wxOpen?closeWxPanel():openWxPanel(); };
