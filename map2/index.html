@@ -278,6 +278,15 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 .am-cell .val.t-cold { color: #4a148c; }
 .am-cell.rain-alert { background: #fff0f0; }
 .am-cell.rain-alert .lbl { color: #c00; }
+/* 3日間予報カード */
+.wx-day-card {
+  background: #f0f4ff; border-radius: 8px; padding: 4px 6px;
+  text-align: center; font-family: sans-serif;
+}
+.wx-day-card .dc-day { font-size: 9px; color: #888; }
+.wx-day-card .dc-ico { font-size: 18px; line-height: 1.3; }
+.wx-day-card .dc-pop { font-size: 10px; color: #0055cc; }
+.wx-day-card .dc-tmp { font-size: 9px; color: #444; }
 /* タップ可能セル */
 .wx-cell, .am-cell { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .wx-cell:active { background: #e0e8ff; }
@@ -340,14 +349,15 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
         </div>
       </div>
       <div id="wxGrid">
-        <div class="wx-cell" id="wxCellRain"><div class="lbl">🌧 降水量</div><div class="val" id="wxRain">--</div></div>
-        <div class="wx-cell" id="wxCellWind"><div class="lbl">💨 風速</div><div class="val" id="wxWind">--</div></div>
-        <div class="wx-cell" id="wxCellHumid"><div class="lbl">💧 湿度</div><div class="val" id="wxHumid">--</div></div>
+        <div class="wx-cell" id="wxCellRain"><div class="lbl">☔ 降水確率</div><div class="val" id="wxRain">--</div></div>
+        <div class="wx-cell" id="wxCellWind"><div class="lbl">🌡 最高気温</div><div class="val" id="wxWind">--</div></div>
+        <div class="wx-cell" id="wxCellHumid"><div class="lbl">🌡 最低気温</div><div class="val" id="wxHumid">--</div></div>
       </div>
-      <div style="font-size:9px;color:#bbb;">↑ タップで今後24時間グラフ</div>
-      <div style="font-size:9px;color:#aaa;">今後6時間の降水量(棒)・気温(線)</div>
+      <div id="wxDayCards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;"></div>
+      <div style="font-size:9px;color:#bbb;">↑ タップで詳細グラフ表示</div>
+      <div style="font-size:9px;color:#aaa;">今後の降水確率（6時間毎）</div>
       <canvas id="wxChart" height="55"></canvas>
-      <div style="font-size:9px;color:#ccc;text-align:right;">出典: <a href="https://open-meteo.com" target="_blank" style="color:#ccc;">Open-Meteo</a></div>
+      <div style="font-size:9px;color:#ccc;text-align:right;">出典: <a href="https://www.jma.go.jp/bosai/forecast/" target="_blank" style="color:#ccc;">気象庁</a></div>
       <!-- 現在の気象情報 -->
       <div id="wxAmedasLoading" style="font-size:11px;color:#888;text-align:center;display:none;padding:6px 0;border-top:1px solid #eee;">📡 取得中...</div>
       <div id="wxAmedasSection" style="display:none; flex-direction:column; gap:6px;">
@@ -770,18 +780,48 @@ document.getElementById('btnAddrClear').onclick=()=>{
 };
 
 /* ── 天気ダッシュボード ───────────────────── */
-const WX_CODE={
-  0:['☀️','快晴'],1:['🌤','晴れ'],2:['⛅','晴れ時々曇り'],3:['☁️','曇り'],
-  45:['🌫','霧'],48:['🌫','霧'],51:['🌦','霧雨'],53:['🌦','霧雨'],55:['🌦','霧雨'],
-  61:['🌧','雨'],63:['🌧','雨'],65:['🌧','大雨'],
-  71:['🌨','雪'],73:['🌨','雪'],75:['🌨','大雪'],77:['🌨','霧雪'],
-  80:['🌦','にわか雨'],81:['🌦','にわか雨'],82:['🌧','激しいにわか雨'],
-  85:['🌨','にわか雪'],86:['🌨','にわか雪'],
-  95:['⛈','雷雨'],96:['⛈','激しい雷雨'],99:['⛈','激しい雷雨']
+
+/* 都道府県コード(2桁) → 気象庁予報区オフィスコード(6桁) */
+const PREF_TO_JMA={
+  '01':'016000','02':'020000','03':'030000','04':'040000','05':'050000',
+  '06':'060000','07':'070000','08':'080000','09':'090000','10':'100000',
+  '11':'110000','12':'120000','13':'130000','14':'140000','15':'150000',
+  '16':'160000','17':'170000','18':'180000','19':'190000','20':'200000',
+  '21':'210000','22':'220000','23':'230000','24':'240000','25':'250000',
+  '26':'260000','27':'270000','28':'280000','29':'290000','30':'300000',
+  '31':'310000','32':'320000','33':'330000','34':'340000','35':'350000',
+  '36':'360000','37':'370000','38':'380000','39':'390000','40':'400000',
+  '41':'410000','42':'420000','43':'430000','44':'440000','45':'450000',
+  '46':'460100','47':'471000'
 };
+
+/* 気象庁天気コード(3桁) → 絵文字 */
+function jmaCodeIcon(code){
+  const n=parseInt(code)||0;
+  if(n>=100&&n<200) return '☀️';
+  if(n>=200&&n<300) return '⛅';
+  if(n>=300&&n<400) return '🌧';
+  if(n>=400&&n<500) return '🌧';
+  if(n>=500&&n<600) return '❄️';
+  if(n>=600&&n<700) return '🌧';
+  if(n>=700&&n<800) return '🌨';
+  return '🌡';
+}
+
+/* GSI逆ジオコーダで都道府県→気象庁オフィスコード取得 */
+async function getJMAAreaCode(lat,lng){
+  const url=`https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${lat}&lon=${lng}`;
+  const res=await fetch(url);
+  const data=await res.json();
+  const muniCd=data.results?.muniCd;
+  if(!muniCd) throw new Error('地域コード取得失敗');
+  const prefCode=String(muniCd).padStart(5,'0').slice(0,2);
+  return PREF_TO_JMA[prefCode]||'130000';
+}
 
 const wxPanel=document.getElementById('wxPanel');
 let wxOpen=false;
+let _jmaForecast=null; /* JMA予報データキャッシュ */
 
 /* 時刻計算（JST基準、Date.UTCの自然な日付繰り越しを利用） */
 function jmaTime(intervalMin=5, lagMin=5){
@@ -889,7 +929,6 @@ Object.keys(CHK_MAP).forEach(key=>{
 const WIND_DIR=['静穏','北北東','北東','東北東','東','東南東','南東','南南東','南','南南西','南西','西南西','西','西北西','北西','北北西','北'];
 
 let _currentAmedasStation=null;
-let _wxHourly=null, _wxForecastHour=0;
 let _modalChart=null;
 
 function showAmedasDetail(s){
@@ -1078,25 +1117,67 @@ function showChartModal(title, labels, datasets, source){
   document.getElementById('chartModal').style.display='flex';
 }
 
+/* 気象庁予報 POPグラフ */
+function showJmaPOPChart(title){
+  if(!_jmaForecast) return;
+  try{
+    const ts1=_jmaForecast[0].timeSeries[1];
+    const defs=ts1.timeDefines;
+    const pops=ts1.areas[0].pops;
+    const labels=defs.map(t=>{
+      const d=new Date(t);
+      const jh=d.getUTCHours()+9; const jd=d.getUTCDate()+(jh>=24?1:0);
+      const h=(jh%24);
+      return `${String(jd).slice(-2)}日${String(h).padStart(2,'0')}時`;
+    });
+    const data=pops.map(p=>p===''?null:Number(p));
+    showChartModal(title||'降水確率', labels, [{
+      data, type:'bar',
+      backgroundColor:'rgba(0,102,255,0.55)', borderColor:'rgba(0,102,255,0.8)', borderWidth:1
+    }], '気象庁');
+  }catch(e){ document.getElementById('chartModalLoading').textContent=`❌ ${e.message}`; }
+}
+
+/* 気象庁予報 気温グラフ（日別最高/最低） */
+function showJmaTempChart(title){
+  if(!_jmaForecast) return;
+  try{
+    const ts2=_jmaForecast[0].timeSeries[2];
+    const defs=ts2.timeDefines;
+    const area=ts2.areas[0];
+    const maxArr=area.tempsMax||area.temps||[];
+    const minArr=area.tempsMin||[];
+    const labels=defs.map(t=>{
+      const d=new Date(t);
+      const jd=new Date(d.getTime()+9*3600000);
+      return `${jd.getUTCMonth()+1}/${jd.getUTCDate()}`;
+    });
+    const datasets=[{
+      label:'最高',data:maxArr.map(v=>v===''?null:Number(v)),type:'bar',
+      backgroundColor:'rgba(255,80,0,0.5)',borderColor:'rgba(255,80,0,0.9)',borderWidth:1
+    }];
+    if(minArr.length){
+      datasets.push({
+        label:'最低',data:minArr.map(v=>v===''?null:Number(v)),type:'bar',
+        backgroundColor:'rgba(0,100,255,0.5)',borderColor:'rgba(0,100,255,0.9)',borderWidth:1
+      });
+    }
+    showChartModal(title||'気温予報', labels, datasets, '気象庁');
+  }catch(e){ document.getElementById('chartModalLoading').textContent=`❌ ${e.message}`; }
+}
+
 function showForecastChart(field, title, chartType){
-  if(!_wxHourly) return;
-  document.getElementById('chartModalTitle').textContent=title;
+  document.getElementById('chartModalTitle').textContent=title||'予報';
   document.getElementById('chartModalLoading').style.display='block';
   document.getElementById('chartModalLoading').textContent='読み込み中...';
   document.getElementById('chartModalCanvas').style.display='none';
   document.getElementById('chartModal').style.display='flex';
-  const labels=[], data=[];
-  for(let i=0;i<24;i++){
-    const h=(_wxForecastHour+i)%24;
-    labels.push(`${h}時`);
-    data.push(_wxHourly[field]?.[_wxForecastHour+i]??null);
+  if(!_jmaForecast){
+    document.getElementById('chartModalLoading').textContent='データなし';
+    return;
   }
-  const col=field==='precipitation'?'rgba(0,102,255,0.55)':field==='temperature_2m'?'rgba(255,100,0,0.8)':field==='windspeed_10m'?'rgba(80,180,0,0.8)':'rgba(0,160,200,0.8)';
-  showChartModal(title, labels, [{
-    data, type:chartType||'bar',
-    backgroundColor:col, borderColor:col, borderWidth:2,
-    fill:false, tension:0.3, pointRadius:2, spanGaps:true
-  }], 'Open-Meteo');
+  if(field==='pop') showJmaPOPChart(title);
+  else showJmaTempChart(title);
 }
 
 /* ── AMeDAS グラフ ───────────────────────── */
@@ -1233,66 +1314,106 @@ document.getElementById('chartModalClose').onclick=()=>{
 
 async function fetchWeather(lat,lng){
   document.getElementById('wxLoading').style.display='block';
+  document.getElementById('wxLoading').textContent='取得中...';
   document.getElementById('wxContent').style.display='none';
   try{
-    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}`
-      +`&current=temperature_2m,precipitation,windspeed_10m,winddirection_10m,relativehumidity_2m,weathercode`
-      +`&hourly=precipitation,temperature_2m,windspeed_10m,relativehumidity_2m&timezone=Asia%2FTokyo&forecast_days=1`;
-    const res=await fetch(url);
-    const d=await res.json();
-    const c=d.current;
-    _wxHourly=d.hourly;
-    _wxForecastHour=new Date().getHours();
-    const [icon,desc]=WX_CODE[c.weathercode]||['🌡','--'];
-    document.getElementById('wxIcon').textContent=icon;
-    document.getElementById('wxDesc').textContent=desc;
-    document.getElementById('wxTemp').textContent=`${c.temperature_2m}°C`;
-    document.getElementById('wxRain').textContent=`${c.precipitation}mm`;
-    document.getElementById('wxWind').textContent=`${c.windspeed_10m}m/s`;
-    document.getElementById('wxHumid').textContent=`${c.relativehumidity_2m}%`;
-    const now=new Date(); const p=n=>String(n).padStart(2,'0');
-    document.getElementById('wxUpdated').textContent=`${p(now.getHours())}:${p(now.getMinutes())} 更新`;
+    /* 1. GSI逆ジオコーダで気象庁オフィスコードを取得 */
+    const officeCode=await getJMAAreaCode(lat,lng);
+    /* 2. 気象庁予報API */
+    const fcUrl=`https://www.jma.go.jp/bosai/forecast/data/forecast/${officeCode}.json`;
+    const res=await fetch(fcUrl);
+    if(!res.ok) throw new Error(`気象庁API HTTP ${res.status}`);
+    const fc=await res.json();
+    _jmaForecast=fc;
 
-    /* 予報セルクリック → 今後24時間グラフ */
-    document.getElementById('wxMain').onclick=()=>showForecastChart('temperature_2m','今後24時間の気温','line');
-    document.getElementById('wxCellRain').onclick=()=>showForecastChart('precipitation','今後24時間の降水量','bar');
-    document.getElementById('wxCellWind').onclick=()=>showForecastChart('windspeed_10m','今後24時間の風速','line');
-    document.getElementById('wxCellHumid').onclick=()=>showForecastChart('relativehumidity_2m','今後24時間の湿度','line');
+    const shortTerm=fc[0];
+    const ts0=shortTerm.timeSeries[0]; /* 天気 */
+    const ts1=shortTerm.timeSeries[1]; /* 降水確率 */
+    const ts2=shortTerm.timeSeries[2]; /* 気温 */
 
-    /* 今後6時間グラフ */
-    const nowHour=now.getHours();
-    const labels=[], rain=[], temp=[];
-    for(let i=0;i<6;i++){
-      const h=(nowHour+i)%24;
-      labels.push(`${h}時`);
-      rain.push(d.hourly.precipitation[nowHour+i]??0);
-      temp.push(d.hourly.temperature_2m[nowHour+i]??null);
+    /* 天気（今日） */
+    const area0=ts0.areas[0];
+    const todayCode=area0.weatherCodes?.[0]||'100';
+    const todayWeather=(area0.weathers?.[0]||'').replace(/\s+/g,' ').trim().slice(0,20);
+
+    /* 降水確率（今日の最大値） */
+    const popArea=ts1.areas[0];
+    const pops=popArea.pops||[];
+    const maxPop=pops.filter(p=>p!=='').map(Number).reduce((m,v)=>Math.max(m,v),-1);
+
+    /* 気温（今日の最高・最低） */
+    const tempArea=ts2.areas[0];
+    const maxArr=(tempArea.tempsMax||tempArea.temps||[]);
+    const minArr=(tempArea.tempsMin||[]);
+    const todayMax=maxArr.find(v=>v!=='')||null;
+    const todayMin=minArr.find(v=>v!=='')||null;
+
+    /* UI 更新 */
+    document.getElementById('wxIcon').textContent=jmaCodeIcon(todayCode);
+    document.getElementById('wxDesc').textContent=todayWeather||'--';
+    document.getElementById('wxTemp').textContent=todayMax?`最高 ${todayMax}°C`:'--';
+    document.getElementById('wxRain').textContent=maxPop>=0?`${maxPop}%`:'--';
+    document.getElementById('wxWind').textContent=todayMax?`${todayMax}°C`:'--';
+    document.getElementById('wxHumid').textContent=todayMin?`${todayMin}°C`:'--';
+
+    /* 3日間予報カード */
+    const dayCards=document.getElementById('wxDayCards');
+    dayCards.innerHTML='';
+    const dayNames=['今日','明日','明後日'];
+    for(let i=0;i<3&&i<(area0.weatherCodes||[]).length;i++){
+      const code=area0.weatherCodes[i]||'';
+      const pop=pops.filter((_,j)=>Math.floor(j/2)===i).filter(p=>p!=='').map(Number);
+      const dayMaxPop=pop.length?Math.max(...pop):-1;
+      const dMax=maxArr[i]||'';
+      const dMin=minArr[i]||'';
+      const card=document.createElement('div');
+      card.className='wx-day-card';
+      card.innerHTML=`<div class="dc-day">${dayNames[i]}</div>`
+        +`<div class="dc-ico">${jmaCodeIcon(code)}</div>`
+        +(dayMaxPop>=0?`<div class="dc-pop">☔${dayMaxPop}%</div>`:'')
+        +((dMax||dMin)?`<div class="dc-tmp">${dMax?dMax+'°':''} / ${dMin?dMin+'°':''}</div>`:'');
+      dayCards.appendChild(card);
     }
+
+    /* タップ → 予報グラフ */
+    document.getElementById('wxMain').onclick=()=>showForecastChart('temp','3日間の気温予報');
+    document.getElementById('wxCellRain').onclick=()=>showForecastChart('pop','降水確率（3日間）');
+    document.getElementById('wxCellWind').onclick=()=>showForecastChart('temp','3日間の気温予報');
+    document.getElementById('wxCellHumid').onclick=()=>showForecastChart('temp','3日間の気温予報');
+
+    /* 降水確率ミニチャート（POPを6時間毎に表示） */
+    const labels=ts1.timeDefines.map(t=>{
+      const d=new Date(t); const jh=d.getUTCHours()+9; const h=jh%24;
+      return `${String(h).padStart(2,'0')}時`;
+    });
+    const popData=pops.map(p=>p===''?null:Number(p));
     const ctx=document.getElementById('wxChart');
     if(wxChart) wxChart.destroy();
     wxChart=new Chart(ctx,{
       type:'bar',
-      data:{
-        labels,
-        datasets:[
-          {label:'降水量(mm)',data:rain,backgroundColor:'rgba(0,102,255,0.5)',borderColor:'rgba(0,102,255,0.8)',borderWidth:1,yAxisID:'y'},
-          {label:'気温(°C)',data:temp,type:'line',borderColor:'rgba(255,100,0,0.8)',backgroundColor:'transparent',borderWidth:2,pointRadius:3,tension:0.3,yAxisID:'y2'}
-        ]
-      },
+      data:{ labels, datasets:[{
+        label:'降水確率(%)',data:popData,
+        backgroundColor:'rgba(0,102,255,0.5)',borderColor:'rgba(0,102,255,0.8)',borderWidth:1
+      }]},
       options:{
         responsive:true, maintainAspectRatio:true,
         plugins:{legend:{display:false}},
         scales:{
-          y:{beginAtZero:true,position:'left',ticks:{font:{size:9},maxTicksLimit:4},grid:{color:'rgba(0,0,0,0.06)'}},
-          y2:{position:'right',ticks:{font:{size:9},maxTicksLimit:4,callback:v=>v+'°'},grid:{display:false}}
+          x:{ticks:{font:{size:8},maxTicksLimit:8},grid:{display:false}},
+          y:{beginAtZero:true,max:100,ticks:{font:{size:9},maxTicksLimit:4,callback:v=>v+'%'},grid:{color:'rgba(0,0,0,0.06)'}}
         }
       }
     });
 
+    const now=new Date(); const p=n=>String(n).padStart(2,'0');
+    document.getElementById('wxUpdated').textContent=`${p(now.getHours())}:${p(now.getMinutes())} 更新`;
     document.getElementById('wxLoading').style.display='none';
     document.getElementById('wxContent').style.display='flex';
     fetchAmedasForLocation(lat,lng);
-  }catch(e){ document.getElementById('wxLoading').textContent='取得に失敗しました'; }
+  }catch(e){
+    console.error('[JMA forecast]',e);
+    document.getElementById('wxLoading').textContent=`取得失敗: ${e.message}`;
+  }
 }
 
 function openWxPanel(){
