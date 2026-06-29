@@ -374,6 +374,29 @@ html, body { height:100%; margin:0; }
 .am-cell.rain-alert { background:#fff0f0; }
 .am-cell.rain-alert .lbl { color:#c00; }
 .am-cell:active { background:#d8eeff; }
+/* PC用フローティングチャートウィンドウ */
+.cw-win {
+  position:fixed; background:#fff; border-radius:14px; overflow:hidden;
+  width:min(300px,calc(100vw - 20px));
+  box-shadow:0 4px 20px rgba(0,0,0,0.25);
+  font-family:sans-serif; touch-action:none;
+}
+.cw-handle {
+  display:flex; align-items:center; gap:8px; padding:7px 10px;
+  background:#f4f4f4; border-bottom:1px solid #eee;
+  cursor:grab; user-select:none; -webkit-user-select:none;
+}
+.cw-handle:active { cursor:grabbing; }
+.cw-title { font-size:12px; font-weight:bold; color:#222; flex:1; line-height:1.3; }
+.cw-close {
+  background:#ddd; border:none; border-radius:50%;
+  width:22px; height:22px; cursor:pointer; font-size:12px;
+  line-height:22px; padding:0; flex-shrink:0;
+}
+.cw-close:active { background:#bbb; }
+.cw-body { padding:10px 12px 8px; }
+.cw-loading { color:#888; font-size:12px; text-align:center; padding:12px 0; }
+.cw-source { font-size:9px; color:#bbb; text-align:right; margin-top:4px; }
 /* チャートチップ行 */
 #chartChips {
   position:fixed; bottom:0; left:0; right:0; z-index:9101;
@@ -1714,7 +1737,13 @@ let _cwCounter=0;
 const _charts=new Map();
 let _activeChartId=null, _sheetChart=null;
 
+/* PC/スマホ自動判定（768px未満をスマホ扱い） */
 function openChartWindow(title){
+  return window.innerWidth < 768 ? _openChartSheet(title) : _openChartFloat(title);
+}
+
+/* ── スマホ: ボトムシート＋チップ ── */
+function _openChartSheet(title){
   _cwCounter++;
   const id=`c${_cwCounter}`;
   _charts.set(id,{title,labels:null,datasets:null,source:null,error:null});
@@ -1730,6 +1759,39 @@ function openChartWindow(title){
   return {
     setChart(labels,datasets,source){ const c=_charts.get(id); if(!c) return; Object.assign(c,{labels,datasets,source}); if(_activeChartId===id) renderSheet(); },
     setError(msg){ const c=_charts.get(id); if(!c) return; c.error=msg; if(_activeChartId===id) renderSheet(); }
+  };
+}
+
+/* ── PC: フローティングウィンドウ ── */
+function _openChartFloat(title){
+  _cwCounter++;
+  const offset=(_cwCounter-1)%6;
+  const win=document.createElement('div');
+  win.className='cw-win';
+  win.style.cssText=`top:${56+offset*26}px;left:${10+offset*16}px;z-index:${9200+_cwCounter};`;
+  win.innerHTML=`<div class="cw-handle"><span class="cw-title">${title}</span><button class="cw-close">✕</button></div>`
+    +`<div class="cw-body"><div class="cw-loading">取得中...</div><canvas class="cw-canvas" height="110" style="display:none;"></canvas><div class="cw-source"></div></div>`;
+  document.body.appendChild(win);
+  win.addEventListener('pointerdown',()=>{ win.style.zIndex=9200+(++_cwCounter); });
+  win.querySelector('.cw-close').addEventListener('click',e=>{ e.stopPropagation(); if(chart) chart.destroy(); win.remove(); });
+  let chart=null, drag=null;
+  const handle=win.querySelector('.cw-handle');
+  handle.addEventListener('mousedown',e=>{
+    if(e.target===win.querySelector('.cw-close')) return;
+    const r=win.getBoundingClientRect(); drag={ox:e.clientX-r.left,oy:e.clientY-r.top}; handle.style.cursor='grabbing';
+  });
+  document.addEventListener('mousemove',e=>{ if(!drag) return; let x=e.clientX-drag.ox,y=e.clientY-drag.oy; x=Math.max(0,Math.min(window.innerWidth-win.offsetWidth,x)); y=Math.max(0,Math.min(window.innerHeight-win.offsetHeight,y)); win.style.left=x+'px'; win.style.top=y+'px'; });
+  document.addEventListener('mouseup',()=>{ drag=null; handle.style.cursor='grab'; });
+  return {
+    setChart(labels,datasets,source){
+      win.querySelector('.cw-loading').style.display='none';
+      const canvas=win.querySelector('.cw-canvas'); canvas.style.display='block';
+      if(source) win.querySelector('.cw-source').textContent=`出典: ${source}`;
+      if(chart) chart.destroy();
+      const type=datasets[0].type||'bar';
+      chart=new Chart(canvas,{type,data:{labels,datasets},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:datasets.length>1}},scales:{x:{ticks:{font:{size:8},maxTicksLimit:8},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:9},maxTicksLimit:5},grid:{color:'rgba(0,0,0,0.06)'}}}}});
+    },
+    setError(msg){ win.querySelector('.cw-loading').textContent=`❌ ${msg}`; }
   };
 }
 function activateChart(id){
