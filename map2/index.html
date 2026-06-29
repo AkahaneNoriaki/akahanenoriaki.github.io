@@ -267,46 +267,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 }
 #wxLoading { font-size: 13px; color: #888; text-align: center; padding: 6px 0; }
 
-/* ─── AMeDASダッシュボード ──────────────────── */
-#amedasPanel {
-  position: fixed;
-  top: 56px; right: 10px;
-  z-index: 9101;
-  background: rgba(255,255,255,0.97);
-  border: 1px solid rgba(0,0,0,0.13);
-  border-radius: 14px;
-  display: none;
-  flex-direction: column;
-  font-family: sans-serif;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.18);
-  width: min(230px, calc(100vw - 20px));
-  touch-action: none;
-}
-#amedasHandle {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 7px 10px 6px;
-  background: #eef4ff;
-  border-radius: 14px 14px 0 0;
-  border-bottom: 1px solid #d8e8f8;
-  cursor: grab;
-  user-select: none; -webkit-user-select: none;
-  gap: 6px;
-}
-#amedasHandle:active { cursor: grabbing; }
-#amedasHandleGrip { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
-#amedasHandleGrip span { display: block; width: 18px; height: 2px; background: #aac; border-radius: 1px; }
-#amedasStationName { font-size: 11px; color: #224; font-weight: bold; flex: 1; }
-#amedasUpdatedTime { font-size: 10px; color: #aaa; white-space: nowrap; }
-#amedasClose {
-  flex-shrink: 0; width: 22px; height: 22px;
-  background: #dde; border: none; border-radius: 50%;
-  font-size: 12px; line-height: 22px; text-align: center;
-  cursor: pointer; color: #666; padding: 0;
-  -webkit-tap-highlight-color: transparent;
-}
-#amedasClose:active { background: #bbc; }
-#amedasBody { padding: 10px; display: flex; flex-direction: column; gap: 6px; }
-#amedasDistLine { font-size: 10px; color: #888; text-align: center; margin-bottom: 2px; }
+/* ─── AMeDASデータグリッド ──────────────────── */
 #amedasDataGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 .am-cell { background: #f0f7ff; border-radius: 8px; padding: 5px 8px; text-align: center; }
 .am-cell .lbl { font-size: 9px; color: #668; }
@@ -367,6 +328,25 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
       <div style="font-size:9px;color:#aaa;">今後6時間の降水量(棒)・気温(線)</div>
       <canvas id="wxChart" height="55"></canvas>
       <div style="font-size:9px;color:#ccc;text-align:right;">出典: <a href="https://open-meteo.com" target="_blank" style="color:#ccc;">Open-Meteo</a></div>
+      <!-- AMeDASセクション -->
+      <div id="wxAmedasLoading" style="font-size:11px;color:#888;text-align:center;display:none;padding:2px 0;border-top:1px solid #eee;padding-top:6px;">📡 AMeDAS 取得中...</div>
+      <div id="wxAmedasSection" style="display:none; flex-direction:column; gap:6px;">
+        <div style="font-size:11px;font-weight:bold;color:#336;border-top:1px solid #eee;padding-top:6px;">
+          📡 <span id="amStationName">--</span><span id="amDistBadge" style="font-size:10px;font-weight:normal;color:#888;margin-left:6px;"></span>
+        </div>
+        <div id="amedasDataGrid">
+          <div class="am-cell"><div class="lbl">🌡 気温</div><div class="val" id="amTemp">--</div></div>
+          <div class="am-cell"><div class="lbl">💧 湿度</div><div class="val" id="amHumid">--</div></div>
+          <div class="am-cell"><div class="lbl">🌧 1h雨量</div><div class="val" id="amRain1h">--</div></div>
+          <div class="am-cell"><div class="lbl">⏱ 10m雨量</div><div class="val" id="amRain10m">--</div></div>
+          <div class="am-cell"><div class="lbl">📅 24h雨量</div><div class="val" id="amRain24h">--</div></div>
+          <div class="am-cell"><div class="lbl">💨 風速</div><div class="val" id="amWind">--</div></div>
+          <div class="am-cell"><div class="lbl">🧭 風向</div><div class="val" id="amWindDir">--</div></div>
+          <div class="am-cell"><div class="lbl">🌨 積雪深</div><div class="val" id="amSnow">--</div></div>
+        </div>
+        <div style="font-size:9px;color:#ccc;text-align:right;">出典: <a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" style="color:#ccc;">気象庁 AMeDAS</a></div>
+      </div>
+      <!-- レイヤー -->
       <div id="wxLayerLabel">🗂 気象レイヤ <span style="font-weight:normal;color:#bbb;">© 気象庁</span></div>
       <div id="wxLayers">
         <label class="wx-chk-item" id="lblLRain"><input type="checkbox" id="chkLRain"><span class="ico">🌧</span><span>雨量現況</span></label>
@@ -376,34 +356,6 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
         <label class="wx-chk-item" id="lblLAmedas"><input type="checkbox" id="chkLAmedas"><span class="ico">📡</span><span>アメダス</span></label>
       </div>
       <div id="wxAmedas"></div>
-      <div style="font-size:9px;color:#ccc;text-align:right;margin-top:2px;">AMeDAS: <a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" style="color:#ccc;">気象庁</a></div>
-    </div>
-  </div>
-</div>
-<div id="amedasPanel">
-  <div id="amedasHandle">
-    <div id="amedasHandleGrip"><span></span><span></span><span></span></div>
-    <span id="amedasStationName">📡 AMeDAS</span>
-    <span id="amedasUpdatedTime"></span>
-    <button id="amedasClose">✕</button>
-  </div>
-  <div id="amedasBody">
-    <div id="amedasLoading" style="font-size:13px;color:#888;text-align:center;padding:4px 0;">取得中...</div>
-    <div id="amedasContent" style="display:none;">
-      <div id="amedasDistLine"></div>
-      <div id="amedasDataGrid">
-        <div class="am-cell"><div class="lbl">🌡 気温</div><div class="val" id="amTemp">--</div></div>
-        <div class="am-cell"><div class="lbl">💧 湿度</div><div class="val" id="amHumid">--</div></div>
-        <div class="am-cell"><div class="lbl">🌧 1h雨量</div><div class="val" id="amRain1h">--</div></div>
-        <div class="am-cell"><div class="lbl">⏱ 10m雨量</div><div class="val" id="amRain10m">--</div></div>
-        <div class="am-cell"><div class="lbl">📅 24h雨量</div><div class="val" id="amRain24h">--</div></div>
-        <div class="am-cell"><div class="lbl">💨 風速</div><div class="val" id="amWind">--</div></div>
-        <div class="am-cell"><div class="lbl">🧭 風向</div><div class="val" id="amWindDir">--</div></div>
-        <div class="am-cell"><div class="lbl">🌨 積雪深</div><div class="val" id="amSnow">--</div></div>
-      </div>
-      <div style="font-size:9px;color:#bbb;text-align:right;margin-top:6px;">
-        出典: <a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" style="color:#aaa;">気象庁 AMeDAS</a>
-      </div>
     </div>
   </div>
 </div>
@@ -901,18 +853,17 @@ Object.keys(CHK_MAP).forEach(key=>{
 });
 
 /* ── AMeDASダッシュボード ─────────────────── */
-const amedasPanel=document.getElementById('amedasPanel');
 const WIND_DIR=['静穏','北北東','北東','東北東','東','東南東','南東','南南東','南','南南西','南西','西南西','西','西北西','北西','北北西','北'];
 
 function showAmedasDetail(s){
-  document.getElementById('amedasLoading').style.display='none';
-  const ct=document.getElementById('amedasContent');
-  ct.style.display='block';
+  document.getElementById('wxAmedasLoading').style.display='none';
+  const sec=document.getElementById('wxAmedasSection');
+  sec.style.display='flex';
 
   const name=s.info.kjName||s.code;
   const dist=s.dist>=1000?`${(s.dist/1000).toFixed(1)}km`:`${Math.round(s.dist)}m`;
-  document.getElementById('amedasStationName').textContent=`📡 ${name}`;
-  document.getElementById('amedasDistLine').textContent=`現在地から約 ${dist}`;
+  document.getElementById('amStationName').textContent=name;
+  document.getElementById('amDistBadge').textContent=`現在地から約 ${dist}`;
 
   const tv=s.d.temp?s.d.temp[0]:null;
   const tempEl=document.getElementById('amTemp');
@@ -931,37 +882,7 @@ function showAmedasDetail(s){
   document.getElementById('amWind').textContent=s.d.wind?`${s.d.wind[0]}m/s`:'--';
   document.getElementById('amWindDir').textContent=s.d.wind?(WIND_DIR[s.d.wind[1]]||'--'):'--';
   document.getElementById('amSnow').textContent=s.d.snow?`${s.d.snow[0]}cm`:'--';
-
-  const now=new Date(); const p=n=>String(n).padStart(2,'0');
-  document.getElementById('amedasUpdatedTime').textContent=`${p(now.getHours())}:${p(now.getMinutes())}`;
-  amedasPanel.style.display='flex';
 }
-
-function closeAmedasPanel(){
-  amedasPanel.style.display='none';
-}
-document.getElementById('amedasClose').onclick=closeAmedasPanel;
-
-/* AMeDASパネル ドラッグ */
-(()=>{
-  const handle=document.getElementById('amedasHandle');
-  let drag=null;
-  function startDrag(cx,cy){ const r=amedasPanel.getBoundingClientRect(); drag={ox:cx-r.left,oy:cy-r.top}; }
-  function moveDrag(cx,cy){
-    if(!drag) return;
-    let x=cx-drag.ox, y=cy-drag.oy;
-    x=Math.max(0,Math.min(window.innerWidth-amedasPanel.offsetWidth,x));
-    y=Math.max(0,Math.min(window.innerHeight-amedasPanel.offsetHeight,y));
-    amedasPanel.style.left=x+'px'; amedasPanel.style.top=y+'px'; amedasPanel.style.right='auto';
-  }
-  function endDrag(){ drag=null; }
-  handle.addEventListener('touchstart',e=>{ const t=e.touches[0]; startDrag(t.clientX,t.clientY); },{passive:true});
-  handle.addEventListener('touchmove',e=>{ if(!drag)return; e.preventDefault(); const t=e.touches[0]; moveDrag(t.clientX,t.clientY); },{passive:false});
-  handle.addEventListener('touchend',endDrag,{passive:true});
-  handle.addEventListener('mousedown',e=>{ if(e.target===document.getElementById('amedasClose'))return; startDrag(e.clientX,e.clientY); handle.style.cursor='grabbing'; });
-  document.addEventListener('mousemove',e=>{ if(drag) moveDrag(e.clientX,e.clientY); });
-  document.addEventListener('mouseup',()=>{ endDrag(); handle.style.cursor='grab'; });
-})();
 
 /* アメダス */
 let amedasOn=false, amedasMarkers=[], amedasTimer=null;
@@ -1041,7 +962,6 @@ document.getElementById('chkLAmedas').addEventListener('change',function(){
     clearInterval(amedasTimer); amedasTimer=null;
     amedasMarkers.forEach(m=>map.removeLayer(m)); amedasMarkers=[];
     document.getElementById('wxAmedas').style.display='none';
-    closeAmedasPanel();
   }
 });
 
@@ -1051,10 +971,9 @@ let wxChart=null;
 
 /* ダッシュボードの位置に基づいて最寄りのAMeDAS観測点を取得して表示 */
 async function fetchAmedasForLocation(lat,lng){
-  document.getElementById('amedasLoading').style.display='block';
-  document.getElementById('amedasLoading').textContent='取得中...';
-  document.getElementById('amedasContent').style.display='none';
-  amedasPanel.style.display='flex';
+  document.getElementById('wxAmedasLoading').style.display='block';
+  document.getElementById('wxAmedasLoading').textContent='📡 AMeDAS 取得中...';
+  document.getElementById('wxAmedasSection').style.display='none';
   try{
     const timeRes=await fetch('https://www.jma.go.jp/bosai/amedas/data/latest_time.txt');
     if(!timeRes.ok) throw new Error(`latest_time HTTP ${timeRes.status}`);
@@ -1082,7 +1001,7 @@ async function fetchAmedasForLocation(lat,lng){
     else throw new Error('観測点が見つかりません');
   }catch(e){
     console.error('[AMeDAS loc]',e);
-    document.getElementById('amedasLoading').textContent=`❌ ${e.message}`;
+    document.getElementById('wxAmedasLoading').textContent=`❌ AMeDAS: ${e.message}`;
   }
 }
 
@@ -1153,7 +1072,6 @@ function closeWxPanel(){
   wxOpen=false;
   wxPanel.style.display='none';
   document.getElementById('btnWx').classList.remove('hi');
-  closeAmedasPanel();
 }
 
 document.getElementById('btnWx').onclick=()=>{ wxOpen?closeWxPanel():openWxPanel(); };
