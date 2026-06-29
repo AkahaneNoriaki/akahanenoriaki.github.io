@@ -657,6 +657,7 @@ html, body { height:100%; margin:0; }
           <div class="am-cell" id="amCellWind"><div class="lbl">💨 風速</div><div class="val" id="amWind">--</div></div>
           <div class="am-cell" id="amCellWindDir"><div class="lbl">🧭 風向</div><div class="val" id="amWindDir">--</div></div>
           <div class="am-cell" id="amCellSnow"><div class="lbl">🌨 積雪深</div><div class="val" id="amSnow">--</div></div>
+          <div class="am-cell" id="amCellMorn" style="grid-column:1/-1"><div class="lbl">🌅 今朝6時の気温（最低気温の参考）</div><div class="val" id="amMornTemp">--</div></div>
         </div>
         <div style="font-size:9px;color:#bbb;">↑ タップで過去24時間グラフ</div>
         <div style="font-size:9px;color:#ccc;text-align:right;">出典: <a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" style="color:#ccc;">気象庁 AMeDAS</a></div>
@@ -1621,7 +1622,7 @@ async function getJMAAreaCode(lat,lng){
   return PREF_TO_JMA[String(muniCd).padStart(5,'0').slice(0,2)]||'130000';
 }
 let _jmaForecast=null;
-let _amedasCurrentTemp=null, _amedasCurrentTime=null;
+let _amedasCurrentTemp=null, _amedasCurrentTime=null, _amedasMorningTemp=null;
 
 /* AMeDAS */
 const WIND_DIR=['静穏','北北東','北東','東北東','東','東南東','南東','南南東','南','南南西','南西','西南西','西','西北西','北西','北北西','北'];
@@ -1657,6 +1658,24 @@ function showAmedasDetail(s){
   document.getElementById('amCellWind').onclick=()=>fetchAmedasChart('wind','過去24時間の風速');
   document.getElementById('amCellWindDir').onclick=()=>fetchAmedasChart('winddir','過去24時間の風向（頻度）');
   document.getElementById('amCellSnow').onclick=()=>fetchAmedasChart('snow','過去24時間の積雪深');
+  document.getElementById('amCellMorn').onclick=()=>showMorning6AMChart();
+  /* 今朝6時の気温を非同期取得 */
+  (async()=>{
+    const mEl=document.getElementById('amMornTemp'); mEl.textContent='取得中...';
+    const jst=new Date(new Date().getTime()+9*3600000);
+    const p=n=>String(n).padStart(2,'0');
+    const ymd=`${jst.getUTCFullYear()}${p(jst.getUTCMonth()+1)}${p(jst.getUTCDate())}`;
+    try{
+      const r=await fetch(`https://www.jma.go.jp/bosai/amedas/data/point/${s.code}/${ymd}_06.json`);
+      if(!r.ok){ mEl.textContent='--'; return; }
+      const data=await r.json();
+      const key=Object.keys(data).sort().find(k=>k.slice(8,10)==='06'&&parseInt(k.slice(10,12))<=10);
+      const t=key&&data[key].temp?data[key].temp[0]:null;
+      _amedasMorningTemp=t;
+      mEl.textContent=t!==null?`${t}°C`:'--';
+      mEl.className='val'+(t===null?'':t>=30?' t-hot':t>=25?' t-warm':t<=5?' t-cold':t<=15?' t-cool':'');
+    }catch{ mEl.textContent='--'; }
+  })();
 }
 
 async function fetchAmedasForLocation(lat,lng){
@@ -1868,7 +1887,7 @@ function showJmaPOPChart(title){
 }
 function _jmaTempLabels(timeDefines){
   const DOW=['日','月','火','水','木','金','土'];
-  return timeDefines.map(t=>{ const jd=new Date(new Date(t).getTime()+9*3600000); return `${jd.getUTCMonth()+1}/${jd.getUTCDate()}(${DOW[jd.getUTCDay()]})`; });
+  return timeDefines.map(t=>{ const jd=new Date(new Date(t).getTime()+9*3600000); const h=jd.getUTCHours(); return `${jd.getUTCMonth()+1}/${jd.getUTCDate()}(${DOW[jd.getUTCDay()]})${h>0?' '+h+'時':''}`; });
 }
 function _compColors(arr,upCol,downCol,baseCol){
   return arr.map((v,i)=>{ if(v===null) return 'rgba(200,200,200,0.3)'; if(i===0) return baseCol; const prev=arr.slice(0,i).reverse().find(x=>x!==null); return prev===undefined?baseCol:v>prev?upCol:v<prev?downCol:baseCol; });
@@ -1890,17 +1909,42 @@ function showJmaMaxTempChart(){
   }catch(e){ w.setError(e.message); }
 }
 function showJmaMinTempChart(){
-  const w=openChartWindow('最低気温の今後の推移');
-  if(!_jmaForecast){ w.setError('データなし'); return; }
-  try{
-    const ts2=_jmaForecast[0].timeSeries[2], area=ts2.areas[0];
-    const minRaw=(area.tempsMin||[]);
-    if(!minRaw.length){ w.setError('データなし'); return; }
-    const r=_prependCurrent(_jmaTempLabels(ts2.timeDefines),minRaw.map(v=>v===''?null:Number(v)));
-    const bg=_compColors(r.data,'rgba(220,50,0,0.7)','rgba(0,80,220,0.7)','rgba(0,100,200,0.6)');
-    const bd=_compColors(r.data,'rgba(220,50,0,1)','rgba(0,80,220,1)','rgba(0,100,200,1)');
-    w.setChart(r.labels,[{label:'最低気温(°C)',data:r.data,type:'bar',backgroundColor:bg,borderColor:bd,borderWidth:1}],'気象庁',{beginAtZero:false});
-  }catch(e){ w.setError(e.message); }
+  const hasMin=_jmaForecast&&(_jmaForecast[0].timeSeries[2].areas[0].tempsMin||[]).some(v=>v!=='');
+  if(hasMin){
+    const w=openChartWindow('最低気温の今後の推移');
+    try{
+      const ts2=_jmaForecast[0].timeSeries[2], area=ts2.areas[0];
+      const r=_prependCurrent(_jmaTempLabels(ts2.timeDefines),(area.tempsMin||[]).map(v=>v===''?null:Number(v)));
+      const bg=_compColors(r.data,'rgba(220,50,0,0.7)','rgba(0,80,220,0.7)','rgba(0,100,200,0.6)');
+      const bd=_compColors(r.data,'rgba(220,50,0,1)','rgba(0,80,220,1)','rgba(0,100,200,1)');
+      w.setChart(r.labels,[{label:'最低気温(°C)',data:r.data,type:'bar',backgroundColor:bg,borderColor:bd,borderWidth:1}],'気象庁',{beginAtZero:false});
+    }catch(e){ w.setError(e.message); }
+  } else {
+    showMorning6AMChart();
+  }
+}
+async function showMorning6AMChart(){
+  const w=openChartWindow('朝6時の気温（最低気温の参考）');
+  if(!_currentAmedasStation){ w.setError('AMeDASデータなし'); return; }
+  const code=_currentAmedasStation.code;
+  const p=n=>String(n).padStart(2,'0');
+  const DOW=['日','月','火','水','木','金','土'];
+  const labels=[], temps=[];
+  for(let i=2;i>=0;i--){
+    const jst=new Date(new Date().getTime()+9*3600000-i*86400000);
+    const ymd=`${jst.getUTCFullYear()}${p(jst.getUTCMonth()+1)}${p(jst.getUTCDate())}`;
+    labels.push(`${jst.getUTCMonth()+1}/${jst.getUTCDate()}(${DOW[jst.getUTCDay()]}) 6時`);
+    try{
+      const r=await fetch(`https://www.jma.go.jp/bosai/amedas/data/point/${code}/${ymd}_06.json`);
+      if(!r.ok){ temps.push(null); continue; }
+      const data=await r.json();
+      const key=Object.keys(data).sort().find(k=>k.slice(8,10)==='06'&&parseInt(k.slice(10,12))<=10);
+      temps.push(key&&data[key].temp?data[key].temp[0]:null);
+    }catch{ temps.push(null); }
+  }
+  const bg=_compColors(temps,'rgba(220,50,0,0.7)','rgba(0,80,220,0.7)','rgba(0,100,200,0.6)');
+  const bd=_compColors(temps,'rgba(220,50,0,1)','rgba(0,80,220,1)','rgba(0,100,200,1)');
+  w.setChart(labels,[{label:'朝6時の気温(°C)',data:temps,type:'bar',backgroundColor:bg,borderColor:bd,borderWidth:1}],'気象庁 AMeDAS',{beginAtZero:false});
 }
 function showForecastChart(field,title){
   if(field==='pop') showJmaPOPChart(title);
