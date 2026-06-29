@@ -1621,6 +1621,7 @@ async function getJMAAreaCode(lat,lng){
   return PREF_TO_JMA[String(muniCd).padStart(5,'0').slice(0,2)]||'130000';
 }
 let _jmaForecast=null;
+let _amedasCurrentTemp=null, _amedasCurrentTime=null;
 
 /* AMeDAS */
 const WIND_DIR=['静穏','北北東','北東','東北東','東','東南東','南東','南南東','南','南南西','南西','西南西','西','西北西','北西','北北西','北'];
@@ -1634,6 +1635,7 @@ function showAmedasDetail(s){
   const dist=s.dist>=1000?`${(s.dist/1000).toFixed(1)}km`:`${Math.round(s.dist)}m`;
   document.getElementById('amDistBadge').textContent=`現在地から約 ${dist}`;
   const tv=s.d.temp?s.d.temp[0]:null;
+  _amedasCurrentTemp=tv; _amedasCurrentTime=new Date();
   const tempEl=document.getElementById('amTemp');
   tempEl.textContent=tv!==null?`${tv}°C`:'--';
   tempEl.className='val'+(tv===null?'':tv>=30?' t-hot':tv>=25?' t-warm':tv<=5?' t-cold':tv<=15?' t-cool':'');
@@ -1767,7 +1769,7 @@ function _openChartSheet(title){
   setTimeout(()=>chip.scrollIntoView({behavior:'smooth',block:'nearest',inline:'end'}),50);
   activateChart(id);
   return {
-    setChart(labels,datasets,source){ const c=_charts.get(id); if(!c) return; Object.assign(c,{labels,datasets,source}); if(_activeChartId===id) renderSheet(); },
+    setChart(labels,datasets,source,yOpts={}){ const c=_charts.get(id); if(!c) return; Object.assign(c,{labels,datasets,source,yOpts}); if(_activeChartId===id) renderSheet(); },
     setError(msg){ const c=_charts.get(id); if(!c) return; c.error=msg; if(_activeChartId===id) renderSheet(); }
   };
 }
@@ -1796,13 +1798,15 @@ function _openChartFloat(title){
   document.addEventListener('mousemove',e=>{ if(!drag) return; let x=e.clientX-drag.ox,y=e.clientY-drag.oy; x=Math.max(0,Math.min(window.innerWidth-win.offsetWidth,x)); y=Math.max(0,Math.min(window.innerHeight-win.offsetHeight,y)); win.style.left=x+'px'; win.style.top=y+'px'; });
   document.addEventListener('mouseup',()=>{ drag=null; handle.style.cursor='grab'; });
   return {
-    setChart(labels,datasets,source){
+    setChart(labels,datasets,source,yOpts={}){
       win.querySelector('.cw-loading').style.display='none';
       const canvas=win.querySelector('.cw-canvas'); canvas.style.display='block';
       if(source) win.querySelector('.cw-source').textContent=`出典: ${source}`;
       if(chart) chart.destroy();
       const type=datasets[0].type||'bar';
-      chart=new Chart(canvas,{type,data:{labels,datasets},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:datasets.length>1}},scales:{x:{ticks:{font:{size:8},maxTicksLimit:8},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:9},maxTicksLimit:5},grid:{color:'rgba(0,0,0,0.06)'}}}}});
+      const yAxis={beginAtZero:yOpts.beginAtZero!==false,ticks:{font:{size:9},maxTicksLimit:5},grid:{color:'rgba(0,0,0,0.06)'}};
+      if(yOpts.min!==undefined) yAxis.min=yOpts.min; if(yOpts.max!==undefined) yAxis.max=yOpts.max;
+      chart=new Chart(canvas,{type,data:{labels,datasets},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:datasets.length>1}},scales:{x:{ticks:{font:{size:8},maxTicksLimit:8},grid:{display:false}},y:yAxis}}});
     },
     setError(msg){ win.querySelector('.cw-loading').textContent=`❌ ${msg}`; }
   };
@@ -1826,7 +1830,9 @@ function renderSheet(){
     src.textContent=c.source?`出典: ${c.source}`:'';
     if(_sheetChart){ _sheetChart.destroy(); _sheetChart=null; }
     const type=c.datasets[0].type||'bar';
-    _sheetChart=new Chart(canvas,{type,data:{labels:c.labels,datasets:c.datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:c.datasets.length>1,labels:{font:{size:10}}}},scales:{x:{ticks:{font:{size:9},maxTicksLimit:12},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:10},maxTicksLimit:5},grid:{color:'rgba(0,0,0,0.06)'}}}}});
+    const yo=c.yOpts||{}; const yAxis={beginAtZero:yo.beginAtZero!==false,ticks:{font:{size:10},maxTicksLimit:5},grid:{color:'rgba(0,0,0,0.06)'}};
+    if(yo.min!==undefined) yAxis.min=yo.min; if(yo.max!==undefined) yAxis.max=yo.max;
+    _sheetChart=new Chart(canvas,{type,data:{labels:c.labels,datasets:c.datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:c.datasets.length>1,labels:{font:{size:10}}}},scales:{x:{ticks:{font:{size:9},maxTicksLimit:12},grid:{display:false}},y:yAxis}}});
   }
 }
 function removeChart(id){
@@ -1860,20 +1866,47 @@ function showJmaPOPChart(title){
     w.setChart(labels,[{data:ts1.areas[0].pops.map(p=>p===''?null:Number(p)),type:'bar',backgroundColor:'rgba(0,102,255,0.55)',borderColor:'rgba(0,102,255,0.8)',borderWidth:1}],'気象庁');
   }catch(e){ w.setError(e.message); }
 }
-function showJmaTempChart(title){
-  const w=openChartWindow(title||'気温予報');
+function _jmaTempLabels(timeDefines){
+  const DOW=['日','月','火','水','木','金','土'];
+  return timeDefines.map(t=>{ const jd=new Date(new Date(t).getTime()+9*3600000); return `${jd.getUTCMonth()+1}/${jd.getUTCDate()}(${DOW[jd.getUTCDay()]})`; });
+}
+function _compColors(arr,upCol,downCol,baseCol){
+  return arr.map((v,i)=>{ if(v===null) return 'rgba(200,200,200,0.3)'; if(i===0) return baseCol; const prev=arr.slice(0,i).reverse().find(x=>x!==null); return prev===undefined?baseCol:v>prev?upCol:v<prev?downCol:baseCol; });
+}
+function _prependCurrent(labels,data){
+  if(_amedasCurrentTemp===null) return {labels,data};
+  const now=_amedasCurrentTime||new Date(); const p=n=>String(n).padStart(2,'0');
+  return {labels:[`現在\n${p(now.getHours())}:${p(now.getMinutes())}`,...labels], data:[_amedasCurrentTemp,...data]};
+}
+function showJmaMaxTempChart(){
+  const w=openChartWindow('最高気温の今後の推移');
   if(!_jmaForecast){ w.setError('データなし'); return; }
   try{
     const ts2=_jmaForecast[0].timeSeries[2], area=ts2.areas[0];
-    const maxArr=area.tempsMax||area.temps||[], minArr=area.tempsMin||[];
-    const labels=ts2.timeDefines.map(t=>{ const jd=new Date(new Date(t).getTime()+9*3600000); return `${jd.getUTCMonth()+1}/${jd.getUTCDate()}`; });
-    const datasets=[{label:'最高',data:maxArr.map(v=>v===''?null:Number(v)),type:'bar',backgroundColor:'rgba(255,80,0,0.5)',borderColor:'rgba(255,80,0,0.9)',borderWidth:1}];
-    if(minArr.length) datasets.push({label:'最低',data:minArr.map(v=>v===''?null:Number(v)),type:'bar',backgroundColor:'rgba(0,100,255,0.5)',borderColor:'rgba(0,100,255,0.9)',borderWidth:1});
-    w.setChart(labels,datasets,'気象庁');
+    const r=_prependCurrent(_jmaTempLabels(ts2.timeDefines),(area.tempsMax||area.temps||[]).map(v=>v===''?null:Number(v)));
+    const bg=_compColors(r.data,'rgba(220,50,0,0.7)','rgba(0,80,220,0.7)','rgba(180,100,0,0.6)');
+    const bd=_compColors(r.data,'rgba(220,50,0,1)','rgba(0,80,220,1)','rgba(180,100,0,1)');
+    w.setChart(r.labels,[{label:'最高気温(°C)',data:r.data,type:'bar',backgroundColor:bg,borderColor:bd,borderWidth:1}],'気象庁',{beginAtZero:false});
+  }catch(e){ w.setError(e.message); }
+}
+function showJmaMinTempChart(){
+  const w=openChartWindow('最低気温の今後の推移');
+  if(!_jmaForecast){ w.setError('データなし'); return; }
+  try{
+    const ts2=_jmaForecast[0].timeSeries[2], area=ts2.areas[0];
+    const minRaw=(area.tempsMin||[]);
+    if(!minRaw.length){ w.setError('データなし'); return; }
+    const r=_prependCurrent(_jmaTempLabels(ts2.timeDefines),minRaw.map(v=>v===''?null:Number(v)));
+    const bg=_compColors(r.data,'rgba(220,50,0,0.7)','rgba(0,80,220,0.7)','rgba(0,100,200,0.6)');
+    const bd=_compColors(r.data,'rgba(220,50,0,1)','rgba(0,80,220,1)','rgba(0,100,200,1)');
+    w.setChart(r.labels,[{label:'最低気温(°C)',data:r.data,type:'bar',backgroundColor:bg,borderColor:bd,borderWidth:1}],'気象庁',{beginAtZero:false});
   }catch(e){ w.setError(e.message); }
 }
 function showForecastChart(field,title){
-  if(field==='pop') showJmaPOPChart(title); else showJmaTempChart(title);
+  if(field==='pop') showJmaPOPChart(title);
+  else if(field==='tempmax') showJmaMaxTempChart();
+  else if(field==='tempmin') showJmaMinTempChart();
+  else{ showJmaMaxTempChart(); showJmaMinTempChart(); }
 }
 
 function jmaTime(intervalMin=5,lagMin=5){
@@ -2055,10 +2088,10 @@ async function fetchWeather(lat,lng){
       dayCards.appendChild(card);
     });
     /* タップ → グラフ */
-    document.getElementById('wxMain').onclick=()=>showForecastChart('temp','3日間の気温予報');
+    document.getElementById('wxMain').onclick=()=>{ showJmaMaxTempChart(); showJmaMinTempChart(); };
     document.getElementById('wxCellRain').onclick=()=>showForecastChart('pop','降水確率（3日間）');
-    document.getElementById('wxCellWind').onclick=()=>showForecastChart('temp','3日間の気温予報');
-    document.getElementById('wxCellHumid').onclick=()=>showForecastChart('temp','3日間の気温予報');
+    document.getElementById('wxCellWind').onclick=()=>showJmaMaxTempChart();
+    document.getElementById('wxCellHumid').onclick=()=>showJmaMinTempChart();
     /* 降水確率ミニチャート */
     const labels=ts1.timeDefines.map(t=>{ const d=new Date(t); return `${String((d.getUTCHours()+9)%24).padStart(2,'0')}時`; });
     if(wxChart) wxChart.destroy();
