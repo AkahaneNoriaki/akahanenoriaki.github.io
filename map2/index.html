@@ -344,6 +344,15 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
           <div class="am-cell"><div class="lbl">🧭 風向</div><div class="val" id="amWindDir">--</div></div>
           <div class="am-cell"><div class="lbl">🌨 積雪深</div><div class="val" id="amSnow">--</div></div>
         </div>
+        <button id="amPrecipBtn" style="font-size:11px;background:#eef4ff;border:1px solid #ccd;border-radius:8px;padding:5px 10px;cursor:pointer;color:#336;width:100%;-webkit-tap-highlight-color:transparent;">📊 過去24時間の降水グラフ</button>
+        <div id="amChartSection" style="display:none;flex-direction:column;gap:4px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:9px;color:#668;">過去24時間の降水量 (mm/h)</span>
+            <button id="amChartClose" style="background:none;border:none;font-size:12px;cursor:pointer;color:#aaa;padding:2px 6px;line-height:1;">✕</button>
+          </div>
+          <div id="amChartLoading" style="font-size:11px;color:#888;text-align:center;padding:4px 0;">取得中...</div>
+          <canvas id="amPrecipCanvas" height="65" style="display:none;"></canvas>
+        </div>
         <div style="font-size:9px;color:#ccc;text-align:right;">出典: <a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" style="color:#ccc;">気象庁 AMeDAS</a></div>
       </div>
       <!-- レイヤー -->
@@ -855,10 +864,16 @@ Object.keys(CHK_MAP).forEach(key=>{
 /* ── AMeDASダッシュボード ─────────────────── */
 const WIND_DIR=['静穏','北北東','北東','東北東','東','東南東','南東','南南東','南','南南西','南西','西南西','西','西北西','北西','北北西','北'];
 
+let _currentAmedasStation=null;
+let amPrecipChart=null;
+
 function showAmedasDetail(s){
+  _currentAmedasStation=s;
   document.getElementById('wxAmedasLoading').style.display='none';
   const sec=document.getElementById('wxAmedasSection');
   sec.style.display='flex';
+  /* グラフを閉じてリセット */
+  document.getElementById('amChartSection').style.display='none';
 
   const name=s.info.kjName||s.code;
   const dist=s.dist>=1000?`${(s.dist/1000).toFixed(1)}km`:`${Math.round(s.dist)}m`;
@@ -1004,6 +1019,99 @@ async function fetchAmedasForLocation(lat,lng){
     document.getElementById('wxAmedasLoading').textContent=`❌ AMeDAS: ${e.message}`;
   }
 }
+
+/* ── AMeDAS 過去24時間降水グラフ ─────────── */
+function getPrecipFileList(){
+  /* JSTの現在時刻から遡って8本(=24時間分)の3時間ファイルリストを生成 */
+  const now=new Date();
+  const jst=new Date(now.getTime()+9*60*60*1000);
+  const h=jst.getUTCHours();
+  const latestH3=Math.floor(h/3)*3; /* 直近の3時間境界 */
+  const files=[];
+  for(let i=7;i>=0;i--){
+    const d=new Date(Date.UTC(jst.getUTCFullYear(),jst.getUTCMonth(),jst.getUTCDate(),latestH3-i*3,0,0));
+    const ymd=`${d.getUTCFullYear()}${String(d.getUTCMonth()+1).padStart(2,'0')}${String(d.getUTCDate()).padStart(2,'0')}`;
+    const hh=String(d.getUTCHours()).padStart(2,'0');
+    files.push({ymd,hh});
+  }
+  return files;
+}
+
+async function fetchPrecipChart(){
+  const station=_currentAmedasStation;
+  if(!station) return;
+  const sec=document.getElementById('amChartSection');
+  const loading=document.getElementById('amChartLoading');
+  const canvas=document.getElementById('amPrecipCanvas');
+  sec.style.display='flex';
+  loading.style.display='block';
+  loading.textContent='取得中...';
+  canvas.style.display='none';
+  try{
+    const files=getPrecipFileList();
+    const code=station.code;
+    /* 8ファイルを並列取得 */
+    const results=await Promise.all(files.map(async({ymd,hh})=>{
+      try{
+        const res=await fetch(`https://www.jma.go.jp/bosai/amedas/data/point/${code}/${ymd}_${hh}.json`);
+        return res.ok?await res.json():null;
+      }catch{ return null; }
+    }));
+    /* 時別雨量に集計（10分値を合算） */
+    const hourly={}; /* "HH" → mm */
+    results.forEach(data=>{
+      if(!data) return;
+      Object.entries(data).forEach(([ts,d])=>{
+        const v=d.precipitation10m?d.precipitation10m[0]:null;
+        if(v===null||v===undefined||v<0) return;
+        const hh=ts.slice(8,10);
+        hourly[hh]=(hourly[hh]||0)+v;
+      });
+    });
+    /* 24時間分のラベルとデータを構築（古い順） */
+    const now=new Date();
+    const jst=new Date(now.getTime()+9*60*60*1000);
+    const curH=jst.getUTCHours();
+    const labels=[],rainData=[];
+    for(let i=23;i>=0;i--){
+      const h=((curH-i)+24)%24;
+      labels.push(`${h}時`);
+      rainData.push(Math.round((hourly[String(h).padStart(2,'0')]||0)*10)/10);
+    }
+    loading.style.display='none';
+    canvas.style.display='block';
+    if(amPrecipChart) amPrecipChart.destroy();
+    amPrecipChart=new Chart(canvas,{
+      type:'bar',
+      data:{
+        labels,
+        datasets:[{
+          data:rainData,
+          backgroundColor:'rgba(0,102,255,0.55)',
+          borderColor:'rgba(0,102,255,0.8)',
+          borderWidth:1
+        }]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:true,
+        plugins:{legend:{display:false}},
+        scales:{
+          x:{ticks:{font:{size:8},maxTicksLimit:8},grid:{display:false}},
+          y:{beginAtZero:true,ticks:{font:{size:9},maxTicksLimit:4},grid:{color:'rgba(0,0,0,0.06)'}}
+        }
+      }
+    });
+  }catch(e){
+    console.error('[PrecipChart]',e);
+    loading.textContent=`❌ ${e.message}`;
+  }
+}
+
+document.getElementById('amPrecipBtn').onclick=fetchPrecipChart;
+document.getElementById('amChartClose').onclick=()=>{
+  document.getElementById('amChartSection').style.display='none';
+  if(amPrecipChart){ amPrecipChart.destroy(); amPrecipChart=null; }
+};
 
 async function fetchWeather(lat,lng){
   document.getElementById('wxLoading').style.display='block';
