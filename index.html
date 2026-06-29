@@ -321,16 +321,21 @@ html, body { height:100%; margin:0; }
 #wxHandleGrip span { display:block; width:20px; height:2px; background:#bbb; border-radius:1px; }
 #wxTitle { font-size:11px; color:#888; flex:1; }
 #wxUpdated { font-size:10px; color:#aaa; white-space:nowrap; }
-#wxRefresh,#wxClose {
+#wxRefresh,#wxClose,#wxCollapseBtn {
   flex-shrink:0; width:22px; height:22px; background:#ddd; border:none;
   border-radius:50%; font-size:12px; line-height:22px; text-align:center;
   cursor:pointer; color:#666; padding:0; -webkit-tap-highlight-color:transparent;
 }
-#wxRefresh:active,#wxClose:active { background:#bbb; }
+#wxRefresh:active,#wxClose:active,#wxCollapseBtn:active { background:#bbb; }
+#wxCollapseBtn { font-size:10px; transition:transform 0.25s; }
+#wxPanel.collapsed #wxCollapseBtn { transform:rotate(180deg); }
 #wxBody {
   padding:10px 12px; display:flex; flex-direction:column; gap:8px;
-  overflow-y:auto; -webkit-overflow-scrolling:touch; max-height:calc(70vh - 36px);
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
+  max-height:calc(70vh - 36px);
+  transition:max-height 0.28s cubic-bezier(0.4,0,0.2,1), padding 0.28s cubic-bezier(0.4,0,0.2,1);
 }
+#wxPanel.collapsed #wxBody { max-height:0 !important; padding-top:0 !important; padding-bottom:0 !important; overflow:hidden; }
 #wxMain { display:flex; align-items:center; gap:12px; }
 #wxIcon { font-size:32px; line-height:1; }
 #wxDesc { font-size:14px; font-weight:bold; color:#222; }
@@ -405,7 +410,9 @@ html, body { height:100%; margin:0; }
   padding:5px 10px; gap:6px; min-height:40px; align-items:center;
   background:rgba(255,255,255,0.97); border-top:1px solid rgba(0,0,0,0.08);
   box-shadow:0 -2px 8px rgba(0,0,0,0.07);
+  transition:bottom 0.28s cubic-bezier(0.4,0,0.2,1);
 }
+#chartChips.sheet-open { bottom:300px; }
 #chartChips::-webkit-scrollbar { display:none; }
 .chart-chip {
   display:flex; align-items:center; gap:5px;
@@ -614,6 +621,7 @@ html, body { height:100%; margin:0; }
     <span id="wxTitle">📍 現在地の天気</span>
     <span id="wxUpdated"></span>
     <button id="wxRefresh" title="更新">🔄</button>
+    <button id="wxCollapseBtn" title="折りたたむ">▾</button>
     <button id="wxClose">✕</button>
   </div>
   <div id="wxBody">
@@ -1804,6 +1812,7 @@ function activateChart(id){
   document.querySelectorAll('.chart-chip').forEach(c=>c.classList.remove('active'));
   const chip=document.getElementById(`chip-${id}`); if(chip) chip.classList.add('active');
   document.getElementById('chartSheet').classList.add('open');
+  document.getElementById('chartChips').classList.add('sheet-open');
   renderSheet();
 }
 function renderSheet(){
@@ -1825,10 +1834,11 @@ function removeChart(id){
   _charts.delete(id);
   const chip=document.getElementById(`chip-${id}`); if(chip) chip.remove();
   if(_activeChartId===id){ const r=[..._charts.keys()]; if(r.length>0) activateChart(r[r.length-1]); else{ document.getElementById('chartSheet').classList.remove('open'); _activeChartId=null; } }
-  if(_charts.size===0) document.getElementById('chartChips').style.display='none';
+  if(_charts.size===0){ const ch=document.getElementById('chartChips'); ch.style.display='none'; ch.classList.remove('sheet-open'); }
 }
 function closeChartSheet(){
   document.getElementById('chartSheet').classList.remove('open');
+  document.getElementById('chartChips').classList.remove('sheet-open');
   _activeChartId=null;
   document.querySelectorAll('.chart-chip').forEach(c=>c.classList.remove('active'));
 }
@@ -2095,13 +2105,16 @@ document.getElementById('wxRefresh').onclick=()=>{
     wxPanel.style.left=x+'px'; wxPanel.style.top=y+'px';
   }
   function endDrag(){ drag=null; }
-  handle.addEventListener('touchstart',e=>{ startDrag(e.touches[0].clientX,e.touches[0].clientY); },{passive:true});
+  handle.addEventListener('touchstart',e=>{ if(e.target.closest('button')) return; startDrag(e.touches[0].clientX,e.touches[0].clientY); },{passive:true});
   handle.addEventListener('touchmove',e=>{ if(!drag)return; e.preventDefault(); moveDrag(e.touches[0].clientX,e.touches[0].clientY); },{passive:false});
   handle.addEventListener('touchend',endDrag,{passive:true});
-  handle.addEventListener('mousedown',e=>{ if(e.target===document.getElementById('wxClose')||e.target===document.getElementById('wxRefresh'))return; startDrag(e.clientX,e.clientY); handle.style.cursor='grabbing'; });
+  handle.addEventListener('mousedown',e=>{ if(e.target.closest('button')) return; startDrag(e.clientX,e.clientY); handle.style.cursor='grabbing'; });
   document.addEventListener('mousemove',e=>{ if(drag) moveDrag(e.clientX,e.clientY); });
   document.addEventListener('mouseup',()=>{ endDrag(); handle.style.cursor='grab'; });
 })();
+document.getElementById('wxCollapseBtn').addEventListener('click',()=>{
+  wxPanel.classList.toggle('collapsed');
+});
 
 /* =========================
    共有URLパラメータ読み込み
