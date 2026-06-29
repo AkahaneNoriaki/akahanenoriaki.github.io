@@ -59,7 +59,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 /* CS透過スライダー */
 #csSliderWrap {
   position: fixed;
-  bottom: calc(env(safe-area-inset-bottom) + 72px);
+  bottom: calc(env(safe-area-inset-bottom) + 112px);
   left: 50%; transform: translateX(-50%);
   z-index: 9001;
   background: rgba(255,255,255,0.93);
@@ -87,7 +87,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
   z-index: 9002; display: none; pointer-events: none;
 }
 #toast {
-  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  position: fixed; bottom: calc(env(safe-area-inset-bottom) + 110px); left: 50%; transform: translateX(-50%);
   background: rgba(0,0,0,0.75); color: white;
   padding: 8px 16px; border-radius: 10px;
   font-size: 12px; font-family: sans-serif;
@@ -292,32 +292,86 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 .wx-cell:active { background: #e0e8ff; }
 .am-cell:active { background: #d8eeff; }
 #wxMain { cursor: pointer; -webkit-tap-highlight-color: transparent; }
-/* チャートウィンドウ（複数表示対応） */
-.cw-win {
+/* ─── チャートチップ行 ─────────────────────── */
+#chartChips {
   position: fixed;
-  background: #fff; border-radius: 14px; overflow: hidden;
-  width: min(300px, calc(100vw - 20px));
-  box-shadow: 0 4px 20px rgba(0,0,0,0.25);
-  font-family: sans-serif; touch-action: none;
+  bottom: calc(env(safe-area-inset-bottom) + 60px);
+  left: 0; right: 0;
+  z-index: 9101;
+  display: none;
+  flex-direction: row;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 5px 10px;
+  gap: 6px;
+  min-height: 40px;
+  align-items: center;
+  background: rgba(255,255,255,0.97);
+  border-top: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.07);
 }
-.cw-handle {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 10px;
-  background: #f4f4f4; border-bottom: 1px solid #eee;
-  cursor: grab; user-select: none; -webkit-user-select: none;
-}
-.cw-handle:active { cursor: grabbing; }
-.cw-title { font-size: 12px; font-weight: bold; color: #222; flex: 1; line-height: 1.3; }
-.cw-close {
-  background: #ddd; border: none; border-radius: 50%;
-  width: 22px; height: 22px; cursor: pointer; font-size: 12px;
-  line-height: 22px; padding: 0; flex-shrink: 0;
+#chartChips::-webkit-scrollbar { display: none; }
+.chart-chip {
+  display: flex; align-items: center; gap: 5px;
+  background: #f0f4ff; border: 1.5px solid #c0d0ff;
+  border-radius: 20px; padding: 5px 8px 5px 12px;
+  white-space: nowrap; flex-shrink: 0; cursor: pointer;
+  font-family: sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
-.cw-close:active { background: #bbb; }
-.cw-body { padding: 10px 12px 8px; }
-.cw-loading { color: #888; font-size: 12px; text-align: center; padding: 16px 0; }
-.cw-source { font-size: 9px; color: #bbb; text-align: right; margin-top: 4px; }
+.chart-chip.active {
+  background: #0055ee; border-color: #0055ee;
+}
+.chip-lbl { font-size: 11px; color: #224; }
+.chart-chip.active .chip-lbl { color: #fff; }
+.chip-cls {
+  background: none; border: none; padding: 0 2px;
+  font-size: 12px; cursor: pointer; color: #aaa; line-height: 1;
+  -webkit-tap-highlight-color: transparent;
+}
+.chart-chip.active .chip-cls { color: rgba(255,255,255,0.7); }
+
+/* ─── チャートボトムシート ──────────────────── */
+#chartSheet {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 9150;
+  height: 300px;
+  background: #fff;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+  transform: translateY(100%);
+  transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+  display: flex; flex-direction: column;
+  font-family: sans-serif;
+}
+#chartSheet.open { transform: translateY(0); }
+#chartSheetHandle {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px 6px;
+  flex-shrink: 0; cursor: grab;
+  -webkit-user-select: none; user-select: none;
+}
+#chartSheetHandle:active { cursor: grabbing; }
+.sheet-grip {
+  width: 36px; height: 4px; background: #ddd;
+  border-radius: 2px; flex-shrink: 0;
+}
+#chartSheetTitle { font-size: 13px; font-weight: bold; color: #222; flex: 1; }
+#chartSheetClose {
+  background: #eee; border: none; border-radius: 50%;
+  width: 24px; height: 24px; cursor: pointer; font-size: 13px;
+  padding: 0; line-height: 24px; flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+#chartSheetBody {
+  flex: 1; padding: 0 14px 12px; overflow: hidden;
+  display: flex; flex-direction: column; gap: 4px;
+}
+#chartSheetLoading { color: #888; font-size: 13px; text-align: center; padding: 24px 0; }
+#chartSheetCanvas { flex: 1; min-height: 0; }
+#chartSheetSrc { font-size: 9px; color: #bbb; text-align: right; }
 </style>
 </head>
 <body>
@@ -404,6 +458,23 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
   </div>
 </div>
 
+
+<!-- チャートチップ行 -->
+<div id="chartChips"></div>
+
+<!-- チャートボトムシート -->
+<div id="chartSheet">
+  <div id="chartSheetHandle">
+    <div class="sheet-grip"></div>
+    <span id="chartSheetTitle"></span>
+    <button id="chartSheetClose">✕</button>
+  </div>
+  <div id="chartSheetBody">
+    <div id="chartSheetLoading">取得中...</div>
+    <canvas id="chartSheetCanvas" style="display:none;"></canvas>
+    <div id="chartSheetSrc"></div>
+  </div>
+</div>
 
 <div id="csSliderWrap">
   <span>CS立体図 透過度</span>
@@ -1095,94 +1166,120 @@ async function fetchAmedasForLocation(lat,lng){
   }
 }
 
-/* ── チャートウィンドウ（複数表示対応） ─── */
+/* ── チャートボトムシート（複数チップ対応） ── */
+const _charts=new Map(); /* id → {title, labels, datasets, source, error} */
+let _activeChartId=null;
+let _sheetChart=null;
+
 function openChartWindow(title){
   _cwCounter++;
-  const offset=(_cwCounter-1)%6;
-  const win=document.createElement('div');
-  win.className='cw-win';
-  win.style.cssText=`top:${56+offset*24}px;left:${10+offset*14}px;z-index:${9200+_cwCounter};`;
-  win.innerHTML=
-    `<div class="cw-handle">`
-    +`<span class="cw-title">${title}</span>`
-    +`<button class="cw-close">✕</button>`
-    +`</div>`
-    +`<div class="cw-body">`
-    +`<div class="cw-loading">取得中...</div>`
-    +`<canvas class="cw-canvas" height="100" style="display:none;"></canvas>`
-    +`<div class="cw-source"></div>`
-    +`</div>`;
-  document.body.appendChild(win);
-
-  let chart=null;
-  const handle=win.querySelector('.cw-handle');
-
-  /* 前面に出す */
-  win.addEventListener('pointerdown',()=>{ win.style.zIndex=9200+(++_cwCounter); });
-
-  /* 閉じる */
-  win.querySelector('.cw-close').addEventListener('click',e=>{
-    e.stopPropagation();
-    if(chart) chart.destroy();
-    win.remove();
-  });
-
-  /* ドラッグ（タッチ・マウス共通） */
-  let drag=null;
-  handle.addEventListener('touchstart',e=>{
-    const t=e.touches[0]; const r=win.getBoundingClientRect();
-    drag={ox:t.clientX-r.left,oy:t.clientY-r.top};
-  },{passive:true});
-  handle.addEventListener('touchmove',e=>{
-    if(!drag) return; e.preventDefault();
-    const t=e.touches[0];
-    let x=t.clientX-drag.ox, y=t.clientY-drag.oy;
-    x=Math.max(0,Math.min(window.innerWidth-win.offsetWidth,x));
-    y=Math.max(0,Math.min(window.innerHeight-win.offsetHeight,y));
-    win.style.left=x+'px'; win.style.top=y+'px';
-  },{passive:false});
-  handle.addEventListener('touchend',()=>drag=null,{passive:true});
-  handle.addEventListener('mousedown',e=>{
-    if(e.target===win.querySelector('.cw-close')) return;
-    const r=win.getBoundingClientRect();
-    drag={ox:e.clientX-r.left,oy:e.clientY-r.top};
-    handle.style.cursor='grabbing';
-  });
-  document.addEventListener('mousemove',e=>{
-    if(!drag) return;
-    let x=e.clientX-drag.ox, y=e.clientY-drag.oy;
-    x=Math.max(0,Math.min(window.innerWidth-win.offsetWidth,x));
-    y=Math.max(0,Math.min(window.innerHeight-win.offsetHeight,y));
-    win.style.left=x+'px'; win.style.top=y+'px';
-  });
-  document.addEventListener('mouseup',()=>{ drag=null; handle.style.cursor='grab'; });
-
+  const id=`c${_cwCounter}`;
+  _charts.set(id,{title,labels:null,datasets:null,source:null,error:null});
+  /* チップ追加 */
+  const chips=document.getElementById('chartChips');
+  const chip=document.createElement('div');
+  chip.className='chart-chip'; chip.id=`chip-${id}`;
+  chip.innerHTML=`<span class="chip-lbl">${title}</span><button class="chip-cls">✕</button>`;
+  chip.querySelector('.chip-lbl').onclick=()=>activateChart(id);
+  chip.querySelector('.chip-cls').onclick=e=>{ e.stopPropagation(); removeChart(id); };
+  chips.appendChild(chip);
+  chips.style.display='flex';
+  setTimeout(()=>chip.scrollIntoView({behavior:'smooth',block:'nearest',inline:'end'}),50);
+  activateChart(id);
   return {
     setChart(labels,datasets,source){
-      win.querySelector('.cw-loading').style.display='none';
-      const canvas=win.querySelector('.cw-canvas');
-      canvas.style.display='block';
-      if(source) win.querySelector('.cw-source').textContent=`出典: ${source}`;
-      if(chart) chart.destroy();
-      const type=datasets[0].type||'bar';
-      chart=new Chart(canvas,{
-        type,
-        data:{labels,datasets},
-        options:{
-          responsive:true,maintainAspectRatio:true,
-          plugins:{legend:{display:datasets.length>1}},
-          scales:{
-            x:{ticks:{font:{size:8},maxTicksLimit:8},grid:{display:false}},
-            y:{beginAtZero:true,ticks:{font:{size:9},maxTicksLimit:5},grid:{color:'rgba(0,0,0,0.06)'}}
-          }
-        }
-      });
+      const c=_charts.get(id); if(!c) return;
+      Object.assign(c,{labels,datasets,source});
+      if(_activeChartId===id) renderSheet();
     },
     setError(msg){
-      win.querySelector('.cw-loading').textContent=`❌ ${msg}`;
+      const c=_charts.get(id); if(!c) return;
+      c.error=msg;
+      if(_activeChartId===id) renderSheet();
     }
   };
 }
+
+function activateChart(id){
+  _activeChartId=id;
+  document.querySelectorAll('.chart-chip').forEach(c=>c.classList.remove('active'));
+  const chip=document.getElementById(`chip-${id}`);
+  if(chip) chip.classList.add('active');
+  document.getElementById('chartSheet').classList.add('open');
+  renderSheet();
+}
+
+function renderSheet(){
+  const c=_charts.get(_activeChartId); if(!c) return;
+  document.getElementById('chartSheetTitle').textContent=c.title;
+  const loading=document.getElementById('chartSheetLoading');
+  const canvas=document.getElementById('chartSheetCanvas');
+  const src=document.getElementById('chartSheetSrc');
+  if(c.error){
+    loading.textContent=`❌ ${c.error}`; loading.style.display='block'; canvas.style.display='none';
+  } else if(!c.labels){
+    loading.textContent='取得中...'; loading.style.display='block'; canvas.style.display='none';
+  } else {
+    loading.style.display='none'; canvas.style.display='block';
+    src.textContent=c.source?`出典: ${c.source}`:'';
+    if(_sheetChart){ _sheetChart.destroy(); _sheetChart=null; }
+    const type=c.datasets[0].type||'bar';
+    _sheetChart=new Chart(canvas,{
+      type,
+      data:{labels:c.labels,datasets:c.datasets},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:c.datasets.length>1,labels:{font:{size:10}}}},
+        scales:{
+          x:{ticks:{font:{size:9},maxTicksLimit:12},grid:{display:false}},
+          y:{beginAtZero:true,ticks:{font:{size:10},maxTicksLimit:5},grid:{color:'rgba(0,0,0,0.06)'}}
+        }
+      }
+    });
+  }
+}
+
+function removeChart(id){
+  if(_sheetChart&&_activeChartId===id){ _sheetChart.destroy(); _sheetChart=null; }
+  _charts.delete(id);
+  const chip=document.getElementById(`chip-${id}`); if(chip) chip.remove();
+  if(_activeChartId===id){
+    const remaining=[..._charts.keys()];
+    if(remaining.length>0) activateChart(remaining[remaining.length-1]);
+    else { document.getElementById('chartSheet').classList.remove('open'); _activeChartId=null; }
+  }
+  if(_charts.size===0) document.getElementById('chartChips').style.display='none';
+}
+
+/* シートを閉じる（チップは残す） */
+function closeSheet(){
+  document.getElementById('chartSheet').classList.remove('open');
+  _activeChartId=null;
+  document.querySelectorAll('.chart-chip').forEach(c=>c.classList.remove('active'));
+}
+
+/* ✕ ボタンでシートを閉じる */
+document.getElementById('chartSheetClose').onclick=closeSheet;
+
+/* スワイプダウンで閉じる */
+(()=>{
+  const sheet=document.getElementById('chartSheet');
+  const handle=document.getElementById('chartSheetHandle');
+  let startY=null;
+  handle.addEventListener('touchstart',e=>{ startY=e.touches[0].clientY; sheet.style.transition='none'; },{passive:true});
+  handle.addEventListener('touchmove',e=>{
+    if(startY===null) return;
+    const dy=e.touches[0].clientY-startY;
+    if(dy>0) sheet.style.transform=`translateY(${dy}px)`;
+  },{passive:true});
+  handle.addEventListener('touchend',e=>{
+    const dy=e.changedTouches[0].clientY-startY;
+    sheet.style.transition='';
+    sheet.style.transform='';
+    if(dy>80) closeSheet();
+    startY=null;
+  },{passive:true});
+})();
 
 function showChartModal(title,labels,datasets,source){
   const w=openChartWindow(title);
