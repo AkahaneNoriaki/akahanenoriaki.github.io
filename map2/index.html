@@ -268,7 +268,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
 #wxLoading { font-size: 13px; color: #888; text-align: center; padding: 6px 0; }
 
 /* ─── AMeDASデータグリッド ──────────────────── */
-#amedasDataGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+#amedasDataGrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
 .am-cell { background: #f0f7ff; border-radius: 8px; padding: 5px 8px; text-align: center; }
 .am-cell .lbl { font-size: 9px; color: #668; }
 .am-cell .val { font-size: 14px; font-weight: bold; color: #224; margin-top: 2px; }
@@ -335,14 +335,9 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #111; }
           📡 <span id="amStationName">--</span><span id="amDistBadge" style="font-size:10px;font-weight:normal;color:#888;margin-left:6px;"></span>
         </div>
         <div id="amedasDataGrid">
-          <div class="am-cell"><div class="lbl">🌡 気温</div><div class="val" id="amTemp">--</div></div>
-          <div class="am-cell"><div class="lbl">💧 湿度</div><div class="val" id="amHumid">--</div></div>
           <div class="am-cell"><div class="lbl">🌧 1h雨量</div><div class="val" id="amRain1h">--</div></div>
           <div class="am-cell"><div class="lbl">⏱ 10m雨量</div><div class="val" id="amRain10m">--</div></div>
           <div class="am-cell"><div class="lbl">📅 24h雨量</div><div class="val" id="amRain24h">--</div></div>
-          <div class="am-cell"><div class="lbl">💨 風速</div><div class="val" id="amWind">--</div></div>
-          <div class="am-cell"><div class="lbl">🧭 風向</div><div class="val" id="amWindDir">--</div></div>
-          <div class="am-cell"><div class="lbl">🌨 積雪深</div><div class="val" id="amSnow">--</div></div>
         </div>
         <button id="amPrecipBtn" style="font-size:11px;background:#eef4ff;border:1px solid #ccd;border-radius:8px;padding:5px 10px;cursor:pointer;color:#336;width:100%;-webkit-tap-highlight-color:transparent;">📊 過去24時間の降水グラフ</button>
         <div id="amChartSection" style="display:none;flex-direction:column;gap:4px;">
@@ -880,13 +875,6 @@ function showAmedasDetail(s){
   document.getElementById('amStationName').textContent=name;
   document.getElementById('amDistBadge').textContent=`現在地から約 ${dist}`;
 
-  const tv=s.d.temp?s.d.temp[0]:null;
-  const tempEl=document.getElementById('amTemp');
-  tempEl.textContent=tv!==null?`${tv}°C`:'--';
-  tempEl.className='val'+(tv===null?'':tv>=30?' t-hot':tv>=25?' t-warm':tv<=5?' t-cold':tv<=15?' t-cool':'');
-
-  document.getElementById('amHumid').textContent=s.d.humidity?`${s.d.humidity[0]}%`:'--';
-
   const r1h=s.d.precipitation1h?s.d.precipitation1h[0]:null;
   const rain1El=document.getElementById('amRain1h').parentElement;
   document.getElementById('amRain1h').textContent=r1h!==null?`${r1h}mm`:'--';
@@ -894,9 +882,6 @@ function showAmedasDetail(s){
 
   document.getElementById('amRain10m').textContent=s.d.precipitation10m?`${s.d.precipitation10m[0]}mm`:'--';
   document.getElementById('amRain24h').textContent=s.d.precipitation24h?`${s.d.precipitation24h[0]}mm`:'--';
-  document.getElementById('amWind').textContent=s.d.wind?`${s.d.wind[0]}m/s`:'--';
-  document.getElementById('amWindDir').textContent=s.d.wind?(WIND_DIR[s.d.wind[1]]||'--'):'--';
-  document.getElementById('amSnow').textContent=s.d.snow?`${s.d.snow[0]}cm`:'--';
 }
 
 /* アメダス */
