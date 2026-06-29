@@ -929,6 +929,7 @@ function showAmedasDetail(s){
   document.getElementById('amCellRain10m').onclick=()=>fetchAmedasChart('rain10m','直近6時間の10分雨量');
   document.getElementById('amCellRain24h').onclick=()=>fetchAmedasChart('rain24h','過去24時間の累積雨量');
   document.getElementById('amCellWind').onclick=()=>fetchAmedasChart('wind','過去24時間の風速');
+  document.getElementById('amCellWindDir').onclick=()=>fetchAmedasChart('winddir','過去24時間の風向（頻度）');
   document.getElementById('amCellSnow').onclick=()=>fetchAmedasChart('snow','過去24時間の積雪深');
 }
 
@@ -1107,6 +1108,7 @@ const AM_CHART_VARS={
   temp:    { field:'temp',             agg:'last',    idx:0, col:'rgba(255,100,0,0.8)',  type:'line', files:8 },
   humid:   { field:'humidity',         agg:'last',    idx:0, col:'rgba(0,160,200,0.8)', type:'line', files:8 },
   wind:    { field:'wind',             agg:'avg',     idx:0, col:'rgba(80,180,0,0.8)',  type:'line', files:8 },
+  winddir: { field:'wind',             agg:'dir_hist',idx:1, col:'rgba(150,100,220,0.7)', type:'bar', files:8 },
   snow:    { field:'snow',             agg:'last',    idx:0, col:'rgba(150,200,255,0.7)', type:'bar', files:8 },
 };
 
@@ -1141,6 +1143,27 @@ async function fetchAmedasChart(varKey, title){
         return res.ok?await res.json():null;
       }catch{ return null; }
     }));
+
+    /* ── dir_hist: 風向頻度ヒストグラム ── */
+    if(cfg.agg==='dir_hist'){
+      const freq=new Array(17).fill(0); /* 0=静穏, 1-16=16方位 */
+      results.forEach(data=>{
+        if(!data) return;
+        Object.values(data).forEach(d=>{
+          const raw=d[cfg.field];
+          const v=raw?raw[cfg.idx]:null;
+          if(v===null||v===undefined) return;
+          freq[v]=(freq[v]||0)+1;
+        });
+      });
+      const labels=WIND_DIR.slice(1).concat(['静穏']); /* 北北東〜北 + 静穏 */
+      const vals=freq.slice(1).concat([freq[0]]);
+      showChartModal(title, labels, [{
+        data:vals, type:'bar',
+        backgroundColor:cfg.col, borderColor:cfg.col, borderWidth:1
+      }], '気象庁 AMeDAS');
+      return;
+    }
 
     /* ── raw10m: 10分値をそのまま時系列で表示 ── */
     if(cfg.agg==='raw10m'){
@@ -1207,9 +1230,6 @@ document.getElementById('chartModalClose').onclick=()=>{
   document.getElementById('chartModal').style.display='none';
   if(_modalChart){ _modalChart.destroy(); _modalChart=null; }
 };
-document.getElementById('chartModal').addEventListener('click',e=>{
-  if(e.target===document.getElementById('chartModal')) document.getElementById('chartModalClose').click();
-});
 
 async function fetchWeather(lat,lng){
   document.getElementById('wxLoading').style.display='block';
