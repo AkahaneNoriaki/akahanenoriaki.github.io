@@ -1822,18 +1822,18 @@ function removeChart(id){
   if(_activeChartId===id){ const r=[..._charts.keys()]; if(r.length>0) activateChart(r[r.length-1]); else{ document.getElementById('chartSheet').classList.remove('open'); _activeChartId=null; } }
   if(_charts.size===0) document.getElementById('chartChips').style.display='none';
 }
-function closeSheet(){
+function closeChartSheet(){
   document.getElementById('chartSheet').classList.remove('open');
   _activeChartId=null;
   document.querySelectorAll('.chart-chip').forEach(c=>c.classList.remove('active'));
 }
-document.getElementById('chartSheetClose').onclick=closeSheet;
+document.getElementById('chartSheetClose').onclick=closeChartSheet;
 (()=>{
   const sheet=document.getElementById('chartSheet'), handle=document.getElementById('chartSheetHandle');
   let startY=null;
   handle.addEventListener('touchstart',e=>{ startY=e.touches[0].clientY; sheet.style.transition='none'; },{passive:true});
   handle.addEventListener('touchmove',e=>{ if(startY===null) return; const dy=e.touches[0].clientY-startY; if(dy>0) sheet.style.transform=`translateY(${dy}px)`; },{passive:true});
-  handle.addEventListener('touchend',e=>{ const dy=e.changedTouches[0].clientY-startY; sheet.style.transition=''; sheet.style.transform=''; if(dy>80) closeSheet(); startY=null; },{passive:true});
+  handle.addEventListener('touchend',e=>{ const dy=e.changedTouches[0].clientY-startY; sheet.style.transition=''; sheet.style.transform=''; if(dy>80) closeChartSheet(); startY=null; },{passive:true});
 })();
 
 function showJmaPOPChart(title){
