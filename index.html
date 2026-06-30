@@ -2058,13 +2058,18 @@ async function _startRainAnim(){
   const lbl=document.getElementById('lblLRainAnim');
   status.textContent='🌀 取得中...'; status.style.display='block';
   try{
-    /* targetTimes.json（_N1 なし）で実際に配信中の全コマ取得 */
-    const res=await fetch('https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes.json',{cache:'no-store'});
+    /* targetTimes_N1.json で最新 basetime を取得し、+5min×12コマの forecast を生成 */
+    const res=await fetch('https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes_N1.json',{cache:'no-store'});
     if(!res.ok) throw new Error(`targetTimes HTTP ${res.status}`);
     const arr=await res.json();
-    if(!Array.isArray(arr)||!arr.length) throw new Error('フレームなし');
-    /* 各要素は {basetime, validtime} または文字列 */
-    _rainAnim.frames=arr.map(e=>typeof e==='string'?{bt:e,vt:e}:{bt:e.basetime||e.validtime,vt:e.validtime||e.basetime});
+    const entry=Array.isArray(arr)?arr[arr.length-1]:arr;
+    const bt=typeof entry==='string'?entry:(entry.basetime||entry.validtime||String(entry));
+    const btMs=_parseJmaTime(bt);
+    /* basetime=観測コマ + 5min刻み×12コマ（+5〜+60分予測） */
+    _rainAnim.frames=[
+      {bt,vt:bt},
+      ...Array.from({length:12},(_,i)=>({bt,vt:_fmtJmaTime(btMs+(i+1)*5*60000)}))
+    ];
     _rainAnim.idx=0;
     if(_rainAnim.frameTimer) clearInterval(_rainAnim.frameTimer);
     _rainAnim.frameTimer=setInterval(_stepRainAnim,700);
