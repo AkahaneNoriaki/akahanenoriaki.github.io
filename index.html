@@ -101,11 +101,12 @@ html, body { height:100%; margin:0; }
 #kikiBar .kb-chips { display:flex; gap:5px; flex:1; flex-wrap:wrap; }
 .kb-chip { font-size:10px; background:rgba(255,255,255,0.2); border-radius:10px; padding:2px 7px; }
 #kikiBar .kb-time { font-size:10px; color:rgba(255,255,255,0.7); white-space:nowrap; }
-#kikiBar .kb-off {
+#kikiBar .kb-off, #kikiBar .kb-refresh {
   background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4);
   border-radius:12px; color:#fff; font-size:11px; padding:2px 9px;
   cursor:pointer; flex-shrink:0; white-space:nowrap;
 }
+#kikiBar .kb-refresh { padding:2px 7px; }
 body.kiki-mode #map { top:32px; }
 
 .s-slider-row { margin-top:10px; display:none; }
@@ -491,6 +492,7 @@ body.kiki-mode #map { top:32px; }
     <span class="kb-chip">🏞 河川</span>
   </div>
   <span class="kb-time" id="kikiUpdated"></span>
+  <button class="kb-refresh" id="kikiRefreshBtn">🔄</button>
   <button class="kb-off" id="kikiOffBtn">✕ 解除</button>
 </div>
 <div id="map"></div>
@@ -2215,7 +2217,8 @@ document.getElementById('btnWx').onclick=()=>{ wxOpen?closeWxPanel():openWxPanel
 
 /* ─── 危機管理モード ─── */
 const KIKI_LAYERS=['land','flood','river'];
-let kikiMode=false;
+let kikiMode=false, kikiTimer=null;
+
 function setKikiLayer(key,on){
   const chk=document.getElementById(WX_CHK_MAP[key]);
   if(!chk||chk.checked===on) return;
@@ -2229,6 +2232,19 @@ function updateKikiTime(){
   const el=document.getElementById('kikiUpdated');
   if(el) el.textContent=`${p(now.getHours())}:${p(now.getMinutes())} 更新`;
 }
+async function kikiRefreshAll(){
+  const btn=document.getElementById('kikiRefreshBtn');
+  if(btn){ btn.style.opacity='0.4'; btn.style.pointerEvents='none'; }
+  /* ハザードレイヤ再取得 */
+  await Promise.all(KIKI_LAYERS.map(k=>wxUpdateLayer(k)));
+  /* AMeDAS更新 */
+  if(amedasOn) fetchAmedas();
+  /* 気象情報更新 */
+  const ll=me?me.getLatLng():map.getCenter();
+  fetchWeather(ll.lat,ll.lng);
+  updateKikiTime();
+  if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
+}
 function enterKikiMode(){
   kikiMode=true;
   KIKI_LAYERS.forEach(k=>setKikiLayer(k,true));
@@ -2237,6 +2253,7 @@ function enterKikiMode(){
   document.getElementById('btnKiki').classList.add('kiki-active');
   updateKikiTime();
   if(!wxOpen) openWxPanel();
+  kikiTimer=setInterval(kikiRefreshAll, 5*60*1000);
 }
 function exitKikiMode(){
   kikiMode=false;
@@ -2244,9 +2261,11 @@ function exitKikiMode(){
   document.getElementById('kikiBar').classList.remove('on');
   document.body.classList.remove('kiki-mode');
   document.getElementById('btnKiki').classList.remove('kiki-active');
+  clearInterval(kikiTimer); kikiTimer=null;
 }
 document.getElementById('btnKiki').onclick=()=>{ kikiMode?exitKikiMode():enterKikiMode(); };
 document.getElementById('kikiOffBtn').onclick=exitKikiMode;
+document.getElementById('kikiRefreshBtn').onclick=kikiRefreshAll;
 document.getElementById('wxClose').onclick=closeWxPanel;
 document.getElementById('wxRefresh').onclick=()=>{
   const ll=me?me.getLatLng():map.getCenter();
