@@ -2062,15 +2062,13 @@ async function _startRainAnim(){
   const lbl=document.getElementById('lblLRainAnim');
   status.textContent='🌀 取得中...'; status.style.display='block';
   try{
-    const res=await fetch('https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes_N1.json',{cache:'no-store'});
+    /* targetTimes.json（_N1 なし）で実際に配信中の全コマ取得 */
+    const res=await fetch('https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes.json',{cache:'no-store'});
     if(!res.ok) throw new Error(`targetTimes HTTP ${res.status}`);
     const arr=await res.json();
-    const entry=Array.isArray(arr)?arr[arr.length-1]:arr;
-    const bt=typeof entry==='string'?entry:(entry.basetime||entry.validtime||String(entry));
-    _rainAnim.basetime=bt;
-    const btMs=_parseJmaTime(bt);
-    /* basetime から 5分刻み×13コマ（0〜60分先） */
-    _rainAnim.frames=Array.from({length:13},(_,i)=>_fmtJmaTime(btMs+i*5*60000));
+    if(!Array.isArray(arr)||!arr.length) throw new Error('フレームなし');
+    /* 各要素は {basetime, validtime} または文字列 */
+    _rainAnim.frames=arr.map(e=>typeof e==='string'?{bt:e,vt:e}:{bt:e.basetime||e.validtime,vt:e.validtime||e.basetime});
     _rainAnim.idx=0;
     if(_rainAnim.frameTimer) clearInterval(_rainAnim.frameTimer);
     _rainAnim.frameTimer=setInterval(_stepRainAnim,700);
@@ -2085,8 +2083,7 @@ async function _startRainAnim(){
 
 function _stepRainAnim(){
   if(!_rainAnim.on||!_rainAnim.frames.length) return;
-  const vt=_rainAnim.frames[_rainAnim.idx];
-  const bt=_rainAnim.basetime;
+  const {bt,vt}=_rainAnim.frames[_rainAnim.idx];
   const url=`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/hrpns/{z}/{x}/{y}.png`;
   const newLayer=L.tileLayer(url,{opacity:0.65,maxNativeZoom:10,maxZoom:22,attribution:'© 気象庁'});
   newLayer.addTo(map);
