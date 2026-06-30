@@ -2208,6 +2208,7 @@ document.getElementById('wxRefresh').onclick=()=>{
 
 /* ─── 河川水位観測（長野県 河川砂防情報ステーション） ─── */
 const SABO_BASE='https://www.sabo-nagano.jp';
+const SABO_GIS='https://www.gis.sabo-nagano.jp'; /* GeoJSONはこちら（CORS: * で直接取得可） */
 /* CORSプロキシ（複数プロキシを順次試行、429/403はスキップ） */
 async function rpFetch(url,opts){
   const proxies=[
@@ -2248,9 +2249,9 @@ async function fetchRiverData(){
   div.textContent='💧 水位データ取得中...';
   div.style.display='block';
   try{
-    /* 1. 観測所GeoJSON（座標）- キャッシュ利用 */
+    /* 1. 観測所GeoJSON（座標）- CORS: * なので直接取得、キャッシュ利用 */
     if(!_saboGeo){
-      const r=await rpFetch(`${SABO_BASE}/gisdata/river/SuiiPoint.geo.json`,{cache:'no-store'});
+      const r=await fetch(`${SABO_GIS}/gisdata/river/SuiiPoint.geo.json`,{cache:'no-store'});
       if(!r.ok) throw new Error(`観測所GeoJSON HTTP ${r.status}`);
       _saboGeo=await r.json();
       if(_saboGeo.features?.length>0) console.log('[River] GeoJSON props sample:',_saboGeo.features[0].properties);
