@@ -2206,8 +2206,8 @@ document.getElementById('wxRefresh').onclick=()=>{
   Object.keys(WX_LAYER_DEFS).forEach(k=>{ if(wxLayerState[k].on) wxUpdateLayer(k); });
 };
 
-/* ─── 河川水位観測（国土交通省 川の防災情報 内部API） ─── */
-const KAWABOU='https://www.river.go.jp/kawabou/file';
+/* ─── 河川水位観測（長野県 河川砂防情報ステーション） ─── */
+const SABO_BASE='https://www.sabo-nagano.jp';
 /* CORSプロキシ（複数プロキシを順次試行、429/403はスキップ） */
 async function rpFetch(url,opts){
   const proxies=[
@@ -2223,37 +2223,21 @@ async function rpFetch(url,opts){
   throw new Error('プロキシ接続失敗');
 }
 let riverOn=false, riverMarkers=[], riverTimer=null;
+let _saboGeo=null; /* SuiiPoint.geo.json キャッシュ */
+const STAGE_COL={'-3':'#888','-2':'#888','-1':'#888','0':'#2e7d32','1':'#f9a825','2':'#e65100','3':'#c62828','4':'#6a0080'};
 
-/* 都道府県コード → 川の防災情報エリアコード（北海道以外は prefCode+"01"） */
-async function _getRiverAreaCode(lat,lng){
-  const res=await fetch(`https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${lat}&lon=${lng}`);
-  const d=await res.json();
-  const mc=String(d.results?.muniCd||'');
-  const pref=mc.padStart(5,'0').slice(0,2);
-  if(!pref||pref==='00') throw new Error('地域コード取得失敗');
-  return pref==='01'?'0101':pref+'01'; /* 北海道は暫定0101 */
-}
+function _stageColor(level){ return STAGE_COL[String(level)]||'#888'; }
+function _stageLabel(level){ return(['平水','待機','注意','避難','危険'][level]||''); }
 
-/* 現在時刻を10分丸めで取得 */
-async function _getRiverTime(){
-  try{
-    const r=await rpFetch(`${KAWABOU}/system/rwCrntTime.json`,{cache:'no-store'});
-    if(r.ok){const d=await r.json(); if(d.crntRwTime) return d.crntRwTime.slice(0,12);}
-  }catch{}
-  /* フォールバック: JST現在時刻を10分切り捨て */
-  const jst=new Date(Date.now()+9*3600000);
-  const p=n=>String(n).padStart(2,'0');
-  const m=Math.floor(jst.getUTCMinutes()/10)*10;
-  return `${jst.getUTCFullYear()}${p(jst.getUTCMonth()+1)}${p(jst.getUTCDate())}${p(jst.getUTCHours())}${p(m)}`;
-}
-
-function _riverStgColor(level,meta){
-  if(level===null||level===undefined||level==='') return '#888';
-  const v=Number(level);
-  if(meta.dngStg!=null&&v>=meta.dngStg) return '#c62828';
-  if(meta.spclWarnStg!=null&&v>=meta.spclWarnStg) return '#e65100';
-  if(meta.warnStg!=null&&v>=meta.warnStg) return '#f9a825';
-  return '#2e7d32';
+/* GeoJSON feature.properties → station key (e.g. "21546_4_4") */
+function _featureKey(props){
+  /* direct key field */
+  for(const k of ['key','KEY','id','ID','StationKey','stationKey']) if(props[k]) return String(props[k]);
+  /* construct from area + station number */
+  const ac=props.AreaCd||props.AREA_CD||props.areaCd||props.area_cd||props.AreaCode||props.AREA_CODE;
+  const tn=props.TelmNo||props.TELM_NO||props.telmNo||props.StationNo||props.stationNo||props.SuiiNo||props.SUII_NO;
+  if(ac&&tn) return `${ac}_4_${tn}`;
+  return null;
 }
 
 async function fetchRiverData(){
@@ -2264,85 +2248,56 @@ async function fetchRiverData(){
   div.textContent='💧 水位データ取得中...';
   div.style.display='block';
   try{
-    const ll=me?me.getLatLng():map.getCenter();
-    const areaCode=await _getRiverAreaCode(ll.lat,ll.lng);
-    const ts12=await _getRiverTime(); /* YYYYMMDDHHII */
-    const dp=ts12.slice(0,8), tp=ts12.slice(8,12);
-
-    /* 1. 観測所メタデータ（名前・警戒水位等） */
-    const obsRes=await rpFetch(`${KAWABOU}/files/obslist/twninfo/obs/stg/${areaCode}.json`,{cache:'no-store'});
-    if(!obsRes.ok) throw new Error(`観測所情報 HTTP ${obsRes.status}`);
-    const obsJson=await obsRes.json();
-
-    /* obsFcd → メタデータのマップ作成 */
-    const metaMap={};
-    const twnCds=new Set();
-    for(const twn of (obsJson.prefTwn||[])){
-      twnCds.add(String(twn.twnCd));
-      for(const st of (twn.stg||[])){
-        metaMap[st.obsFcd]={name:st.obsNm,twnCd:String(twn.twnCd),warnStg:st.warnStg,spclWarnStg:st.spclWarnStg,dngStg:st.dngStg};
-      }
+    /* 1. 観測所GeoJSON（座標）- キャッシュ利用 */
+    if(!_saboGeo){
+      const r=await rpFetch(`${SABO_BASE}/gisdata/river/SuiiPoint.geo.json`,{cache:'no-store'});
+      if(!r.ok) throw new Error(`観測所GeoJSON HTTP ${r.status}`);
+      _saboGeo=await r.json();
+      if(_saboGeo.features?.length>0) console.log('[River] GeoJSON props sample:',_saboGeo.features[0].properties);
     }
 
-    /* 2. 現在水位 */
-    const tmRes=await rpFetch(`${KAWABOU}/files/obslist/twninfo/tm/stg/${areaCode}.json`,{cache:'no-store'});
-    if(!tmRes.ok) throw new Error(`水位データ HTTP ${tmRes.status}`);
-    const tmJson=await tmRes.json();
+    /* 2. 現在水位（1リクエスト） */
+    const cr=await rpFetch(`${SABO_BASE}/dyn/json/dat/latest/river_current.json`,{cache:'no-store'});
+    if(!cr.ok) throw new Error(`現在水位 HTTP ${cr.status}`);
+    const crJson=await cr.json();
+    const stageMap=crJson.data?.stage||{};
 
-    /* obsFcd → 現在水位マップ */
-    const levelMap={};
-    for(const twn of (tmJson.prefTwn||[])){
-      for(const st of (twn.stg||[])){
-        levelMap[st.obsFcd]={level:st.stg,obsTime:st.obsTime};
-      }
-    }
-
-    /* 3. 各twnCdのGeoJSON取得（座標のため）→ 現在表示範囲に絞る */
+    /* 3. 表示範囲内マーカー配置 */
     const b=map.getBounds();
-    const coordMap={}; /* obsFcd → [lng,lat] */
-    const twnCdArr=[...twnCds].slice(0,12); /* 最大12町（3件×4バッチ） */
-    for(let bi=0;bi<twnCdArr.length;bi+=3){
-      await Promise.allSettled(twnCdArr.slice(bi,bi+3).map(async tc=>{
-        try{
-          const r=await rpFetch(`${KAWABOU}/gjson/obs/${dp}/${tp}/stg/${tc}.json`,{cache:'no-store'});
-          if(!r.ok) return;
-          const gj=await r.json();
-          for(const f of (gj.features||[])){
-            const fcd=f.properties?.obsFcd;
-            const c=f.geometry?.coordinates;
-            if(fcd&&c) coordMap[fcd]=c;
-          }
-        }catch{}
-      }));
-    }
-
-    /* 4. マーカー配置 */
     let count=0;
-    for(const [fcd,coord] of Object.entries(coordMap)){
-      const lat=coord[1], lng=coord[0];
+    for(const feat of (_saboGeo.features||[])){
+      const c=feat.geometry?.coordinates;
+      if(!c) continue;
+      const lng=c[0], lat=c[1];
       if(!b.contains([lat,lng])) continue;
-      const meta=metaMap[fcd]||{};
-      const lv=levelMap[fcd];
-      const level=lv?.level??null;
-      const col=_riverStgColor(level,meta);
-      const levelStr=level!==null&&level!==''?`${Number(level).toFixed(2)}m`:'--';
-      const name=meta.name||fcd;
+      const props=feat.properties||{};
+      const key=_featureKey(props);
+      if(!key) continue;
+      const sd=stageMap[key];
+      const level=sd?.item_10?.level??-1;
+      const value=sd?.item_10?.value;
+      const obsTime=sd?.time; /* "2026-06-30-20-40" */
+      const col=_stageColor(level);
+      const levelStr=value!=null?`${Number(value).toFixed(2)}m`:'--';
+      const name=props.name||props.NAME||props.ObsNm||props.obsNm||props.StationName||props.stationName||key;
+      const river=props.river||props.RIVER||props.RiverNm||props.riverNm||props.RiverName||'';
+      const timeStr=obsTime?`${obsTime.slice(11,13)}:${obsTime.slice(14,16)}`:'';
 
       const mk=L.marker([lat,lng],{icon:L.divIcon({
         html:`<div style="background:#fff;color:${col};border:2px solid ${col};border-radius:6px;padding:2px 6px;font-size:11px;font-family:sans-serif;font-weight:bold;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.25)">${levelStr}</div>`,
         className:'',iconAnchor:[20,12]
       })}).addTo(map);
 
-      const threshHtml=meta.dngStg!=null
-        ?`<div style="font-size:10px;color:#888;margin:2px 0">危険${meta.dngStg}m / 警戒${meta.spclWarnStg??'--'}m / 注意${meta.warnStg??'--'}m</div>`:'';
-      const obsTimeStr=lv?.obsTime?`<span style="font-size:9px;color:#aaa"> (${String(lv.obsTime).slice(8,10)}:${String(lv.obsTime).slice(10,12)}観測)</span>`:'';
-      const encFcd=encodeURIComponent(fcd), encName=encodeURIComponent(name);
       const pDiv=document.createElement('div');
       pDiv.style.cssText='font-size:12px;font-family:sans-serif;min-width:190px';
-      pDiv.innerHTML=`<b>💧 ${name}</b>${obsTimeStr}<br><div style="font-size:14px;font-weight:bold;color:${col};margin:3px 0">水位: ${levelStr}</div>${threshHtml}<div style="display:flex;gap:4px;margin-top:5px"><button data-fcd="${encFcd}" data-dp="${dp}" data-n="${encName}" data-h="6" class="rv-btn">📈 6時間</button><button data-fcd="${encFcd}" data-dp="${dp}" data-n="${encName}" data-h="24" class="rv-btn">📈 24時間</button></div><div style="font-size:9px;color:#aaa;margin-top:3px">出典: 国土交通省 川の防災情報</div>`;
+      const riverHtml=river?`<span style="font-size:10px;color:#888"> (${river})</span>`:'';
+      const timeHtml=timeStr?`<span style="font-size:9px;color:#aaa"> (${timeStr}観測)</span>`:'';
+      const lvLabel=level>=0?`<span style="color:${col}"> ${_stageLabel(level)}</span>`:'';
+      const encKey=encodeURIComponent(key), encName=encodeURIComponent(name);
+      pDiv.innerHTML=`<b>💧 ${name}</b>${riverHtml}${timeHtml}<br><div style="font-size:14px;font-weight:bold;color:${col};margin:3px 0">水位: ${levelStr}${lvLabel}</div><div style="display:flex;gap:4px;margin-top:5px"><button data-key="${encKey}" data-nm="${encName}" data-h="6" class="rv-btn">📈 6時間</button><button data-key="${encKey}" data-nm="${encName}" data-h="24" class="rv-btn">📈 24時間</button></div><div style="font-size:9px;color:#aaa;margin-top:3px">出典: 長野県 河川砂防情報ステーション</div>`;
       pDiv.querySelectorAll('.rv-btn').forEach(btn=>{
         btn.style.cssText='flex:1;padding:3px 5px;font-size:11px;border:1px solid #0066ff;background:#fff;border-radius:4px;cursor:pointer;color:#0066ff';
-        btn.onclick=()=>showRiverChart(decodeURIComponent(btn.dataset.fcd),btn.dataset.dp,Number(btn.dataset.h),decodeURIComponent(btn.dataset.n));
+        btn.onclick=()=>showRiverChart(decodeURIComponent(btn.dataset.key),Number(btn.dataset.h),decodeURIComponent(btn.dataset.nm));
       });
       mk.bindPopup(pDiv);
       riverMarkers.push(mk); count++;
@@ -2362,33 +2317,59 @@ async function fetchRiverData(){
   }
 }
 
-async function showRiverChart(obsFcd,datePart,hours,stationName){
+async function showRiverChart(stationKey,hours,stationName){
   const w=openChartWindow(`${stationName} 水位(過去${hours}h)`);
   try{
-    /* tmlist/{dp}/{tp}/{obsFcd}.json は当該時刻までの時系列データを含む想定 */
-    const ts12=await _getRiverTime();
-    const dp=ts12.slice(0,8), tp=ts12.slice(8,12);
-    const r=await rpFetch(`${KAWABOU}/files/tmlist/stg/${dp}/${tp}/${obsFcd}.json`,{cache:'no-store'});
-    if(!r.ok) throw new Error(`HTTP ${r.status}`);
-    const json=await r.json();
-    /* 時系列配列: stgList / tmStgList / data / 配列直接 など複数形式を試みる */
-    const list=json.stgList||json.tmStgList||json.stgTmList||json.list||(Array.isArray(json)?json:null);
-    if(!list||!list.length){w.setError('時系列データなし');return;}
-    /* 直近hours時間分に絞る（obsTimeはJST: YYYYMMDDHHmm） */
-    const nowJst=Date.now()+9*3600000;
-    const cutJst=nowJst-hours*3600000;
-    const labels=[],data=[];
-    for(const pt of list){
-      const ot=String(pt.obsTime||pt.tm||'');
-      if(ot.length<12) continue;
-      const tJst=Date.UTC(+ot.slice(0,4),+ot.slice(4,6)-1,+ot.slice(6,8),+ot.slice(8,10),+ot.slice(10,12));
-      if(tJst<cutJst) continue;
-      labels.push(`${ot.slice(8,10)}:${ot.slice(10,12)}`);
-      const v=pt.stg??pt.suii??pt.value??null;
-      data.push(v!==null&&v!==''?Number(v):null);
+    const pad=n=>String(n).padStart(2,'0');
+    /* JST現在時刻（epoch ms に +9h を加算して UTC関数でJST値を読み出す） */
+    const nowMs=Date.now()+9*3600000;
+    const cutMs=nowMs-hours*3600000;
+
+    /* 必要な4時間ブロックを収集（重複はSetで排除） */
+    const blocks=new Set();
+    for(let h=0;h<=hours+4;h+=4){
+      const t=new Date(nowMs-h*3600000);
+      const d=`${t.getUTCFullYear()}${pad(t.getUTCMonth()+1)}${pad(t.getUTCDate())}`;
+      const n=Math.floor(t.getUTCHours()/4)+1;
+      blocks.add(`${d}/${d}_${n}_stage_10.json`);
     }
-    if(!data.length||data.every(v=>v===null)){w.setError('時系列データなし');return;}
-    w.setChart(labels,[{label:'水位(m)',data,type:'line',backgroundColor:'rgba(0,102,255,0.12)',borderColor:'rgba(0,102,255,0.8)',borderWidth:2,fill:true,tension:0.3,pointRadius:2,spanGaps:true}],'国土交通省 川の防災情報',{beginAtZero:false});
+
+    /* 並列取得 */
+    const responses=await Promise.allSettled([...blocks].map(bp=>
+      rpFetch(`${SABO_BASE}/dyn/json/dat/pc/${bp}`,{cache:'no-store'})
+    ));
+
+    /* 時系列データ収集（time形式: "2026-06-30-20-40"） */
+    const pts=[];
+    for(const res of responses){
+      if(res.status!=='fulfilled') continue;
+      const r=res.value;
+      if(!r.ok) continue;
+      const json=await r.json();
+      const stn=json[stationKey];
+      if(!stn?.data10) continue;
+      for(const pt of stn.data10){
+        const t=pt.time;
+        if(!t||t.length<16) continue;
+        /* "YYYY-MM-DD-HH-mm" → epoch ms（JSTフレーム） */
+        const ms=Date.UTC(+t.slice(0,4),+t.slice(5,7)-1,+t.slice(8,10),+t.slice(11,13),+t.slice(14,16));
+        if(ms<cutMs) continue;
+        pts.push({ms,label:`${t.slice(11,13)}:${t.slice(14,16)}`,value:pt.item_10?.value});
+      }
+    }
+    pts.sort((a,b)=>a.ms-b.ms);
+    /* 重複除去 */
+    const seen=new Set(), uniq=[];
+    for(const pt of pts){ if(!seen.has(pt.ms)){seen.add(pt.ms);uniq.push(pt);} }
+
+    if(!uniq.length){w.setError('時系列データなし');return;}
+    w.setChart(
+      uniq.map(pt=>pt.label),
+      [{label:'水位(m)',data:uniq.map(pt=>pt.value!=null&&pt.value!==''?Number(pt.value):null),
+        type:'line',backgroundColor:'rgba(0,102,255,0.12)',borderColor:'rgba(0,102,255,0.8)',
+        borderWidth:2,fill:true,tension:0.3,pointRadius:2,spanGaps:true}],
+      '長野県 河川砂防情報ステーション',{beginAtZero:false}
+    );
   }catch(e){ w.setError(`取得失敗: ${e.message}`); }
 }
 
