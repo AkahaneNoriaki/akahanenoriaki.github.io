@@ -671,8 +671,10 @@ html, body { height:100%; margin:0; }
         <label class="wx-chk-item" id="lblLLand"><input type="checkbox" id="chkLLand"><span class="ico">⛰</span><span>土砂危険</span></label>
         <label class="wx-chk-item" id="lblLFlood"><input type="checkbox" id="chkLFlood"><span class="ico">🌊</span><span>浸水危険</span></label>
         <label class="wx-chk-item" id="lblLRiver"><input type="checkbox" id="chkLRiver"><span class="ico">🏞</span><span>河川危険度</span></label>
+        <label class="wx-chk-item" id="lblLRiverLevel"><input type="checkbox" id="chkLRiverLevel"><span class="ico">💧</span><span>水位観測</span></label>
         <label class="wx-chk-item" id="lblLAmedas"><input type="checkbox" id="chkLAmedas"><span class="ico">📡</span><span>アメダス</span></label>
       </div>
+      <div id="wxRiver" style="display:none;font-size:10px;color:#aaa;padding:3px 6px;border-top:1px solid #444;"></div>
       <div id="wxAmedas"></div>
     </div>
   </div>
@@ -2200,8 +2202,117 @@ document.getElementById('wxRefresh').onclick=()=>{
   const ll=me?me.getLatLng():map.getCenter();
   fetchWeather(ll.lat,ll.lng);
   if(amedasOn) fetchAmedas();
+  if(riverOn) fetchRiverData();
   Object.keys(WX_LAYER_DEFS).forEach(k=>{ if(wxLayerState[k].on) wxUpdateLayer(k); });
 };
+
+/* ─── 河川水位観測（川の水位情報） ─── */
+const RIVER_API='https://k-api.river.go.jp/api';
+let riverOn=false, riverMarkers=[], riverTimer=null;
+
+function _riverColor(level,thresholds){
+  if(level===null||level===undefined) return '#888';
+  if(!thresholds) return '#2e7d32';
+  const d=thresholds.danger??thresholds.dangerLevel, w=thresholds.warning??thresholds.warningLevel, s=thresholds.standby??thresholds.standbyLevel;
+  if(d!==undefined&&level>=d) return '#c62828';
+  if(w!==undefined&&level>=w) return '#e65100';
+  if(s!==undefined&&level>=s) return '#f9a825';
+  return '#2e7d32';
+}
+function _riverStatusColor(st){
+  const m={'danger':'#c62828','flood_danger':'#c62828','warning':'#e65100','flood_warning':'#e65100','standby':'#f9a825','normal':'#2e7d32','氾濫危険':'#c62828','氾濫警戒':'#e65100','氾濫注意':'#e65100','待機':'#f9a825','正常':'#2e7d32'};
+  return m[st]||'#888';
+}
+
+async function fetchRiverData(){
+  riverMarkers.forEach(mk=>map.removeLayer(mk)); riverMarkers=[];
+  const div=document.getElementById('wxRiver');
+  const lbl=document.getElementById('lblLRiverLevel');
+  try{
+    const b=map.getBounds();
+    const p4=v=>v.toFixed(4);
+    const url=`${RIVER_API}/stations?minLat=${p4(b.getSouth())}&maxLat=${p4(b.getNorth())}&minLon=${p4(b.getWest())}&maxLon=${p4(b.getEast())}`;
+    const res=await fetch(url,{cache:'no-store'});
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json=await res.json();
+    const stations=Array.isArray(json)?json:(json.stations||json.features||json.data||[]);
+    if(!stations.length){
+      div.textContent='⚠ 表示エリアに水位観測所なし';
+      div.style.display='block'; lbl.style.borderColor=''; return;
+    }
+    stations.slice(0,40).forEach(st=>{
+      const pr=st.properties||st;
+      const lat=pr.lat??pr.latitude??(st.geometry?.coordinates?.[1]);
+      const lon=pr.lon??pr.longitude??pr.lng??(st.geometry?.coordinates?.[0]);
+      if(!lat||!lon) return;
+      const level=pr.currentLevel??pr.waterLevel??pr.level??pr.suii??null;
+      const status=pr.status??pr.state??null;
+      const thresholds=pr.thresholds??{danger:pr.dangerLevel??pr.danger,warning:pr.warningLevel??pr.warning,standby:pr.standbyLevel??pr.standby};
+      const col=status?_riverStatusColor(status):_riverColor(level,thresholds);
+      const levelStr=level!==null?`${Number(level).toFixed(2)}m`:'--';
+      const name=pr.name??pr.stationName??pr.observationName??pr.id??st.id??'観測所';
+      const riverName=pr.riverName??pr.river??pr.kasenName??'';
+      const sid=encodeURIComponent(pr.id??pr.stationId??pr.code??st.id??'');
+      const sname=encodeURIComponent(name);
+      const mk=L.marker([lat,lon],{icon:L.divIcon({
+        html:`<div style="background:#fff;color:${col};border:2px solid ${col};border-radius:6px;padding:2px 6px;font-size:11px;font-family:sans-serif;font-weight:bold;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.25)">${levelStr}</div>`,
+        className:'',iconAnchor:[20,12]
+      })}).addTo(map);
+      const popDiv=document.createElement('div');
+      popDiv.style.cssText='font-size:12px;font-family:sans-serif;min-width:190px';
+      popDiv.innerHTML=`<b>💧 ${name}</b>${riverName?`<br><span style="color:#555">📍 ${riverName}</span>`:''}<br><div style="font-size:14px;font-weight:bold;color:${col};margin:4px 0">水位: ${levelStr}</div><div style="display:flex;gap:4px;margin-top:6px"><button data-sid="${sid}" data-h="6" data-n="${sname}" class="rv-btn">📈 6時間</button><button data-sid="${sid}" data-h="24" data-n="${sname}" class="rv-btn">📈 24時間</button></div><div style="font-size:9px;color:#aaa;margin-top:4px">出典: 国土交通省 川の水位情報</div>`;
+      popDiv.querySelectorAll('.rv-btn').forEach(btn=>{
+        btn.style.cssText='flex:1;padding:3px 6px;font-size:11px;border:1px solid #0066ff;background:#fff;border-radius:4px;cursor:pointer;color:#0066ff';
+        btn.onclick=()=>showRiverChart(decodeURIComponent(btn.dataset.sid),Number(btn.dataset.h),decodeURIComponent(btn.dataset.n));
+      });
+      mk.bindPopup(popDiv);
+      riverMarkers.push(mk);
+    });
+    const now=new Date(), p=n=>String(n).padStart(2,'0');
+    div.textContent=`💧 水位観測 ${Math.min(stations.length,40)}地点 (${p(now.getHours())}:${p(now.getMinutes())} 更新)`;
+    div.style.display='block'; lbl.style.borderColor='';
+  }catch(e){
+    console.error('[River]',e);
+    div.innerHTML=`❌ 水位取得失敗: ${e.message}　<a href="https://k.river.go.jp/" target="_blank" style="color:#8ab4f8">川の水位情報 →</a>`;
+    div.style.display='block'; lbl.style.borderColor='#ff3b30';
+  }
+}
+
+async function showRiverChart(stationId,hours,stationName){
+  const w=openChartWindow(`${stationName} 水位(過去${hours}h)`);
+  try{
+    const now=new Date(), from=new Date(now-hours*3600*1000);
+    const fmt=d=>{const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}00`;};
+    const res=await fetch(`${RIVER_API}/stations/${stationId}/history?from=${fmt(from)}&to=${fmt(now)}`);
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json=await res.json();
+    const obs=Array.isArray(json)?json:(json.observations??json.data??json.history??json.records??[]);
+    if(!obs.length){w.setError('データなし');return;}
+    const parseTime=t=>{
+      if(!t) return null;
+      if(typeof t==='string'&&/^\d{14}$/.test(t)) return new Date(`${t.slice(0,4)}-${t.slice(4,6)}-${t.slice(6,8)}T${t.slice(8,10)}:${t.slice(10,12)}:${t.slice(12,14)}+09:00`);
+      return new Date(t);
+    };
+    const labels=obs.map(o=>{
+      const d=parseTime(o.time??o.datetime??o.timestamp??o.observedAt??o[0]);
+      if(!d||isNaN(d)) return '--';
+      const p=n=>String(n).padStart(2,'0');
+      return `${p(d.getHours())}:${p(d.getMinutes())}`;
+    });
+    const data=obs.map(o=>{ const v=o.level??o.waterLevel??o.value??o.suii??o[1]; return v!==null&&v!==undefined?Number(v):null; });
+    w.setChart(labels,[{label:'水位(m)',data,type:'line',backgroundColor:'rgba(0,102,255,0.12)',borderColor:'rgba(0,102,255,0.8)',borderWidth:2,fill:true,tension:0.3,pointRadius:2,spanGaps:true}],'国土交通省 川の水位情報',{beginAtZero:false});
+  }catch(e){
+    w.setError(`データ取得失敗: ${e.message}`);
+  }
+}
+
+document.getElementById('chkLRiverLevel').addEventListener('change',function(){
+  riverOn=this.checked;
+  document.getElementById('lblLRiverLevel').classList.toggle('active',riverOn);
+  if(riverOn){ fetchRiverData(); if(!riverTimer) riverTimer=setInterval(fetchRiverData,10*60*1000); }
+  else{ clearInterval(riverTimer); riverTimer=null; riverMarkers.forEach(mk=>map.removeLayer(mk)); riverMarkers=[]; document.getElementById('wxRiver').style.display='none'; }
+});
+map.on('moveend',()=>{ if(riverOn) fetchRiverData(); });
 
 /* パネルドラッグ */
 (()=>{
