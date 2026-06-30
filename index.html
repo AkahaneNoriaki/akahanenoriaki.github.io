@@ -2206,85 +2206,184 @@ document.getElementById('wxRefresh').onclick=()=>{
   Object.keys(WX_LAYER_DEFS).forEach(k=>{ if(wxLayerState[k].on) wxUpdateLayer(k); });
 };
 
-/* ─── 河川・洪水情報（JMA気象警報＋外部リンク） ─── */
+/* ─── 河川水位観測（国土交通省 川の防災情報 内部API） ─── */
+const KAWABOU='https://www.river.go.jp/kawabou/file';
 let riverOn=false, riverMarkers=[], riverTimer=null;
 
-/* JMA 洪水関連警報コード */
-const FLOOD_WARN={
-  '14':{name:'洪水注意報',col:'#f9a825'},
-  '15':{name:'洪水警報', col:'#e65100'},
-  '24':{name:'洪水特別警報',col:'#c62828'}
-};
+/* 都道府県コード → 川の防災情報エリアコード（北海道以外は prefCode+"01"） */
+async function _getRiverAreaCode(lat,lng){
+  const res=await fetch(`https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${lat}&lon=${lng}`);
+  const d=await res.json();
+  const mc=String(d.results?.muniCd||'');
+  const pref=mc.padStart(5,'0').slice(0,2);
+  if(!pref||pref==='00') throw new Error('地域コード取得失敗');
+  return pref==='01'?'0101':pref+'01'; /* 北海道は暫定0101 */
+}
+
+/* 現在時刻を10分丸めで取得 */
+async function _getRiverTime(){
+  try{
+    const r=await fetch(`${KAWABOU}/system/rwCrntTime.json`,{cache:'no-store'});
+    if(r.ok){const d=await r.json(); if(d.crntRwTime) return d.crntRwTime.slice(0,12);}
+  }catch{}
+  /* フォールバック: JST現在時刻を10分切り捨て */
+  const jst=new Date(Date.now()+9*3600000);
+  const p=n=>String(n).padStart(2,'0');
+  const m=Math.floor(jst.getUTCMinutes()/10)*10;
+  return `${jst.getUTCFullYear()}${p(jst.getUTCMonth()+1)}${p(jst.getUTCDate())}${p(jst.getUTCHours())}${p(m)}`;
+}
+
+function _riverStgColor(level,meta){
+  if(level===null||level===undefined||level==='') return '#888';
+  const v=Number(level);
+  if(meta.dngStg!=null&&v>=meta.dngStg) return '#c62828';
+  if(meta.spclWarnStg!=null&&v>=meta.spclWarnStg) return '#e65100';
+  if(meta.warnStg!=null&&v>=meta.warnStg) return '#f9a825';
+  return '#2e7d32';
+}
 
 async function fetchRiverData(){
   riverMarkers.forEach(mk=>map.removeLayer(mk)); riverMarkers=[];
   const div=document.getElementById('wxRiver');
   const lbl=document.getElementById('lblLRiverLevel');
   div.style.color='#aaa';
-  div.textContent='💧 洪水・水位情報取得中...';
+  div.textContent='💧 水位データ取得中...';
   div.style.display='block';
   try{
     const ll=me?me.getLatLng():map.getCenter();
-    const officeCode=await getJMAAreaCode(ll.lat,ll.lng);
+    const areaCode=await _getRiverAreaCode(ll.lat,ll.lng);
+    const ts12=await _getRiverTime(); /* YYYYMMDDHHII */
+    const dp=ts12.slice(0,8), tp=ts12.slice(8,12);
 
-    /* JMA 気象警報・注意報（洪水注意報/警報含む） */
-    const res=await fetch(`https://www.jma.go.jp/bosai/warning/data/warning/${officeCode}.json`,{cache:'no-store'});
-    if(!res.ok) throw new Error(`JMA警報 HTTP ${res.status}`);
-    const data=await res.json();
+    /* 1. 観測所メタデータ（名前・警戒水位等） */
+    const obsRes=await fetch(`${KAWABOU}/files/obslist/twninfo/obs/stg/${areaCode}.json`,{cache:'no-store'});
+    if(!obsRes.ok) throw new Error(`観測所情報 HTTP ${obsRes.status}`);
+    const obsJson=await obsRes.json();
 
-    /* 洪水警報を収集 */
-    const floods=[];
-    for(const at of (data.areaTypes||[])){
-      for(const area of (at.areas||[])){
-        for(const w of (area.warnings||area.kinds||[])){
-          const code=String(w.code??w.kindCode??'');
-          if(FLOOD_WARN[code]&&w.status!=='解除'&&w.status!=='なし')
-            floods.push({area:area.name,code,status:w.status});
-        }
+    /* obsFcd → メタデータのマップ作成 */
+    const metaMap={};
+    const twnCds=new Set();
+    for(const twn of (obsJson.prefTwn||[])){
+      twnCds.add(String(twn.twnCd));
+      for(const st of (twn.stg||[])){
+        metaMap[st.obsFcd]={name:st.obsNm,twnCd:String(twn.twnCd),warnStg:st.warnStg,spclWarnStg:st.spclWarnStg,dngStg:st.dngStg};
       }
     }
 
-    const now=new Date(), p=v=>String(v).padStart(2,'0');
-    const ts=`${p(now.getHours())}:${p(now.getMinutes())}`;
-    /* 水位確認リンク（国土交通省 川の防災情報） */
-    const lat=ll.lat.toFixed(4), lng=ll.lng.toFixed(4);
-    const riverLink=`https://www.river.go.jp/kawabou/kasen/dsp/kawabou/pc/map.do?mode=pc`;
-    const linkHtml=`<a href="${riverLink}" target="_blank" style="color:#8ab4f8">水位確認 →</a>`;
+    /* 2. 現在水位 */
+    const tmRes=await fetch(`${KAWABOU}/files/obslist/twninfo/tm/stg/${areaCode}.json`,{cache:'no-store'});
+    if(!tmRes.ok) throw new Error(`水位データ HTTP ${tmRes.status}`);
+    const tmJson=await tmRes.json();
 
-    if(!floods.length){
-      div.style.color='#4caf50';
-      div.innerHTML=`💧 洪水警報・注意報なし (${ts})　${linkHtml}`;
-    }else{
-      /* 最高レベル判定 */
-      const top=floods.find(f=>f.code==='24')||floods.find(f=>f.code==='15')||floods[0];
-      const col=FLOOD_WARN[top.code].col;
-      const summary=floods.slice(0,3).map(f=>`${f.area}: ${FLOOD_WARN[f.code].name}`).join(' / ')+(floods.length>3?` 他${floods.length-3}件`:'');
-      div.style.color=col;
-      div.innerHTML=`⚠ ${summary}<br><span style="color:#aaa;font-size:9px">${ts} JMA警報</span>　${linkHtml}`;
-      lbl.style.borderColor=col;
+    /* obsFcd → 現在水位マップ */
+    const levelMap={};
+    for(const twn of (tmJson.prefTwn||[])){
+      for(const st of (twn.stg||[])){
+        levelMap[st.obsFcd]={level:st.stg,obsTime:st.obsTime};
+      }
     }
-    div.style.display='block';
 
-    /* 地図上に洪水警報マーカーを置く（中心付近） */
-    if(floods.length){
-      const top=floods.find(f=>f.code==='24')||floods.find(f=>f.code==='15')||floods[0];
-      const col=FLOOD_WARN[top.code].col;
-      const mk=L.marker([ll.lat,ll.lng],{icon:L.divIcon({
-        html:`<div style="background:${col};color:#fff;border:2px solid ${col};border-radius:8px;padding:3px 8px;font-size:12px;font-family:sans-serif;font-weight:bold;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.4)">${FLOOD_WARN[top.code].name}</div>`,
-        className:'',iconAnchor:[40,14]
+    /* 3. 各twnCdのGeoJSON取得（座標のため）→ 現在表示範囲に絞る */
+    const b=map.getBounds();
+    const coordMap={}; /* obsFcd → [lng,lat] */
+    const twnCdArr=[...twnCds].slice(0,20); /* 最大20町 */
+    await Promise.allSettled(twnCdArr.map(async tc=>{
+      try{
+        const r=await fetch(`${KAWABOU}/gjson/obs/${dp}/${tp}/stg/${tc}.json`,{cache:'no-store'});
+        if(!r.ok) return;
+        const gj=await r.json();
+        for(const f of (gj.features||[])){
+          const fcd=f.properties?.obsFcd;
+          const c=f.geometry?.coordinates;
+          if(fcd&&c) coordMap[fcd]=c; /* [lng,lat] */
+        }
+      }catch{}
+    }));
+
+    /* 4. マーカー配置 */
+    let count=0;
+    for(const [fcd,coord] of Object.entries(coordMap)){
+      const lat=coord[1], lng=coord[0];
+      if(!b.contains([lat,lng])) continue;
+      const meta=metaMap[fcd]||{};
+      const lv=levelMap[fcd];
+      const level=lv?.level??null;
+      const col=_riverStgColor(level,meta);
+      const levelStr=level!==null&&level!==''?`${Number(level).toFixed(2)}m`:'--';
+      const name=meta.name||fcd;
+
+      const mk=L.marker([lat,lng],{icon:L.divIcon({
+        html:`<div style="background:#fff;color:${col};border:2px solid ${col};border-radius:6px;padding:2px 6px;font-size:11px;font-family:sans-serif;font-weight:bold;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.25)">${levelStr}</div>`,
+        className:'',iconAnchor:[20,12]
       })}).addTo(map);
+
+      const threshHtml=meta.dngStg!=null
+        ?`<div style="font-size:10px;color:#888;margin:2px 0">危険${meta.dngStg}m / 警戒${meta.spclWarnStg??'--'}m / 注意${meta.warnStg??'--'}m</div>`:'';
+      const obsTimeStr=lv?.obsTime?`<span style="font-size:9px;color:#aaa"> (${String(lv.obsTime).slice(8,10)}:${String(lv.obsTime).slice(10,12)}観測)</span>`:'';
+      const encFcd=encodeURIComponent(fcd), encName=encodeURIComponent(name);
       const pDiv=document.createElement('div');
-      pDiv.style.cssText='font-size:12px;font-family:sans-serif;max-width:220px';
-      pDiv.innerHTML=`<b style="color:${col}">⚠ 洪水警報・注意報</b><br>${floods.slice(0,5).map(f=>`<div style="color:${FLOOD_WARN[f.code].col}">●${f.area}: ${FLOOD_WARN[f.code].name}</div>`).join('')}<div style="margin-top:6px"><a href="${riverLink}" target="_blank" style="color:#0066ff;font-size:11px">📊 水位グラフを見る（外部）→</a></div><div style="font-size:9px;color:#aaa;margin-top:3px">出典: 気象庁 気象警報・注意報</div>`;
+      pDiv.style.cssText='font-size:12px;font-family:sans-serif;min-width:190px';
+      pDiv.innerHTML=`<b>💧 ${name}</b>${obsTimeStr}<br><div style="font-size:14px;font-weight:bold;color:${col};margin:3px 0">水位: ${levelStr}</div>${threshHtml}<div style="display:flex;gap:4px;margin-top:5px"><button data-fcd="${encFcd}" data-dp="${dp}" data-n="${encName}" data-h="6" class="rv-btn">📈 6時間</button><button data-fcd="${encFcd}" data-dp="${dp}" data-n="${encName}" data-h="24" class="rv-btn">📈 24時間</button></div><div style="font-size:9px;color:#aaa;margin-top:3px">出典: 国土交通省 川の防災情報</div>`;
+      pDiv.querySelectorAll('.rv-btn').forEach(btn=>{
+        btn.style.cssText='flex:1;padding:3px 5px;font-size:11px;border:1px solid #0066ff;background:#fff;border-radius:4px;cursor:pointer;color:#0066ff';
+        btn.onclick=()=>showRiverChart(decodeURIComponent(btn.dataset.fcd),btn.dataset.dp,Number(btn.dataset.h),decodeURIComponent(btn.dataset.n));
+      });
       mk.bindPopup(pDiv);
-      riverMarkers.push(mk);
+      riverMarkers.push(mk); count++;
     }
+
+    const now=new Date(), pn=v=>String(v).padStart(2,'0');
+    div.style.color=count?'#aaa':'#888';
+    div.textContent=count
+      ?`💧 水位観測 ${count}地点 (${pn(now.getHours())}:${pn(now.getMinutes())} 更新)`
+      :'⚠ 表示エリアに水位観測所なし';
+    div.style.display='block'; lbl.style.borderColor='';
   }catch(e){
     console.error('[River]',e);
     div.style.color='#ff6b6b';
-    div.innerHTML=`❌ 洪水情報取得失敗: ${e.message}`;
+    div.innerHTML=`❌ 水位取得失敗: ${e.message}`;
     div.style.display='block'; document.getElementById('lblLRiverLevel').style.borderColor='#ff3b30';
   }
+}
+
+async function showRiverChart(obsFcd,datePart,hours,stationName){
+  const w=openChartWindow(`${stationName} 水位(過去${hours}h)`);
+  try{
+    /* 川の防災情報 水位時系列: /tmlist/stg/{YYYYMMDD}/{HHMM}/{obsFcd}.json */
+    /* 過去N時間分を10分間隔で集める */
+    const jst=d=>new Date(d.getTime()+9*3600000);
+    const now=new Date();
+    const p=n=>String(n).padStart(2,'0');
+    const times=[]; /* 新しい順に最大hours*6個 */
+    const base=new Date(now);
+    base.setMinutes(Math.floor(base.getMinutes()/10)*10,0,0);
+    for(let i=0;i<hours*6;i++){
+      const t=new Date(base-i*10*60000);
+      const jt=jst(t);
+      times.push({
+        dp:`${jt.getUTCFullYear()}${p(jt.getUTCMonth()+1)}${p(jt.getUTCDate())}`,
+        tp:`${p(jt.getUTCHours())}${p(Math.floor(jt.getUTCMinutes()/10)*10)}`,
+        label:`${p((jt.getUTCHours())%24)}:${p(jt.getUTCMinutes())}`
+      });
+    }
+    /* データ取得（各時刻ごとに別ファイル） - 並列で最大N件 */
+    const results=await Promise.allSettled(
+      times.map(t=>fetch(`${KAWABOU}/files/tmlist/stg/${t.dp}/${t.tp}/${obsFcd}.json`,{cache:'no-store'})
+        .then(r=>r.ok?r.json():null).catch(()=>null))
+    );
+    const labels=[], data=[];
+    times.reverse(); /* 古い順に */
+    results.reverse();
+    results.forEach((r,i)=>{
+      labels.push(times[i].label);
+      if(r.status==='fulfilled'&&r.value!==null){
+        const v=r.value?.stg??r.value?.suii??r.value?.value??null;
+        data.push(v!==null?Number(v):null);
+      }else{ data.push(null); }
+    });
+    if(data.every(v=>v===null)){w.setError('時系列データなし');return;}
+    w.setChart(labels,[{label:'水位(m)',data,type:'line',backgroundColor:'rgba(0,102,255,0.12)',borderColor:'rgba(0,102,255,0.8)',borderWidth:2,fill:true,tension:0.3,pointRadius:2,spanGaps:true}],'国土交通省 川の防災情報',{beginAtZero:false});
+  }catch(e){ w.setError(`取得失敗: ${e.message}`); }
 }
 
 document.getElementById('chkLRiverLevel').addEventListener('change',function(){
