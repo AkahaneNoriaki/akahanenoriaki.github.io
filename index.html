@@ -2062,14 +2062,19 @@ async function _startRainAnim(){
     const res=await fetch('https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes_N1.json',{cache:'no-store'});
     if(!res.ok) throw new Error(`targetTimes HTTP ${res.status}`);
     const arr=await res.json();
-    const entry=Array.isArray(arr)?arr[arr.length-1]:arr;
-    const bt=typeof entry==='string'?entry:(entry.basetime||entry.validtime||String(entry));
-    const btMs=_parseJmaTime(bt);
-    /* basetime=観測コマ + 5min刻み×12コマ（+5〜+60分予測） */
-    _rainAnim.frames=[
-      {bt,vt:bt},
-      ...Array.from({length:12},(_,i)=>({bt,vt:_fmtJmaTime(btMs+(i+1)*5*60000)}))
-    ];
+    if(!Array.isArray(arr)||!arr.length) throw new Error('フレームなし');
+    /* arr は新→旧順。最新 basetime を取得 */
+    const latest=arr[0];
+    const latestBt=typeof latest==='string'?latest:(latest.basetime||latest.validtime);
+    const btMs=_parseJmaTime(latestBt);
+    /* 過去コマ（旧→新の時系列、最大12コマ=60min分）*/
+    const obsFrames=arr.slice(0,12).map(e=>{
+      const t=typeof e==='string'?e:(e.basetime||e.validtime);
+      return {bt:t,vt:t};
+    }).reverse();
+    /* 予測コマ（+5min〜+60min）*/
+    const fcFrames=Array.from({length:12},(_,i)=>({bt:latestBt,vt:_fmtJmaTime(btMs+(i+1)*5*60000)}));
+    _rainAnim.frames=[...obsFrames,...fcFrames];
     _rainAnim.idx=0;
     if(_rainAnim.frameTimer) clearInterval(_rainAnim.frameTimer);
     _rainAnim.frameTimer=setInterval(_stepRainAnim,700);
