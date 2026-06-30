@@ -668,6 +668,7 @@ html, body { height:100%; margin:0; }
       <div id="wxLayerLabel">🗂 気象レイヤ</div>
       <div id="wxLayers">
         <label class="wx-chk-item" id="lblLRain"><input type="checkbox" id="chkLRain"><span class="ico">🌧</span><span>レーダー雨量</span></label>
+        <label class="wx-chk-item" id="lblLRainAnim"><input type="checkbox" id="chkLRainAnim"><span class="ico">🌀</span><span>雨雲の動き</span></label>
         <label class="wx-chk-item" id="lblLLand"><input type="checkbox" id="chkLLand"><span class="ico">⛰</span><span>土砂危険</span></label>
         <label class="wx-chk-item" id="lblLFlood"><input type="checkbox" id="chkLFlood"><span class="ico">🌊</span><span>浸水危険</span></label>
         <label class="wx-chk-item" id="lblLRiver"><input type="checkbox" id="chkLRiver"><span class="ico">🏞</span><span>河川危険度</span></label>
@@ -675,6 +676,7 @@ html, body { height:100%; margin:0; }
         <label class="wx-chk-item" id="lblLAmedas"><input type="checkbox" id="chkLAmedas"><span class="ico">📡</span><span>アメダス</span></label>
       </div>
       <div id="wxRiver" style="display:none;font-size:10px;color:#aaa;padding:3px 6px;border-top:1px solid #444;"></div>
+      <div id="rainAnimStatus" style="display:none;font-size:10px;color:#aaa;padding:3px 6px;border-top:1px solid #444;"></div>
       <div id="wxAmedas"></div>
     </div>
   </div>
@@ -2041,6 +2043,83 @@ Object.keys(WX_CHK_MAP).forEach(key=>{
     wxLayerState[key].on=this.checked;
     wxApplyLayerState(key);
   });
+});
+
+/* ─── 雨雲アニメーション（降水ナウキャスト 5分×13コマ） ─── */
+const _rainAnim={on:false,basetime:'',frames:[],idx:0,layer:null,frameTimer:null,refreshTimer:null};
+
+function _parseJmaTime(t){
+  if(!t||t.length<12) return 0;
+  return Date.UTC(+t.slice(0,4),+t.slice(4,6)-1,+t.slice(6,8),+t.slice(8,10),+t.slice(10,12));
+}
+function _fmtJmaTime(ms){
+  const d=new Date(ms), p=n=>String(n).padStart(2,'0');
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth()+1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}00`;
+}
+
+async function _startRainAnim(){
+  const status=document.getElementById('rainAnimStatus');
+  const lbl=document.getElementById('lblLRainAnim');
+  status.textContent='🌀 取得中...'; status.style.display='block';
+  try{
+    const res=await fetch('https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes_N1.json',{cache:'no-store'});
+    if(!res.ok) throw new Error(`targetTimes HTTP ${res.status}`);
+    const arr=await res.json();
+    const entry=Array.isArray(arr)?arr[arr.length-1]:arr;
+    const bt=typeof entry==='string'?entry:(entry.basetime||entry.validtime||String(entry));
+    _rainAnim.basetime=bt;
+    const btMs=_parseJmaTime(bt);
+    /* basetime から 5分刻み×13コマ（0〜60分先） */
+    _rainAnim.frames=Array.from({length:13},(_,i)=>_fmtJmaTime(btMs+i*5*60000));
+    _rainAnim.idx=0;
+    if(_rainAnim.frameTimer) clearInterval(_rainAnim.frameTimer);
+    _rainAnim.frameTimer=setInterval(_stepRainAnim,700);
+    _stepRainAnim();
+    if(lbl) lbl.style.borderColor='';
+  }catch(e){
+    console.error('[RainAnim]',e);
+    status.textContent='❌ 雨雲取得失敗';
+    if(lbl) lbl.style.borderColor='#ff3b30';
+  }
+}
+
+function _stepRainAnim(){
+  if(!_rainAnim.on||!_rainAnim.frames.length) return;
+  const vt=_rainAnim.frames[_rainAnim.idx];
+  const bt=_rainAnim.basetime;
+  const url=`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/hrpns/{z}/{x}/{y}.png`;
+  const newLayer=L.tileLayer(url,{opacity:0.65,maxNativeZoom:10,maxZoom:22,attribution:'© 気象庁'});
+  newLayer.addTo(map);
+  if(_rainAnim.layer) map.removeLayer(_rainAnim.layer);
+  _rainAnim.layer=newLayer;
+  const status=document.getElementById('rainAnimStatus');
+  if(status){
+    const diffMin=Math.round((_parseJmaTime(vt)-_parseJmaTime(bt))/60000);
+    const hhmm=`${vt.slice(8,10)}:${vt.slice(10,12)}`;
+    status.textContent=diffMin===0?`🌀 ${hhmm} 観測`:`🌀 ${hhmm} (+${diffMin}分 予測)`;
+    status.style.color=diffMin===0?'#aaa':'#7ec8e3';
+  }
+  _rainAnim.idx=(_rainAnim.idx+1)%_rainAnim.frames.length;
+}
+
+function _stopRainAnim(){
+  clearInterval(_rainAnim.frameTimer); _rainAnim.frameTimer=null;
+  clearInterval(_rainAnim.refreshTimer); _rainAnim.refreshTimer=null;
+  if(_rainAnim.layer){ map.removeLayer(_rainAnim.layer); _rainAnim.layer=null; }
+  _rainAnim.frames=[]; _rainAnim.idx=0;
+  const status=document.getElementById('rainAnimStatus');
+  if(status) status.style.display='none';
+}
+
+document.getElementById('chkLRainAnim').addEventListener('change',function(){
+  _rainAnim.on=this.checked;
+  document.getElementById('lblLRainAnim').classList.toggle('active',_rainAnim.on);
+  if(_rainAnim.on){
+    _startRainAnim();
+    if(!_rainAnim.refreshTimer) _rainAnim.refreshTimer=setInterval(_startRainAnim,10*60*1000);
+  } else {
+    _stopRainAnim();
+  }
 });
 
 /* アメダス */
