@@ -2201,16 +2201,20 @@ async function fetchWeather(lat,lng){
   }catch(e){ console.error('[fetchWeather]',e); document.getElementById('wxLoading').textContent='取得に失敗しました'; }
 }
 
+let wxPanelTimer=null;
 function openWxPanel(){
   wxOpen=true; wxPanel.style.display='flex';
   document.getElementById('btnWx').classList.add('hi');
   const ll=me?me.getLatLng():map.getCenter();
   fetchWeather(ll.lat,ll.lng);
   closeSheet();
+  clearInterval(wxPanelTimer);
+  wxPanelTimer=setInterval(()=>{ const l=me?me.getLatLng():map.getCenter(); fetchWeather(l.lat,l.lng); },10*60*1000);
 }
 function closeWxPanel(){
   wxOpen=false; wxPanel.style.display='none';
   document.getElementById('btnWx').classList.remove('hi');
+  clearInterval(wxPanelTimer); wxPanelTimer=null;
 }
 
 document.getElementById('btnWx').onclick=()=>{ wxOpen?closeWxPanel():openWxPanel(); };
