@@ -2208,8 +2208,20 @@ document.getElementById('wxRefresh').onclick=()=>{
 
 /* ─── 河川水位観測（国土交通省 川の防災情報 内部API） ─── */
 const KAWABOU='https://www.river.go.jp/kawabou/file';
-/* CORSプロキシ: river.go.jp は CORS ヘッダーを返さないため経由する */
-const _rp=url=>`https://corsproxy.io/?${encodeURIComponent(url)}`;
+/* CORSプロキシ（複数プロキシを順次試行、429/403はスキップ） */
+async function rpFetch(url,opts){
+  const proxies=[
+    u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
+  ];
+  for(const px of proxies){
+    try{
+      const r=await fetch(px(url),opts||{});
+      if(r.status!==429&&r.status!==403) return r;
+    }catch{}
+  }
+  throw new Error('プロキシ接続失敗');
+}
 let riverOn=false, riverMarkers=[], riverTimer=null;
 
 /* 都道府県コード → 川の防災情報エリアコード（北海道以外は prefCode+"01"） */
@@ -2225,7 +2237,7 @@ async function _getRiverAreaCode(lat,lng){
 /* 現在時刻を10分丸めで取得 */
 async function _getRiverTime(){
   try{
-    const r=await fetch(_rp(`${KAWABOU}/system/rwCrntTime.json`),{cache:'no-store'});
+    const r=await rpFetch(`${KAWABOU}/system/rwCrntTime.json`,{cache:'no-store'});
     if(r.ok){const d=await r.json(); if(d.crntRwTime) return d.crntRwTime.slice(0,12);}
   }catch{}
   /* フォールバック: JST現在時刻を10分切り捨て */
@@ -2258,7 +2270,7 @@ async function fetchRiverData(){
     const dp=ts12.slice(0,8), tp=ts12.slice(8,12);
 
     /* 1. 観測所メタデータ（名前・警戒水位等） */
-    const obsRes=await fetch(_rp(`${KAWABOU}/files/obslist/twninfo/obs/stg/${areaCode}.json`),{cache:'no-store'});
+    const obsRes=await rpFetch(`${KAWABOU}/files/obslist/twninfo/obs/stg/${areaCode}.json`,{cache:'no-store'});
     if(!obsRes.ok) throw new Error(`観測所情報 HTTP ${obsRes.status}`);
     const obsJson=await obsRes.json();
 
@@ -2273,7 +2285,7 @@ async function fetchRiverData(){
     }
 
     /* 2. 現在水位 */
-    const tmRes=await fetch(_rp(`${KAWABOU}/files/obslist/twninfo/tm/stg/${areaCode}.json`),{cache:'no-store'});
+    const tmRes=await rpFetch(`${KAWABOU}/files/obslist/twninfo/tm/stg/${areaCode}.json`,{cache:'no-store'});
     if(!tmRes.ok) throw new Error(`水位データ HTTP ${tmRes.status}`);
     const tmJson=await tmRes.json();
 
@@ -2288,19 +2300,21 @@ async function fetchRiverData(){
     /* 3. 各twnCdのGeoJSON取得（座標のため）→ 現在表示範囲に絞る */
     const b=map.getBounds();
     const coordMap={}; /* obsFcd → [lng,lat] */
-    const twnCdArr=[...twnCds].slice(0,20); /* 最大20町 */
-    await Promise.allSettled(twnCdArr.map(async tc=>{
-      try{
-        const r=await fetch(_rp(`${KAWABOU}/gjson/obs/${dp}/${tp}/stg/${tc}.json`),{cache:'no-store'});
-        if(!r.ok) return;
-        const gj=await r.json();
-        for(const f of (gj.features||[])){
-          const fcd=f.properties?.obsFcd;
-          const c=f.geometry?.coordinates;
-          if(fcd&&c) coordMap[fcd]=c; /* [lng,lat] */
-        }
-      }catch{}
-    }));
+    const twnCdArr=[...twnCds].slice(0,12); /* 最大12町（3件×4バッチ） */
+    for(let bi=0;bi<twnCdArr.length;bi+=3){
+      await Promise.allSettled(twnCdArr.slice(bi,bi+3).map(async tc=>{
+        try{
+          const r=await rpFetch(`${KAWABOU}/gjson/obs/${dp}/${tp}/stg/${tc}.json`,{cache:'no-store'});
+          if(!r.ok) return;
+          const gj=await r.json();
+          for(const f of (gj.features||[])){
+            const fcd=f.properties?.obsFcd;
+            const c=f.geometry?.coordinates;
+            if(fcd&&c) coordMap[fcd]=c;
+          }
+        }catch{}
+      }));
+    }
 
     /* 4. マーカー配置 */
     let count=0;
@@ -2351,39 +2365,29 @@ async function fetchRiverData(){
 async function showRiverChart(obsFcd,datePart,hours,stationName){
   const w=openChartWindow(`${stationName} 水位(過去${hours}h)`);
   try{
-    /* 川の防災情報 水位時系列: /tmlist/stg/{YYYYMMDD}/{HHMM}/{obsFcd}.json */
-    /* 過去N時間分を10分間隔で集める */
-    const jst=d=>new Date(d.getTime()+9*3600000);
-    const now=new Date();
-    const p=n=>String(n).padStart(2,'0');
-    const times=[]; /* 新しい順に最大hours*6個 */
-    const base=new Date(now);
-    base.setMinutes(Math.floor(base.getMinutes()/10)*10,0,0);
-    for(let i=0;i<hours*6;i++){
-      const t=new Date(base-i*10*60000);
-      const jt=jst(t);
-      times.push({
-        dp:`${jt.getUTCFullYear()}${p(jt.getUTCMonth()+1)}${p(jt.getUTCDate())}`,
-        tp:`${p(jt.getUTCHours())}${p(Math.floor(jt.getUTCMinutes()/10)*10)}`,
-        label:`${p((jt.getUTCHours())%24)}:${p(jt.getUTCMinutes())}`
-      });
+    /* tmlist/{dp}/{tp}/{obsFcd}.json は当該時刻までの時系列データを含む想定 */
+    const ts12=await _getRiverTime();
+    const dp=ts12.slice(0,8), tp=ts12.slice(8,12);
+    const r=await rpFetch(`${KAWABOU}/files/tmlist/stg/${dp}/${tp}/${obsFcd}.json`,{cache:'no-store'});
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const json=await r.json();
+    /* 時系列配列: stgList / tmStgList / data / 配列直接 など複数形式を試みる */
+    const list=json.stgList||json.tmStgList||json.stgTmList||json.list||(Array.isArray(json)?json:null);
+    if(!list||!list.length){w.setError('時系列データなし');return;}
+    /* 直近hours時間分に絞る（obsTimeはJST: YYYYMMDDHHmm） */
+    const nowJst=Date.now()+9*3600000;
+    const cutJst=nowJst-hours*3600000;
+    const labels=[],data=[];
+    for(const pt of list){
+      const ot=String(pt.obsTime||pt.tm||'');
+      if(ot.length<12) continue;
+      const tJst=Date.UTC(+ot.slice(0,4),+ot.slice(4,6)-1,+ot.slice(6,8),+ot.slice(8,10),+ot.slice(10,12));
+      if(tJst<cutJst) continue;
+      labels.push(`${ot.slice(8,10)}:${ot.slice(10,12)}`);
+      const v=pt.stg??pt.suii??pt.value??null;
+      data.push(v!==null&&v!==''?Number(v):null);
     }
-    /* データ取得（各時刻ごとに別ファイル） - 並列で最大N件 */
-    const results=await Promise.allSettled(
-      times.map(t=>fetch(_rp(`${KAWABOU}/files/tmlist/stg/${t.dp}/${t.tp}/${obsFcd}.json`),{cache:'no-store'})
-        .then(r=>r.ok?r.json():null).catch(()=>null))
-    );
-    const labels=[], data=[];
-    times.reverse(); /* 古い順に */
-    results.reverse();
-    results.forEach((r,i)=>{
-      labels.push(times[i].label);
-      if(r.status==='fulfilled'&&r.value!==null){
-        const v=r.value?.stg??r.value?.suii??r.value?.value??null;
-        data.push(v!==null?Number(v):null);
-      }else{ data.push(null); }
-    });
-    if(data.every(v=>v===null)){w.setError('時系列データなし');return;}
+    if(!data.length||data.every(v=>v===null)){w.setError('時系列データなし');return;}
     w.setChart(labels,[{label:'水位(m)',data,type:'line',backgroundColor:'rgba(0,102,255,0.12)',borderColor:'rgba(0,102,255,0.8)',borderWidth:2,fill:true,tension:0.3,pointRadius:2,spanGaps:true}],'国土交通省 川の防災情報',{beginAtZero:false});
   }catch(e){ w.setError(`取得失敗: ${e.message}`); }
 }
