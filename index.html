@@ -1647,7 +1647,7 @@ function showAmedasDetail(s){
   document.getElementById('amRain10m').textContent=s.d.precipitation10m?`${s.d.precipitation10m[0]}mm`:'--';
   document.getElementById('amRain24h').textContent=s.d.precipitation24h?`${s.d.precipitation24h[0]}mm`:'--';
   document.getElementById('amWind').textContent=s.d.wind?`${s.d.wind[0]}m/s`:'--';
-  document.getElementById('amWindDir').textContent=s.d.wind?(WIND_DIR[s.d.wind[1]]||'--'):'--';
+  document.getElementById('amWindDir').textContent=s.d.windDirection?(WIND_DIR[s.d.windDirection[0]]||'--'):'--';
   document.getElementById('amSnow').textContent=s.d.snow?`${s.d.snow[0]}cm`:'--';
   document.getElementById('amCellTemp').onclick=()=>fetchAmedasChart('temp','過去24時間の気温');
   document.getElementById('amCellHumid').onclick=()=>fetchAmedasChart('humid','過去24時間の湿度');
@@ -1725,7 +1725,7 @@ const AM_CHART_VARS={
   temp:    {field:'temp',            agg:'last',   idx:0,col:'rgba(255,100,0,0.8)', type:'line',files:8},
   humid:   {field:'humidity',        agg:'last',   idx:0,col:'rgba(0,160,200,0.8)',type:'line',files:8},
   wind:    {field:'wind',            agg:'avg',    idx:0,col:'rgba(80,180,0,0.8)', type:'line',files:8},
-  winddir: {field:'wind',            agg:'dir_hist',idx:1,col:'rgba(150,100,220,0.7)',type:'bar',files:8},
+  winddir: {field:'windDirection',   agg:'dir_hist',idx:0,col:'rgba(150,100,220,0.7)',type:'bar',files:8},
   snow:    {field:'snow',            agg:'last',   idx:0,col:'rgba(150,200,255,0.7)',type:'bar',files:8},
 };
 
