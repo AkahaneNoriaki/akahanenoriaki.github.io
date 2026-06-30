@@ -609,9 +609,6 @@ html, body { height:100%; margin:0; }
         <button class="s-btn" id="btnWx">
           <span class="ico">🌤</span>天気
         </button>
-        <button class="s-btn" id="btnKiki">
-          <span class="ico">🚨</span>危機管理
-        </button>
       </div>
     </div>
 
@@ -2322,20 +2319,7 @@ function closeWxPanel(){
 
 document.getElementById('btnWx').onclick=()=>{ wxOpen?closeWxPanel():openWxPanel(); };
 
-/* ─── 危機管理モード ─── */
-const KIKI_LAYERS=['land','flood','river'];
-let kikiMode=false;
-document.getElementById('btnKiki').onclick=()=>{
-  kikiMode=!kikiMode;
-  document.getElementById('btnKiki').classList.toggle('on', kikiMode);
-  KIKI_LAYERS.forEach(key=>{
-    const chk=document.getElementById(WX_CHK_MAP[key]);
-    if(!chk||chk.checked===kikiMode) return;
-    chk.checked=kikiMode;
-    wxLayerState[key].on=kikiMode;
-    wxApplyLayerState(key);
-  });
-};
+
 document.getElementById('wxClose').onclick=closeWxPanel;
 document.getElementById('wxRefresh').onclick=()=>{
   const ll=me?me.getLatLng():map.getCenter();
