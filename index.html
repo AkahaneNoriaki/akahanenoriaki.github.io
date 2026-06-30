@@ -669,14 +669,13 @@ html, body { height:100%; margin:0; }
       <div id="wxLayers">
         <label class="wx-chk-item" id="lblLRain"><input type="checkbox" id="chkLRain"><span class="ico">🌧</span><span>レーダー雨量</span></label>
         <label class="wx-chk-item" id="lblLRainAnim"><input type="checkbox" id="chkLRainAnim"><span class="ico">🌀</span><span>雨雲の動き</span></label>
-        <label class="wx-chk-item" id="lblLLand"><input type="checkbox" id="chkLLand"><span class="ico">⛰</span><span>土砂危険</span></label>
-        <label class="wx-chk-item" id="lblLFlood"><input type="checkbox" id="chkLFlood"><span class="ico">🌊</span><span>浸水危険</span></label>
-        <label class="wx-chk-item" id="lblLRiver"><input type="checkbox" id="chkLRiver"><span class="ico">🏞</span><span>河川危険度</span></label>
+        <label class="wx-chk-item" id="lblLKikendo"><input type="checkbox" id="chkLKikendo"><span class="ico">⚠</span><span>危険度</span></label>
         <label class="wx-chk-item" id="lblLRiverLevel"><input type="checkbox" id="chkLRiverLevel"><span class="ico">💧</span><span>水位観測</span></label>
         <label class="wx-chk-item" id="lblLAmedas"><input type="checkbox" id="chkLAmedas"><span class="ico">📡</span><span>アメダス</span></label>
       </div>
       <div id="wxRiver" style="display:none;font-size:10px;color:#aaa;padding:3px 6px;border-top:1px solid #444;"></div>
       <div id="rainAnimStatus" style="display:none;font-size:10px;color:#aaa;padding:3px 6px;border-top:1px solid #444;"></div>
+      <div id="wxKikendo" style="display:none;font-size:10px;color:#aaa;padding:3px 6px;border-top:1px solid #444;"></div>
       <div id="wxAmedas"></div>
     </div>
   </div>
@@ -1980,15 +1979,12 @@ function jmaTime(intervalMin=5,lagMin=5){
 }
 
 const WX_LAYER_DEFS={
-  rain:  {type:'nowc',zoom:10,tf:['targetTimes_N1.json'],url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/hrpns/{z}/{x}/{y}.png`},
-  land:  {type:'risk',zoom:9, tf:['targetTimes.json'],   url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/risk/${bt}/none/${vt}/surf/land/{z}/{x}/{y}.png`},
-  flood: {type:'risk',zoom:9, tf:['targetTimes.json'],   url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/risk/${bt}/none/${vt}/surf/inund/{z}/{x}/{y}.png`},
-  river: {type:'risk',zoom:9, tf:['targetTimes.json'],   url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/risk/${bt}/none/${vt}/surf/flood/{z}/{x}/{y}.png`},
+  rain: {type:'nowc',zoom:10,tf:['targetTimes_N1.json'],url:(bt,vt)=>`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/hrpns/{z}/{x}/{y}.png`},
 };
 const wxLayerState={};
 Object.keys(WX_LAYER_DEFS).forEach(k=>{ wxLayerState[k]={on:false,layer:null,timer:null,errCount:0}; });
-const WX_CHK_MAP={rain:'chkLRain',land:'chkLLand',flood:'chkLFlood',river:'chkLRiver'};
-const WX_LBL_MAP={rain:'lblLRain',land:'lblLLand',flood:'lblLFlood',river:'lblLRiver'};
+const WX_CHK_MAP={rain:'chkLRain'};
+const WX_LBL_MAP={rain:'lblLRain'};
 
 async function getJmaValidTime(type,candidates){
   for(const file of (candidates||['targetTimes_N1.json'])){
@@ -2116,6 +2112,61 @@ document.getElementById('chkLRainAnim').addEventListener('change',function(){
     if(!_rainAnim.refreshTimer) _rainAnim.refreshTimer=setInterval(_startRainAnim,10*60*1000);
   } else {
     _stopRainAnim();
+  }
+});
+
+/* ─── 危険度メッシュ（長野県 河川砂防情報ステーション KikendoMesh） ─── */
+let _kikendoOverlays=[], _kikendoOn=false, _kikendoTimer=null;
+
+async function _loadKikendoMesh(){
+  _kikendoOverlays.forEach(ov=>map.removeLayer(ov)); _kikendoOverlays=[];
+  const lbl=document.getElementById('lblLKikendo');
+  const statusDiv=document.getElementById('wxKikendo');
+  statusDiv.style.display='block';
+  statusDiv.style.color='#aaa';
+  statusDiv.textContent='⚠ 危険度取得中...';
+  try{
+    const idx=await fetch(`${SABO_GIS}/gisdata/mesh/KikendoMesh.json`,{cache:'no-store'}).then(r=>r.json());
+    const latest=idx.latest; /* "2026-06-30-23-40" */
+    const parts=latest.split('-'); /* ["2026","06","30","23","40"] */
+    const ymd=parts[0]+parts[1]+parts[2];
+    const hhmm=parts[3]+parts[4];
+    const tilesUrl=`${SABO_GIS}/gisdata/mesh/kikendo/${ymd}/${hhmm}/mesh_tiles.json`;
+    const tilesRes=await fetch(tilesUrl,{cache:'no-store'});
+    if(!tilesRes.ok){
+      statusDiv.textContent='⚠ 危険域なし（平常）';
+      if(lbl) lbl.style.borderColor='';
+      return;
+    }
+    const tilesJson=await tilesRes.json();
+    const baseUrl=`${SABO_GIS}/gisdata/mesh/kikendo/${ymd}/${hhmm}/`;
+    for(const tile of (tilesJson.tiles||[])){
+      const {north,south,east,west}=tile.latLon;
+      const ov=L.imageOverlay(baseUrl+tile.file,[[south,west],[north,east]],{opacity:0.7,interactive:false});
+      ov.addTo(map);
+      _kikendoOverlays.push(ov);
+    }
+    statusDiv.textContent=`⚠ 危険度メッシュ ${parts[3]}:${parts[4]} 更新 (${_kikendoOverlays.length}タイル)`;
+    if(lbl) lbl.style.borderColor='';
+  }catch(e){
+    console.error('[Kikendo]',e);
+    statusDiv.style.color='#ff6b6b';
+    statusDiv.textContent='❌ 危険度取得失敗';
+    if(lbl) lbl.style.borderColor='#ff3b30';
+  }
+}
+
+document.getElementById('chkLKikendo').addEventListener('change',function(){
+  _kikendoOn=this.checked;
+  document.getElementById('lblLKikendo').classList.toggle('active',_kikendoOn);
+  if(_kikendoOn){
+    _loadKikendoMesh();
+    if(!_kikendoTimer) _kikendoTimer=setInterval(_loadKikendoMesh,10*60*1000);
+  } else {
+    clearInterval(_kikendoTimer); _kikendoTimer=null;
+    _kikendoOverlays.forEach(ov=>map.removeLayer(ov)); _kikendoOverlays=[];
+    document.getElementById('wxKikendo').style.display='none';
+    document.getElementById('lblLKikendo').style.borderColor='';
   }
 });
 
