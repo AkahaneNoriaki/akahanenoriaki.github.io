@@ -2208,6 +2208,8 @@ document.getElementById('wxRefresh').onclick=()=>{
 
 /* ─── 河川水位観測（国土交通省 川の防災情報 内部API） ─── */
 const KAWABOU='https://www.river.go.jp/kawabou/file';
+/* CORSプロキシ: river.go.jp は CORS ヘッダーを返さないため経由する */
+const _rp=url=>`https://corsproxy.io/?${encodeURIComponent(url)}`;
 let riverOn=false, riverMarkers=[], riverTimer=null;
 
 /* 都道府県コード → 川の防災情報エリアコード（北海道以外は prefCode+"01"） */
@@ -2223,7 +2225,7 @@ async function _getRiverAreaCode(lat,lng){
 /* 現在時刻を10分丸めで取得 */
 async function _getRiverTime(){
   try{
-    const r=await fetch(`${KAWABOU}/system/rwCrntTime.json`,{cache:'no-store'});
+    const r=await fetch(_rp(`${KAWABOU}/system/rwCrntTime.json`),{cache:'no-store'});
     if(r.ok){const d=await r.json(); if(d.crntRwTime) return d.crntRwTime.slice(0,12);}
   }catch{}
   /* フォールバック: JST現在時刻を10分切り捨て */
@@ -2256,7 +2258,7 @@ async function fetchRiverData(){
     const dp=ts12.slice(0,8), tp=ts12.slice(8,12);
 
     /* 1. 観測所メタデータ（名前・警戒水位等） */
-    const obsRes=await fetch(`${KAWABOU}/files/obslist/twninfo/obs/stg/${areaCode}.json`,{cache:'no-store'});
+    const obsRes=await fetch(_rp(`${KAWABOU}/files/obslist/twninfo/obs/stg/${areaCode}.json`),{cache:'no-store'});
     if(!obsRes.ok) throw new Error(`観測所情報 HTTP ${obsRes.status}`);
     const obsJson=await obsRes.json();
 
@@ -2271,7 +2273,7 @@ async function fetchRiverData(){
     }
 
     /* 2. 現在水位 */
-    const tmRes=await fetch(`${KAWABOU}/files/obslist/twninfo/tm/stg/${areaCode}.json`,{cache:'no-store'});
+    const tmRes=await fetch(_rp(`${KAWABOU}/files/obslist/twninfo/tm/stg/${areaCode}.json`),{cache:'no-store'});
     if(!tmRes.ok) throw new Error(`水位データ HTTP ${tmRes.status}`);
     const tmJson=await tmRes.json();
 
@@ -2289,7 +2291,7 @@ async function fetchRiverData(){
     const twnCdArr=[...twnCds].slice(0,20); /* 最大20町 */
     await Promise.allSettled(twnCdArr.map(async tc=>{
       try{
-        const r=await fetch(`${KAWABOU}/gjson/obs/${dp}/${tp}/stg/${tc}.json`,{cache:'no-store'});
+        const r=await fetch(_rp(`${KAWABOU}/gjson/obs/${dp}/${tp}/stg/${tc}.json`),{cache:'no-store'});
         if(!r.ok) return;
         const gj=await r.json();
         for(const f of (gj.features||[])){
@@ -2368,7 +2370,7 @@ async function showRiverChart(obsFcd,datePart,hours,stationName){
     }
     /* データ取得（各時刻ごとに別ファイル） - 並列で最大N件 */
     const results=await Promise.allSettled(
-      times.map(t=>fetch(`${KAWABOU}/files/tmlist/stg/${t.dp}/${t.tp}/${obsFcd}.json`,{cache:'no-store'})
+      times.map(t=>fetch(_rp(`${KAWABOU}/files/tmlist/stg/${t.dp}/${t.tp}/${obsFcd}.json`),{cache:'no-store'})
         .then(r=>r.ok?r.json():null).catch(()=>null))
     );
     const labels=[], data=[];
