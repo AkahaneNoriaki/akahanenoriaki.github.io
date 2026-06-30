@@ -82,6 +82,32 @@ html, body { height:100%; margin:0; }
 .s-btn:hover  { background:#ebebeb; }
 .s-btn.on { background:#fff0f0; border-color:#ffaaaa; color:#cc0000; }
 .s-btn.hi { background:#eef4ff; border-color:#99bbff; color:#0044cc; }
+.s-btn.kiki-active { background:#c62828; border-color:#c62828; color:#fff; }
+
+/* ─── 危機管理バナー ─── */
+#kikiBar {
+  position:fixed; top:0; left:0; right:0; z-index:9999;
+  background:linear-gradient(90deg,#b71c1c,#e53935);
+  color:#fff; display:none; align-items:center; gap:8px;
+  padding:5px 12px; font-family:sans-serif; font-size:12px; font-weight:bold;
+  box-shadow:0 2px 10px rgba(0,0,0,0.35);
+}
+#kikiBar.on { display:flex; }
+#kikiBar .kb-pulse {
+  width:9px; height:9px; border-radius:50%; background:#ff8a80; flex-shrink:0;
+  animation:kb-blink 1.4s ease-in-out infinite;
+}
+@keyframes kb-blink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
+#kikiBar .kb-chips { display:flex; gap:5px; flex:1; flex-wrap:wrap; }
+.kb-chip { font-size:10px; background:rgba(255,255,255,0.2); border-radius:10px; padding:2px 7px; }
+#kikiBar .kb-time { font-size:10px; color:rgba(255,255,255,0.7); white-space:nowrap; }
+#kikiBar .kb-off, #kikiBar .kb-refresh {
+  background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4);
+  border-radius:12px; color:#fff; font-size:11px; padding:2px 9px;
+  cursor:pointer; flex-shrink:0; white-space:nowrap;
+}
+#kikiBar .kb-refresh { padding:2px 7px; }
+body.kiki-mode #map { top:32px; }
 
 .s-slider-row { margin-top:10px; display:none; }
 .s-slider-row input { width:100%; }
@@ -456,6 +482,19 @@ html, body { height:100%; margin:0; }
 </head>
 
 <body>
+<!-- 危機管理バナー -->
+<div id="kikiBar">
+  <div class="kb-pulse"></div>
+  <span>🚨 危機管理モード</span>
+  <div class="kb-chips">
+    <span class="kb-chip">⛰ 土砂</span>
+    <span class="kb-chip">🌊 浸水</span>
+    <span class="kb-chip">🏞 河川</span>
+  </div>
+  <span class="kb-time" id="kikiUpdated"></span>
+  <button class="kb-refresh" id="kikiRefreshBtn">🔄</button>
+  <button class="kb-off" id="kikiOffBtn">✕ 解除</button>
+</div>
 <div id="map"></div>
 <div id="toast"></div>
 <div id="cacheBar"></div>
@@ -607,6 +646,9 @@ html, body { height:100%; margin:0; }
       <div class="s-grid">
         <button class="s-btn" id="btnWx">
           <span class="ico">🌤</span>天気
+        </button>
+        <button class="s-btn" id="btnKiki">
+          <span class="ico">🚨</span>危機管理
         </button>
       </div>
     </div>
@@ -2159,19 +2201,75 @@ async function fetchWeather(lat,lng){
   }catch(e){ console.error('[fetchWeather]',e); document.getElementById('wxLoading').textContent='取得に失敗しました'; }
 }
 
+let wxPanelTimer=null;
 function openWxPanel(){
   wxOpen=true; wxPanel.style.display='flex';
   document.getElementById('btnWx').classList.add('hi');
   const ll=me?me.getLatLng():map.getCenter();
   fetchWeather(ll.lat,ll.lng);
   closeSheet();
+  clearInterval(wxPanelTimer);
+  wxPanelTimer=setInterval(()=>{ const l=me?me.getLatLng():map.getCenter(); fetchWeather(l.lat,l.lng); },10*60*1000);
 }
 function closeWxPanel(){
   wxOpen=false; wxPanel.style.display='none';
   document.getElementById('btnWx').classList.remove('hi');
+  clearInterval(wxPanelTimer); wxPanelTimer=null;
 }
 
 document.getElementById('btnWx').onclick=()=>{ wxOpen?closeWxPanel():openWxPanel(); };
+
+/* ─── 危機管理モード ─── */
+const KIKI_LAYERS=['land','flood','river'];
+let kikiMode=false, kikiTimer=null;
+
+function setKikiLayer(key,on){
+  const chk=document.getElementById(WX_CHK_MAP[key]);
+  if(!chk||chk.checked===on) return;
+  chk.checked=on;
+  wxLayerState[key].on=on;
+  wxApplyLayerState(key);
+  document.getElementById(WX_LBL_MAP[key]).classList.toggle('active',on);
+}
+function updateKikiTime(){
+  const now=new Date(), p=n=>String(n).padStart(2,'0');
+  const el=document.getElementById('kikiUpdated');
+  if(el) el.textContent=`${p(now.getHours())}:${p(now.getMinutes())} 更新`;
+}
+async function kikiRefreshAll(){
+  const btn=document.getElementById('kikiRefreshBtn');
+  if(btn){ btn.style.opacity='0.4'; btn.style.pointerEvents='none'; }
+  /* ハザードレイヤ再取得 */
+  await Promise.all(KIKI_LAYERS.map(k=>wxUpdateLayer(k)));
+  /* AMeDAS更新 */
+  if(amedasOn) fetchAmedas();
+  /* 気象情報更新 */
+  const ll=me?me.getLatLng():map.getCenter();
+  fetchWeather(ll.lat,ll.lng);
+  updateKikiTime();
+  if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
+}
+function enterKikiMode(){
+  kikiMode=true;
+  KIKI_LAYERS.forEach(k=>setKikiLayer(k,true));
+  document.getElementById('kikiBar').classList.add('on');
+  document.body.classList.add('kiki-mode');
+  document.getElementById('btnKiki').classList.add('kiki-active');
+  updateKikiTime();
+  if(!wxOpen) openWxPanel();
+  kikiTimer=setInterval(kikiRefreshAll, 5*60*1000);
+}
+function exitKikiMode(){
+  kikiMode=false;
+  KIKI_LAYERS.forEach(k=>setKikiLayer(k,false));
+  document.getElementById('kikiBar').classList.remove('on');
+  document.body.classList.remove('kiki-mode');
+  document.getElementById('btnKiki').classList.remove('kiki-active');
+  clearInterval(kikiTimer); kikiTimer=null;
+}
+document.getElementById('btnKiki').onclick=()=>{ kikiMode?exitKikiMode():enterKikiMode(); };
+document.getElementById('kikiOffBtn').onclick=exitKikiMode;
+document.getElementById('kikiRefreshBtn').onclick=kikiRefreshAll;
 document.getElementById('wxClose').onclick=closeWxPanel;
 document.getElementById('wxRefresh').onclick=()=>{
   const ll=me?me.getLatLng():map.getCenter();
