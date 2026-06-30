@@ -2224,22 +2224,10 @@ async function rpFetch(url,opts){
   throw new Error('プロキシ接続失敗');
 }
 let riverOn=false, riverMarkers=[], riverTimer=null;
-let _saboGeo=null; /* SuiiPoint.geo.json キャッシュ */
 const STAGE_COL={'-3':'#888','-2':'#888','-1':'#888','0':'#2e7d32','1':'#f9a825','2':'#e65100','3':'#c62828','4':'#6a0080'};
 
 function _stageColor(level){ return STAGE_COL[String(level)]||'#888'; }
 function _stageLabel(level){ return(['平水','待機','注意','避難','危険'][level]||''); }
-
-/* GeoJSON feature.properties → station key (e.g. "21546_4_4") */
-function _featureKey(props){
-  /* direct key field */
-  for(const k of ['key','KEY','id','ID','StationKey','stationKey']) if(props[k]) return String(props[k]);
-  /* construct from area + station number */
-  const ac=props.AreaCd||props.AREA_CD||props.areaCd||props.area_cd||props.AreaCode||props.AREA_CODE;
-  const tn=props.TelmNo||props.TELM_NO||props.telmNo||props.StationNo||props.stationNo||props.SuiiNo||props.SUII_NO;
-  if(ac&&tn) return `${ac}_4_${tn}`;
-  return null;
-}
 
 async function fetchRiverData(){
   riverMarkers.forEach(mk=>map.removeLayer(mk)); riverMarkers=[];
@@ -2249,39 +2237,29 @@ async function fetchRiverData(){
   div.textContent='💧 水位データ取得中...';
   div.style.display='block';
   try{
-    /* 1. 観測所GeoJSON（座標）- CORS: * なので直接取得、キャッシュ利用 */
-    if(!_saboGeo){
-      const r=await fetch(`${SABO_GIS}/gisdata/river/SuiiPoint.geo.json`,{cache:'no-store'});
-      if(!r.ok) throw new Error(`観測所GeoJSON HTTP ${r.status}`);
-      _saboGeo=await r.json();
-      if(_saboGeo.features?.length>0) console.log('[River] GeoJSON props sample:',_saboGeo.features[0].properties);
-    }
+    /* 座標・観測所名・現在水位がすべて1ファイルに含まれる（CORS: * で直接取得） */
+    const r=await fetch(`${SABO_GIS}/gisdata/river/SuiiPoint.geo.json`,{cache:'no-store'});
+    if(!r.ok) throw new Error(`GeoJSON HTTP ${r.status}`);
+    const gj=await r.json();
 
-    /* 2. 現在水位（1リクエスト） */
-    const cr=await rpFetch(`${SABO_BASE}/dyn/json/dat/latest/river_current.json`,{cache:'no-store'});
-    if(!cr.ok) throw new Error(`現在水位 HTTP ${cr.status}`);
-    const crJson=await cr.json();
-    const stageMap=crJson.data?.stage||{};
-
-    /* 3. 表示範囲内マーカー配置 */
     const b=map.getBounds();
     let count=0;
-    for(const feat of (_saboGeo.features||[])){
+    for(const feat of (gj.features||[])){
       const c=feat.geometry?.coordinates;
       if(!c) continue;
       const lng=c[0], lat=c[1];
       if(!b.contains([lat,lng])) continue;
       const props=feat.properties||{};
-      const key=_featureKey(props);
+      const key=props.id;
       if(!key) continue;
-      const sd=stageMap[key];
+      const sd=props.data;                   /* 現在水位データ（GeoJSON内に埋め込み） */
       const level=sd?.item_10?.level??-1;
       const value=sd?.item_10?.value;
-      const obsTime=sd?.time; /* "2026-06-30-20-40" */
+      const obsTime=sd?.time;                /* "2026-06-30-20-40" */
       const col=_stageColor(level);
       const levelStr=value!=null?`${Number(value).toFixed(2)}m`:'--';
-      const name=props.name||props.NAME||props.ObsNm||props.obsNm||props.StationName||props.stationName||key;
-      const river=props.river||props.RIVER||props.RiverNm||props.riverNm||props.RiverName||'';
+      const name=props.nm||key;
+      const river=props.rv||'';
       const timeStr=obsTime?`${obsTime.slice(11,13)}:${obsTime.slice(14,16)}`:'';
 
       const mk=L.marker([lat,lng],{icon:L.divIcon({
