@@ -894,7 +894,7 @@ async function searchAddr(){
   if(!q) return;
   toast('住所を検索中...',5000);
   try{
-    const res=await fetch(`https://api.qchizu.jp/geocode.php?address=${encodeURIComponent(q)}`);
+    const res=await rpFetch(`https://api.qchizu.jp/geocode.php?address=${encodeURIComponent(q)}`);
     const data=await res.json();
     if(!data.results||!data.results.length){ toast('住所が見つかりませんでした',3000); return; }
     const r=data.results[0].result;
