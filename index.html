@@ -669,7 +669,6 @@ html, body { height:100%; margin:0; }
         <label class="wx-chk-item" id="lblLKikendo"><input type="checkbox" id="chkLKikendo"><span class="ico">⚠</span><span>危険度</span></label>
         <label class="wx-chk-item" id="lblLRiverLevel"><input type="checkbox" id="chkLRiverLevel"><span class="ico">💧</span><span>水位観測</span></label>
         <label class="wx-chk-item" id="lblLAmedas"><input type="checkbox" id="chkLAmedas"><span class="ico">📡</span><span>アメダス</span></label>
-        <div class="wx-chk-item" id="lblLFloodRisk" onclick="toggleFloodRisk()" style="cursor:pointer"><span class="ico">🌊</span><span>洪水危険度</span></div>
       </div>
       <div id="wxRiver" style="display:none;font-size:10px;color:#aaa;padding:3px 6px;border-top:1px solid #444;"></div>
       <div id="rainAnimStatus" style="display:none;font-size:10px;color:#aaa;padding:3px 6px;border-top:1px solid #444;"></div>
@@ -2534,12 +2533,5 @@ document.getElementById('wxCollapseBtn').addEventListener('click',()=>{
 })();
 </script>
 
-<script>
-function toggleFloodRisk(){
-  const c=map.getCenter(), z=map.getZoom();
-  const url=`https://www.jma.go.jp/bosai/risk/#zoom:${z}/lat:${c.lat.toFixed(6)}/lon:${c.lng.toFixed(6)}/colordepth:deep/elements:flood`;
-  window.open(url,'_blank','noopener');
-}
-</script>
 </body>
 </html>
