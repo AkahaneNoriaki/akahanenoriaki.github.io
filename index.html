@@ -916,7 +916,7 @@ async function searchAddr(){
   }catch(e){ toast('検索に失敗しました',3000); console.error(e); }
 }
 document.getElementById('btnAddrSearch').onclick=searchAddr;
-document.getElementById('addrInput').addEventListener('keydown',e=>{ if(e.key==='Enter') searchAddr(); });
+document.getElementById('addrInput').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.isComposing) searchAddr(); });
 document.getElementById('btnAddrClear').onclick=()=>{
   if(searchMarker){ map.removeLayer(searchMarker); searchMarker=null; }
   map.closePopup();
