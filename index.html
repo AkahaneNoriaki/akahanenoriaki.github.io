@@ -894,17 +894,19 @@ async function searchAddr(){
   if(!q) return;
   toast('住所を検索中...',5000);
   try{
-    const res=await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(q)}`);
+    const res=await fetch(`https://api.qchizu.jp/geocode.php?address=${encodeURIComponent(q)}`);
     const data=await res.json();
-    if(!data.length){ toast('住所が見つかりませんでした',3000); return; }
-    const [lng,lat]=data[0].geometry.coordinates;
-    const addrStr=data[0].properties.title||q;
+    if(!data.results||!data.results.length){ toast('住所が見つかりませんでした',3000); return; }
+    const r=data.results[0].result;
+    const lat=r.lat, lng=r.lon;
+    const addrStr=r.output||q;
+    const qlink=data.results[0].links?.qchizu_map||'https://qchizu.jp/';
     map.setView([lat,lng],15);
     if(searchMarker) map.removeLayer(searchMarker);
     searchMarker=L.marker([lat,lng],{
       icon:L.divIcon({html:'<div style="font-size:28px;margin:-28px 0 0 -14px">📍</div>',iconSize:[28,28],className:''})
     }).addTo(map)
-      .bindPopup(`<div style="font-size:12px;font-weight:bold">${addrStr}</div>`)
+      .bindPopup(`<div style="font-size:12px;font-weight:bold">${addrStr}</div><div style="font-size:11px;margin-top:4px"><a href="${qlink}" target="_blank" rel="noopener">全国Q地図で開く</a></div>`)
       .openPopup();
     document.getElementById('btnAddrClear').style.display='block';
     toast('住所が見つかりました',2000);
