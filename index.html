@@ -2354,12 +2354,12 @@ async function rpFetch(url,opts){
   throw new Error('プロキシ接続失敗');
 }
 let riverOn=false, riverMarkers=[], riverTimer=null;
-let _riverGeoLayer=null, _riverGeoJson=null, _riverStageMap={};
+let _riverGeoLayer=null, _riverGeoJson=null, _riverGeoFetch=null, _riverStageMap={};
 
 async function _loadRiverGeo(){
   if(_riverGeoJson) return _riverGeoJson;
-  const r=await fetch('data/rivers_nagano.geojson');
-  _riverGeoJson=await r.json();
+  if(!_riverGeoFetch) _riverGeoFetch=fetch('data/rivers_nagano.geojson').then(r=>{if(!r.ok)throw new Error(`河川GeoJSON ${r.status}`);return r.json();});
+  _riverGeoJson=await _riverGeoFetch;
   return _riverGeoJson;
 }
 
@@ -2376,7 +2376,7 @@ function _renderRiverLines(){
       }
     }).addTo(map);
     _riverGeoLayer.bringToBack();
-  });
+  }).catch(e=>console.error('[RiverLines]',e));
 }
 const STAGE_COL={'-3':'#888','-2':'#888','-1':'#888','0':'#2e7d32','1':'#f9a825','2':'#e65100','3':'#c62828','4':'#6a0080'};
 
