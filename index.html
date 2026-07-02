@@ -2077,7 +2077,7 @@ async function _startRainAnim(){
     _rainAnim.frames=[...obsFrames,...fcFrames];
     _rainAnim.idx=0;
     if(_rainAnim.frameTimer) clearInterval(_rainAnim.frameTimer);
-    _rainAnim.frameTimer=setInterval(_stepRainAnim,700);
+    _rainAnim.frameTimer=setInterval(_stepRainAnim,1500);
     _stepRainAnim();
     if(lbl) lbl.style.borderColor='';
   }catch(e){
