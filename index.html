@@ -2354,6 +2354,30 @@ async function rpFetch(url,opts){
   throw new Error('プロキシ接続失敗');
 }
 let riverOn=false, riverMarkers=[], riverTimer=null;
+let _riverGeoLayer=null, _riverGeoJson=null, _riverStageMap={};
+
+async function _loadRiverGeo(){
+  if(_riverGeoJson) return _riverGeoJson;
+  const r=await fetch('data/rivers_nagano.geojson');
+  _riverGeoJson=await r.json();
+  return _riverGeoJson;
+}
+
+function _renderRiverLines(){
+  if(_riverGeoLayer){ map.removeLayer(_riverGeoLayer); _riverGeoLayer=null; }
+  if(!riverOn) return;
+  _loadRiverGeo().then(gj=>{
+    _riverGeoLayer=L.geoJSON(gj,{
+      style:feat=>{
+        const name=feat.properties.name;
+        const stage=_riverStageMap[name];
+        if(stage==null||stage<0) return {color:'#90caf9',weight:1,opacity:0.35};
+        return {color:_stageColor(stage),weight:stage>=2?3:2,opacity:0.85};
+      }
+    }).addTo(map);
+    _riverGeoLayer.bringToBack();
+  });
+}
 const STAGE_COL={'-3':'#888','-2':'#888','-1':'#888','0':'#2e7d32','1':'#f9a825','2':'#e65100','3':'#c62828','4':'#6a0080'};
 
 function _stageColor(level){ return STAGE_COL[String(level)]||'#888'; }
@@ -2371,6 +2395,16 @@ async function fetchRiverData(){
     const r=await fetch(`${SABO_GIS}/gisdata/river/SuiiPoint.geo.json`,{cache:'no-store'});
     if(!r.ok) throw new Error(`GeoJSON HTTP ${r.status}`);
     const gj=await r.json();
+
+    /* 全ステーションから河川ステージマップを構築（表示範囲外も含む） */
+    _riverStageMap={};
+    for(const feat of (gj.features||[])){
+      const rv=feat.properties?.rv;
+      const level=feat.properties?.data?.item_10?.level??-1;
+      if(!rv) continue;
+      if(_riverStageMap[rv]==null||level>_riverStageMap[rv]) _riverStageMap[rv]=level;
+    }
+    _renderRiverLines();
 
     const b=map.getBounds();
     let count=0;
@@ -2486,7 +2520,7 @@ document.getElementById('chkLRiverLevel').addEventListener('change',function(){
   riverOn=this.checked;
   document.getElementById('lblLRiverLevel').classList.toggle('active',riverOn);
   if(riverOn){ fetchRiverData(); if(!riverTimer) riverTimer=setInterval(fetchRiverData,10*60*1000); }
-  else{ clearInterval(riverTimer); riverTimer=null; riverMarkers.forEach(mk=>map.removeLayer(mk)); riverMarkers=[]; document.getElementById('wxRiver').style.display='none'; }
+  else{ clearInterval(riverTimer); riverTimer=null; riverMarkers.forEach(mk=>map.removeLayer(mk)); riverMarkers=[]; document.getElementById('wxRiver').style.display='none'; if(_riverGeoLayer){ map.removeLayer(_riverGeoLayer); _riverGeoLayer=null; } _riverStageMap={}; }
 });
 map.on('moveend',()=>{ if(riverOn) fetchRiverData(); });
 
