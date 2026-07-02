@@ -458,6 +458,7 @@ html, body { height:100%; margin:0; }
 
 <body>
 <div id="map"></div>
+<div id="rainAnimBar" style="display:none;position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:8000;background:rgba(0,0,0,0.65);color:#fff;font-size:13px;font-weight:bold;padding:5px 16px;border-radius:20px;pointer-events:none;white-space:nowrap"></div>
 <div id="toast"></div>
 <div id="cacheBar"></div>
 <div id="confirmOverlay">
@@ -2095,14 +2096,14 @@ function _stepRainAnim(){
   if(_rainAnim.layer) map.removeLayer(_rainAnim.layer);
   _rainAnim.layer=newLayer;
   const status=document.getElementById('rainAnimStatus');
-  if(status){
-    const diffMin=Math.round((_parseJmaTime(vt)-_parseJmaTime(bt))/60000);
-    const jstMs=_parseJmaTime(vt)+9*3600000;
-    const jd=new Date(jstMs), p2=n=>String(n).padStart(2,'0');
-    const hhmm=`${p2(jd.getUTCHours())}:${p2(jd.getUTCMinutes())}`;
-    status.textContent=diffMin===0?`🌀 ${hhmm} 観測`:`🌀 ${hhmm} (+${diffMin}分 予測)`;
-    status.style.color=diffMin===0?'#aaa':'#7ec8e3';
-  }
+  const bar=document.getElementById('rainAnimBar');
+  const diffMin=Math.round((_parseJmaTime(vt)-_parseJmaTime(bt))/60000);
+  const jstMs=_parseJmaTime(vt)+9*3600000;
+  const jd=new Date(jstMs), p2=n=>String(n).padStart(2,'0');
+  const hhmm=`${p2(jd.getUTCHours())}:${p2(jd.getUTCMinutes())}`;
+  const txt=diffMin===0?`🌀 ${hhmm} 観測`:`🌀 ${hhmm} (+${diffMin}分 予測)`;
+  if(status){ status.textContent=txt; status.style.color=diffMin===0?'#aaa':'#7ec8e3'; }
+  if(bar){ bar.textContent=txt; bar.style.color=diffMin===0?'#fff':'#7ec8e3'; bar.style.display='block'; }
   _rainAnim.idx=(_rainAnim.idx+1)%_rainAnim.frames.length;
 }
 
@@ -2113,6 +2114,8 @@ function _stopRainAnim(){
   _rainAnim.frames=[]; _rainAnim.idx=0;
   const status=document.getElementById('rainAnimStatus');
   if(status) status.style.display='none';
+  const bar=document.getElementById('rainAnimBar');
+  if(bar) bar.style.display='none';
 }
 
 document.getElementById('chkLRainAnim').addEventListener('change',function(){
