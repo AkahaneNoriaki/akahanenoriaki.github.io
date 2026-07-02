@@ -2097,7 +2097,9 @@ function _stepRainAnim(){
   const status=document.getElementById('rainAnimStatus');
   if(status){
     const diffMin=Math.round((_parseJmaTime(vt)-_parseJmaTime(bt))/60000);
-    const hhmm=`${vt.slice(8,10)}:${vt.slice(10,12)}`;
+    const jstMs=_parseJmaTime(vt)+9*3600000;
+    const jd=new Date(jstMs), p2=n=>String(n).padStart(2,'0');
+    const hhmm=`${p2(jd.getUTCHours())}:${p2(jd.getUTCMinutes())}`;
     status.textContent=diffMin===0?`🌀 ${hhmm} 観測`:`🌀 ${hhmm} (+${diffMin}分 予測)`;
     status.style.color=diffMin===0?'#aaa':'#7ec8e3';
   }
