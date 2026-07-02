@@ -2358,8 +2358,7 @@ let _riverGeoLayer=null, _riverGeoJson=null, _riverGeoFetch=null, _riverStageMap
 
 async function _loadRiverGeo(){
   if(_riverGeoJson) return _riverGeoJson;
-  const _rvUrl=location.hostname==='localhost'?'data/rivers_nagano.geojson':'https://raw.githubusercontent.com/AkahaneNoriaki/akahanenoriaki.github.io/claude/enhance-map-features-XGw7H/data/rivers_nagano.geojson';
-  if(!_riverGeoFetch) _riverGeoFetch=fetch(_rvUrl).then(r=>{if(!r.ok)throw new Error(`河川GeoJSON ${r.status}`);return r.json();});
+  if(!_riverGeoFetch) _riverGeoFetch=fetch('data/rivers_nagano.geojson').then(r=>{if(!r.ok)throw new Error(`河川GeoJSON ${r.status}`);return r.json();});
   _riverGeoJson=await _riverGeoFetch;
   return _riverGeoJson;
 }
