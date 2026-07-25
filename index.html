@@ -456,69 +456,85 @@ html, body { height:100%; margin:0; }
 
 /* ─── 現場掲示板パネル ─────────────────────── */
 #bbsPanel {
-  position:fixed; inset:0; z-index:10000;
-  background:#f7f7f7; display:flex; flex-direction:column;
-  transform:translateX(100%);
-  transition:transform 0.28s cubic-bezier(0.4,0,0.2,1);
-  font-family:sans-serif;
+  position:fixed; top:10px; right:10px; z-index:9100;
+  background:rgba(255,255,255,0.97); border:1px solid rgba(0,0,0,0.13);
+  border-radius:14px; display:none; flex-direction:column;
+  font-family:sans-serif; box-shadow:0 4px 20px rgba(0,0,0,0.18);
+  width:min(300px,calc(100vw - 20px)); max-height:70vh;
+  overflow:hidden; touch-action:none;
 }
-#bbsPanel.open { transform:translateX(0); }
-#bbsHeader {
-  display:flex; align-items:center; padding:12px 14px;
-  border-bottom:1px solid #e8e8e8; gap:8px; flex-shrink:0;
-  background:#fff;
+@media (min-width:768px){ #bbsPanel { right:10px; } }
+#bbsHandle {
+  display:flex; align-items:center;
+  padding:7px 12px 6px; background:#f4f4f4;
+  border-radius:14px 14px 0 0; border-bottom:1px solid #e8e8e8;
+  cursor:grab; user-select:none; -webkit-user-select:none; gap:8px;
 }
-#bbsTitle { font-size:15px; font-weight:bold; flex:1; color:#222; }
-#bbsRefreshBtn, #bbsClose {
-  background:#f0f0f0; border:none; border-radius:50%;
-  width:30px; height:30px; cursor:pointer; font-size:15px;
-  padding:0; line-height:30px; flex-shrink:0;
+#bbsHandle:active { cursor:grabbing; }
+#bbsHandleGrip { display:flex; flex-direction:column; gap:3px; flex-shrink:0; }
+#bbsHandleGrip span { display:block; width:20px; height:2px; background:#bbb; border-radius:1px; }
+#bbsPanelTitle { font-size:11px; color:#888; flex:1; }
+#bbsRefreshBtn, #bbsClose, #bbsCollapseBtn {
+  flex-shrink:0; width:22px; height:22px; background:#ddd; border:none;
+  border-radius:50%; font-size:12px; line-height:22px; text-align:center;
+  cursor:pointer; color:#666; padding:0; -webkit-tap-highlight-color:transparent;
 }
-#bbsTabs { display:flex; border-bottom:1px solid #e8e8e8; flex-shrink:0; background:#fff; }
+#bbsRefreshBtn:active,#bbsClose:active,#bbsCollapseBtn:active { background:#bbb; }
+#bbsCollapseBtn { font-size:10px; transition:transform 0.25s; }
+#bbsPanel.collapsed #bbsCollapseBtn { transform:rotate(180deg); }
+#bbsBody {
+  display:flex; flex-direction:column; overflow:hidden;
+  max-height:calc(70vh - 36px);
+  transition:max-height 0.28s cubic-bezier(0.4,0,0.2,1);
+}
+#bbsPanel.collapsed #bbsBody { max-height:0 !important; overflow:hidden; }
+.bbs-tabs { display:flex; border-bottom:1px solid #eee; flex-shrink:0; }
 .bbs-tab {
-  flex:1; padding:10px; border:none; background:#f8f8f8;
-  font-size:13px; cursor:pointer; border-bottom:2px solid transparent;
+  flex:1; padding:7px 4px; border:none; background:#f8f8f8;
+  font-size:12px; cursor:pointer; border-bottom:2px solid transparent;
+  -webkit-tap-highlight-color:transparent;
 }
 .bbs-tab.active { background:#fff; border-bottom-color:#0066ff; color:#0066ff; font-weight:bold; }
-#bbsTabContent { flex:1; overflow:hidden; display:flex; flex-direction:column; }
-.bbs-pane { flex:1; overflow-y:auto; padding:12px 14px 80px; -webkit-overflow-scrolling:touch; }
+.bbs-pane { overflow-y:auto; -webkit-overflow-scrolling:touch; padding:8px 10px 16px; }
 .bbs-card {
-  border:1px solid #e8e8e8; border-radius:10px; padding:10px 12px;
-  margin-bottom:10px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,0.06);
+  border:1px solid #eee; border-radius:8px; padding:8px 10px;
+  margin-bottom:8px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.05);
 }
-.bbs-card-header { display:flex; align-items:center; gap:6px; margin-bottom:6px; flex-wrap:wrap; }
+.bbs-card-header { display:flex; align-items:center; gap:5px; margin-bottom:5px; flex-wrap:wrap; }
 .bbs-cat-badge {
-  font-size:10px; font-weight:bold; padding:2px 8px;
-  border-radius:10px; background:#eef4ff; color:#0044cc; white-space:nowrap;
+  font-size:10px; font-weight:bold; padding:2px 7px;
+  border-radius:8px; background:#eef4ff; color:#0044cc; white-space:nowrap;
 }
 .bbs-time { font-size:10px; color:#aaa; flex:1; }
 .bbs-icon-btn {
-  font-size:12px; padding:3px 8px;
-  border:1px solid #ddd; border-radius:8px; background:#f8f8f8; cursor:pointer;
+  font-size:11px; padding:2px 6px;
+  border:1px solid #ddd; border-radius:6px; background:#f8f8f8; cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
 }
-.bbs-comment { font-size:13px; color:#222; margin-bottom:6px; line-height:1.5; white-space:pre-wrap; }
-.bbs-photo { max-width:100%; max-height:160px; border-radius:8px; cursor:pointer; display:block; margin-top:4px; }
-.bbs-loc { font-size:10px; color:#888; margin-top:4px; }
-.bbs-field { margin-bottom:14px; }
-.bbs-field label { display:block; font-size:11px; color:#888; margin-bottom:4px; font-weight:bold; letter-spacing:0.3px; }
+.bbs-comment { font-size:12px; color:#222; margin-bottom:5px; line-height:1.5; white-space:pre-wrap; }
+.bbs-photo { max-width:100%; max-height:120px; border-radius:6px; cursor:pointer; display:block; margin-top:4px; object-fit:cover; }
+.bbs-loc { font-size:10px; color:#888; margin-top:3px; }
+.bbs-field { margin-bottom:10px; }
+.bbs-field label { display:block; font-size:10px; color:#888; margin-bottom:3px; font-weight:bold; }
 .bbs-field select,
 .bbs-field textarea {
   width:100%; box-sizing:border-box; border:1px solid #ddd;
-  border-radius:8px; padding:8px 10px; font-size:13px; font-family:sans-serif;
+  border-radius:7px; padding:7px 9px; font-size:12px; font-family:sans-serif;
 }
 .bbs-field textarea { resize:vertical; }
 .bbs-action-btn {
-  padding:7px 14px; border:1px solid #ccc; border-radius:8px;
-  background:#f5f5f5; font-size:12px; cursor:pointer;
+  padding:6px 12px; border:1px solid #ccc; border-radius:7px;
+  background:#f5f5f5; font-size:11px; cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
 }
-#bbsLocStatus { font-size:11px; color:#888; margin-left:8px; }
+#bbsLocStatus { font-size:10px; color:#888; margin-left:6px; }
 #bbsSubmitBtn {
-  width:100%; padding:12px; background:#0066ff; color:#fff;
-  border:none; border-radius:10px; font-size:14px; font-weight:bold; cursor:pointer;
+  width:100%; padding:10px; background:#0066ff; color:#fff;
+  border:none; border-radius:8px; font-size:13px; font-weight:bold; cursor:pointer;
 }
 #bbsSubmitBtn:disabled { background:#aaa; cursor:default; }
-#bbsFormStatus { font-size:12px; color:#888; text-align:center; margin-top:8px; min-height:18px; }
-#bbsLoadingMsg, #bbsEmptyMsg { text-align:center; color:#999; font-size:13px; padding:32px 0; }
+#bbsFormStatus { font-size:11px; color:#888; text-align:center; margin-top:6px; min-height:16px; }
+#bbsLoadingMsg, #bbsEmptyMsg { text-align:center; color:#999; font-size:12px; padding:24px 0; }
 </style>
 </head>
 
@@ -774,16 +790,18 @@ html, body { height:100%; margin:0; }
 
 <!-- 現場掲示板パネル -->
 <div id="bbsPanel">
-  <div id="bbsHeader">
-    <span id="bbsTitle">📋 現場掲示板</span>
+  <div id="bbsHandle">
+    <div id="bbsHandleGrip"><span></span><span></span><span></span></div>
+    <span id="bbsPanelTitle">📋 現場掲示板</span>
     <button id="bbsRefreshBtn" title="更新">🔄</button>
+    <button id="bbsCollapseBtn" title="折りたたむ">▾</button>
     <button id="bbsClose">✕</button>
   </div>
-  <div id="bbsTabs">
-    <button class="bbs-tab active" id="bbsTabList" data-tab="list">投稿一覧</button>
-    <button class="bbs-tab" id="bbsTabNew" data-tab="new">＋ 新規投稿</button>
-  </div>
-  <div id="bbsTabContent">
+  <div id="bbsBody">
+    <div class="bbs-tabs">
+      <button class="bbs-tab active" id="bbsTabList" data-tab="list">投稿一覧</button>
+      <button class="bbs-tab" id="bbsTabNew" data-tab="new">＋ 新規投稿</button>
+    </div>
     <!-- 投稿一覧 -->
     <div id="bbsListPane" class="bbs-pane">
       <div id="bbsLoadingMsg">読み込み中...</div>
@@ -804,11 +822,11 @@ html, body { height:100%; margin:0; }
       </div>
       <div class="bbs-field">
         <label>コメント <span style="color:#c00">*</span></label>
-        <textarea id="bbsComment" rows="4" placeholder="状況を入力..."></textarea>
+        <textarea id="bbsComment" rows="3" placeholder="状況を入力..."></textarea>
       </div>
       <div class="bbs-field">
         <label>位置情報</label>
-        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px">
           <button class="bbs-action-btn" id="bbsGetLocBtn">📍 現在地を取得</button>
           <span id="bbsLocStatus">未設定</span>
         </div>
@@ -817,7 +835,7 @@ html, body { height:100%; margin:0; }
         <label>写真（任意）</label>
         <button class="bbs-action-btn" id="bbsPickPhotoBtn">📷 写真を選択</button>
         <input id="bbsPhotoInput" type="file" accept="image/*" style="display:none">
-        <img id="bbsPhotoPreview" style="display:none;max-width:140px;max-height:100px;border-radius:8px;margin-top:8px;cursor:pointer">
+        <img id="bbsPhotoPreview" style="display:none;max-width:120px;max-height:80px;border-radius:6px;margin-top:6px;cursor:pointer">
       </div>
       <button id="bbsSubmitBtn">📤 投稿する</button>
       <div id="bbsFormStatus"></div>
@@ -2834,9 +2852,11 @@ function _bbsCompressPhoto(file){
   });
 }
 
+const bbsPanel=document.getElementById('bbsPanel');
+
 async function openBbsPanel(){
-  const panel=document.getElementById('bbsPanel');
-  panel.classList.add('open');
+  bbsPanel.style.display='flex';
+  bbsPanel.classList.remove('collapsed');
   // リストタブに戻す
   document.querySelectorAll('.bbs-tab').forEach(b=>b.classList.remove('active'));
   document.getElementById('bbsTabList').classList.add('active');
@@ -2854,7 +2874,7 @@ async function openBbsPanel(){
 }
 
 function closeBbsPanel(){
-  document.getElementById('bbsPanel').classList.remove('open');
+  bbsPanel.style.display='none';
   clearInterval(_bbsTimer); _bbsTimer=null;
 }
 
@@ -2874,12 +2894,35 @@ document.getElementById('btnBbs').addEventListener('click',()=>{
   openBbsPanel();
 });
 document.getElementById('bbsClose').addEventListener('click',closeBbsPanel);
+document.getElementById('bbsCollapseBtn').addEventListener('click',()=>{ bbsPanel.classList.toggle('collapsed'); });
 document.getElementById('bbsRefreshBtn').addEventListener('click',async()=>{
   document.getElementById('bbsLoadingMsg').style.display='block';
   document.getElementById('bbsList').innerHTML='';
   await _bbsFetchPosts(); _bbsRenderMarkers(); _bbsRenderList();
   toast('更新しました',1500);
 });
+
+// ドラッグ
+(()=>{
+  const handle=document.getElementById('bbsHandle');
+  let drag=null;
+  function startDrag(cx,cy){ const r=bbsPanel.getBoundingClientRect(); drag={ox:cx-r.left,oy:cy-r.top}; }
+  function moveDrag(cx,cy){
+    if(!drag) return;
+    let x=cx-drag.ox, y=cy-drag.oy;
+    x=Math.max(0,Math.min(window.innerWidth-bbsPanel.offsetWidth,x));
+    y=Math.max(0,Math.min(window.innerHeight-bbsPanel.offsetHeight,y));
+    bbsPanel.style.left=x+'px'; bbsPanel.style.top=y+'px';
+    bbsPanel.style.right='auto';
+  }
+  function endDrag(){ drag=null; }
+  handle.addEventListener('touchstart',e=>{ if(e.target.closest('button')) return; startDrag(e.touches[0].clientX,e.touches[0].clientY); },{passive:true});
+  handle.addEventListener('touchmove',e=>{ if(!drag)return; e.preventDefault(); moveDrag(e.touches[0].clientX,e.touches[0].clientY); },{passive:false});
+  handle.addEventListener('touchend',endDrag,{passive:true});
+  handle.addEventListener('mousedown',e=>{ if(e.target.closest('button')) return; startDrag(e.clientX,e.clientY); handle.style.cursor='grabbing'; });
+  document.addEventListener('mousemove',e=>{ if(drag) moveDrag(e.clientX,e.clientY); });
+  document.addEventListener('mouseup',()=>{ endDrag(); handle.style.cursor='grab'; });
+})();
 
 // 現在地取得
 document.getElementById('bbsGetLocBtn').addEventListener('click',()=>{
