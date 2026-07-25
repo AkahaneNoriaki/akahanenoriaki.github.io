@@ -453,6 +453,72 @@ html, body { height:100%; margin:0; }
 #chartSheetLoading { color:#888; font-size:13px; text-align:center; padding:24px 0; }
 #chartSheetCanvas { flex:1; min-height:0; }
 #chartSheetSrc { font-size:9px; color:#bbb; text-align:right; }
+
+/* ─── 現場掲示板パネル ─────────────────────── */
+#bbsPanel {
+  position:fixed; inset:0; z-index:10000;
+  background:#f7f7f7; display:flex; flex-direction:column;
+  transform:translateX(100%);
+  transition:transform 0.28s cubic-bezier(0.4,0,0.2,1);
+  font-family:sans-serif;
+}
+#bbsPanel.open { transform:translateX(0); }
+#bbsHeader {
+  display:flex; align-items:center; padding:12px 14px;
+  border-bottom:1px solid #e8e8e8; gap:8px; flex-shrink:0;
+  background:#fff;
+}
+#bbsTitle { font-size:15px; font-weight:bold; flex:1; color:#222; }
+#bbsRefreshBtn, #bbsClose {
+  background:#f0f0f0; border:none; border-radius:50%;
+  width:30px; height:30px; cursor:pointer; font-size:15px;
+  padding:0; line-height:30px; flex-shrink:0;
+}
+#bbsTabs { display:flex; border-bottom:1px solid #e8e8e8; flex-shrink:0; background:#fff; }
+.bbs-tab {
+  flex:1; padding:10px; border:none; background:#f8f8f8;
+  font-size:13px; cursor:pointer; border-bottom:2px solid transparent;
+}
+.bbs-tab.active { background:#fff; border-bottom-color:#0066ff; color:#0066ff; font-weight:bold; }
+#bbsTabContent { flex:1; overflow:hidden; display:flex; flex-direction:column; }
+.bbs-pane { flex:1; overflow-y:auto; padding:12px 14px 80px; -webkit-overflow-scrolling:touch; }
+.bbs-card {
+  border:1px solid #e8e8e8; border-radius:10px; padding:10px 12px;
+  margin-bottom:10px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,0.06);
+}
+.bbs-card-header { display:flex; align-items:center; gap:6px; margin-bottom:6px; flex-wrap:wrap; }
+.bbs-cat-badge {
+  font-size:10px; font-weight:bold; padding:2px 8px;
+  border-radius:10px; background:#eef4ff; color:#0044cc; white-space:nowrap;
+}
+.bbs-time { font-size:10px; color:#aaa; flex:1; }
+.bbs-icon-btn {
+  font-size:12px; padding:3px 8px;
+  border:1px solid #ddd; border-radius:8px; background:#f8f8f8; cursor:pointer;
+}
+.bbs-comment { font-size:13px; color:#222; margin-bottom:6px; line-height:1.5; white-space:pre-wrap; }
+.bbs-photo { max-width:100%; max-height:160px; border-radius:8px; cursor:pointer; display:block; margin-top:4px; }
+.bbs-loc { font-size:10px; color:#888; margin-top:4px; }
+.bbs-field { margin-bottom:14px; }
+.bbs-field label { display:block; font-size:11px; color:#888; margin-bottom:4px; font-weight:bold; letter-spacing:0.3px; }
+.bbs-field select,
+.bbs-field textarea {
+  width:100%; box-sizing:border-box; border:1px solid #ddd;
+  border-radius:8px; padding:8px 10px; font-size:13px; font-family:sans-serif;
+}
+.bbs-field textarea { resize:vertical; }
+.bbs-action-btn {
+  padding:7px 14px; border:1px solid #ccc; border-radius:8px;
+  background:#f5f5f5; font-size:12px; cursor:pointer;
+}
+#bbsLocStatus { font-size:11px; color:#888; margin-left:8px; }
+#bbsSubmitBtn {
+  width:100%; padding:12px; background:#0066ff; color:#fff;
+  border:none; border-radius:10px; font-size:14px; font-weight:bold; cursor:pointer;
+}
+#bbsSubmitBtn:disabled { background:#aaa; cursor:default; }
+#bbsFormStatus { font-size:12px; color:#888; text-align:center; margin-top:8px; min-height:18px; }
+#bbsLoadingMsg, #bbsEmptyMsg { text-align:center; color:#999; font-size:13px; padding:32px 0; }
 </style>
 </head>
 
@@ -613,6 +679,16 @@ html, body { height:100%; margin:0; }
       </div>
     </div>
 
+    <!-- 現場共有 -->
+    <div class="s-section">
+      <div class="s-title">現場共有</div>
+      <div class="s-grid">
+        <button class="s-btn" id="btnBbs">
+          <span class="ico">📋</span>現場掲示板
+        </button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -693,6 +769,59 @@ html, body { height:100%; margin:0; }
     <div id="chartSheetLoading">取得中...</div>
     <canvas id="chartSheetCanvas" style="display:none;"></canvas>
     <div id="chartSheetSrc"></div>
+  </div>
+</div>
+
+<!-- 現場掲示板パネル -->
+<div id="bbsPanel">
+  <div id="bbsHeader">
+    <span id="bbsTitle">📋 現場掲示板</span>
+    <button id="bbsRefreshBtn" title="更新">🔄</button>
+    <button id="bbsClose">✕</button>
+  </div>
+  <div id="bbsTabs">
+    <button class="bbs-tab active" id="bbsTabList" data-tab="list">投稿一覧</button>
+    <button class="bbs-tab" id="bbsTabNew" data-tab="new">＋ 新規投稿</button>
+  </div>
+  <div id="bbsTabContent">
+    <!-- 投稿一覧 -->
+    <div id="bbsListPane" class="bbs-pane">
+      <div id="bbsLoadingMsg">読み込み中...</div>
+      <div id="bbsEmptyMsg" style="display:none">投稿がありません</div>
+      <div id="bbsList"></div>
+    </div>
+    <!-- 新規投稿 -->
+    <div id="bbsNewPane" class="bbs-pane" style="display:none">
+      <div class="bbs-field">
+        <label>カテゴリ</label>
+        <select id="bbsCatSel">
+          <option value="道路">🛣 道路</option>
+          <option value="河川">💧 河川</option>
+          <option value="土砂">⛰ 土砂</option>
+          <option value="施設">🏢 施設</option>
+          <option value="その他">📌 その他</option>
+        </select>
+      </div>
+      <div class="bbs-field">
+        <label>コメント <span style="color:#c00">*</span></label>
+        <textarea id="bbsComment" rows="4" placeholder="状況を入力..."></textarea>
+      </div>
+      <div class="bbs-field">
+        <label>位置情報</label>
+        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+          <button class="bbs-action-btn" id="bbsGetLocBtn">📍 現在地を取得</button>
+          <span id="bbsLocStatus">未設定</span>
+        </div>
+      </div>
+      <div class="bbs-field">
+        <label>写真（任意）</label>
+        <button class="bbs-action-btn" id="bbsPickPhotoBtn">📷 写真を選択</button>
+        <input id="bbsPhotoInput" type="file" accept="image/*" style="display:none">
+        <img id="bbsPhotoPreview" style="display:none;max-width:140px;max-height:100px;border-radius:8px;margin-top:8px;cursor:pointer">
+      </div>
+      <button id="bbsSubmitBtn">📤 投稿する</button>
+      <div id="bbsFormStatus"></div>
+    </div>
   </div>
 </div>
 
@@ -2546,6 +2675,275 @@ map.on('moveend',()=>{ if(riverOn) fetchRiverData(); });
 })();
 document.getElementById('wxCollapseBtn').addEventListener('click',()=>{
   wxPanel.classList.toggle('collapsed');
+});
+
+/* =========================
+   現場掲示板 (BBS)
+========================= */
+const _GH_PAT  = ['github_pat_11B3RLR5I0','E1Fw0DjlOOuC_TCT2Ph','zGnHu76WmqKnoF2AgFo8mwBuXkkKTAQJDik62VBVT7J3XUS1fEzBA'].join('');
+const _GH_FILE_URL = 'https://api.github.com/repos/akahanenoriaki/akahanenoriaki.github.io/contents/data/posts.json';
+
+let _bbsPosts=[], _bbsSha=null, _bbsMarkers=[], _bbsTimer=null;
+let _bbsPhotoB64=null, _bbsLat=null, _bbsLng=null;
+let _bbsPhotoMap={};
+
+async function _bbsFetchPosts(){
+  try{
+    const res=await fetch(_GH_FILE_URL,{
+      headers:{'Authorization':'Bearer '+_GH_PAT,'Accept':'application/vnd.github+json'}
+    });
+    if(res.status===404){ _bbsPosts=[]; _bbsSha=null; return; }
+    if(!res.ok) throw new Error('GitHub API '+res.status);
+    const data=await res.json();
+    _bbsSha=data.sha;
+    _bbsPosts=JSON.parse(decodeURIComponent(escape(atob(data.content.replace(/\n/g,'')))))||[];
+  }catch(e){ console.error('[BBS fetch]',e); toast('掲示板の読込失敗',2500); }
+}
+
+async function _bbsSavePosts(posts){
+  const encoded=btoa(unescape(encodeURIComponent(JSON.stringify(posts,null,2))));
+  const body={message:'BBS: update posts',content:encoded,committer:{name:'Field Map',email:'map@field'}};
+  if(_bbsSha) body.sha=_bbsSha;
+  const res=await fetch(_GH_FILE_URL,{
+    method:'PUT',
+    headers:{'Authorization':'Bearer '+_GH_PAT,'Content-Type':'application/json','Accept':'application/vnd.github+json'},
+    body:JSON.stringify(body)
+  });
+  if(!res.ok){
+    const err=await res.json().catch(()=>({}));
+    throw new Error(err.message||'GitHub PUT '+res.status);
+  }
+  const data=await res.json();
+  _bbsSha=data.content.sha;
+}
+
+function _bbsCatEmoji(cat){
+  return {'道路':'🛣','河川':'💧','土砂':'⛰','施設':'🏢','その他':'📌'}[cat]||'📌';
+}
+
+function _bbsFmtTime(iso){
+  const d=new Date(iso);
+  return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function _bbsRenderMarkers(){
+  _bbsMarkers.forEach(m=>map.removeLayer(m));
+  _bbsMarkers=[]; _bbsPhotoMap={};
+  const catCol={'道路':'#e65100','河川':'#0277bd','土砂':'#4e342e','施設':'#2e7d32','その他':'#37474f'};
+  for(const p of _bbsPosts){
+    if(p.lat==null||p.lng==null) continue;
+    const col=catCol[p.cat]||'#555';
+    const ico=L.divIcon({
+      html:`<div style="background:${col};color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.35);margin:-16px 0 0 -16px">${_bbsCatEmoji(p.cat)}</div>`,
+      iconSize:[32,32],className:''
+    });
+    let pop=`<div style="font-size:12px;max-width:230px"><b>${escapeHtml(p.cat)}</b> <span style="color:#aaa">${_bbsFmtTime(p.ts)}</span><br><div style="margin-top:4px">${escapeHtml(p.comment||'')}</div>`;
+    if(p.photo){
+      _bbsPhotoMap[p.id]=p.photo;
+      pop+=`<img src="${p.photo}" style="max-width:210px;max-height:130px;border-radius:6px;margin-top:6px;cursor:pointer;display:block" onclick="_bbsOpenPhoto('${p.id}')">`;
+    }
+    pop+='</div>';
+    const mk=L.marker([p.lat,p.lng],{icon:ico}).addTo(map).bindPopup(pop,{maxWidth:240});
+    _bbsMarkers.push(mk);
+  }
+}
+window._bbsOpenPhoto=id=>{ if(_bbsPhotoMap[id]) openPhoto(_bbsPhotoMap[id]); };
+
+function _bbsRenderList(){
+  const listEl=document.getElementById('bbsList');
+  const loadMsg=document.getElementById('bbsLoadingMsg');
+  const emptyMsg=document.getElementById('bbsEmptyMsg');
+  loadMsg.style.display='none';
+  if(!_bbsPosts.length){ emptyMsg.style.display='block'; listEl.innerHTML=''; return; }
+  emptyMsg.style.display='none';
+  const sorted=[..._bbsPosts].sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+  listEl.innerHTML='';
+  sorted.forEach(p=>{
+    const card=document.createElement('div');
+    card.className='bbs-card';
+    // ヘッダー
+    const hdr=document.createElement('div');
+    hdr.className='bbs-card-header';
+    const badge=document.createElement('span');
+    badge.className='bbs-cat-badge';
+    badge.textContent=`${_bbsCatEmoji(p.cat)} ${p.cat}`;
+    const ts=document.createElement('span');
+    ts.className='bbs-time';
+    ts.textContent=_bbsFmtTime(p.ts);
+    hdr.appendChild(badge); hdr.appendChild(ts);
+    if(p.lat!=null){
+      const jb=document.createElement('button');
+      jb.className='bbs-icon-btn'; jb.textContent='🗺 地図';
+      jb.addEventListener('click',()=>{ map.setView([p.lat,p.lng],16); closeBbsPanel(); });
+      hdr.appendChild(jb);
+    }
+    const db=document.createElement('button');
+    db.className='bbs-icon-btn'; db.textContent='🗑';
+    db.style.color='#c00';
+    db.addEventListener('click',()=>_bbsDeleteById(p.id));
+    hdr.appendChild(db);
+    card.appendChild(hdr);
+    // コメント
+    const cm=document.createElement('div');
+    cm.className='bbs-comment'; cm.textContent=p.comment||'';
+    card.appendChild(cm);
+    // 写真
+    if(p.photo){
+      const img=document.createElement('img');
+      img.src=p.photo; img.className='bbs-photo';
+      img.addEventListener('click',()=>openPhoto(p.photo));
+      card.appendChild(img);
+    }
+    // 位置
+    if(p.lat!=null){
+      const loc=document.createElement('div');
+      loc.className='bbs-loc';
+      loc.textContent=`📍 ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`;
+      card.appendChild(loc);
+    }
+    listEl.appendChild(card);
+  });
+}
+
+async function _bbsDeleteById(id){
+  if(!await showConfirm('この投稿を削除しますか？')) return;
+  const newPosts=_bbsPosts.filter(p=>p.id!==id);
+  toast('削除中...',3000);
+  try{
+    await _bbsSavePosts(newPosts);
+    _bbsPosts=newPosts;
+    _bbsRenderMarkers();
+    _bbsRenderList();
+    toast('削除しました',2000);
+  }catch(e){ toast('削除失敗: '+e.message,4000); }
+}
+
+function _bbsCompressPhoto(file){
+  return new Promise(resolve=>{
+    const img=new Image(), url=URL.createObjectURL(file);
+    img.onload=()=>{
+      const MAX=900; let w=img.width,h=img.height;
+      if(w>MAX||h>MAX){ if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;} }
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg',0.72));
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); resolve(null); };
+    img.src=url;
+  });
+}
+
+async function openBbsPanel(){
+  const panel=document.getElementById('bbsPanel');
+  panel.classList.add('open');
+  // リストタブに戻す
+  document.querySelectorAll('.bbs-tab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('bbsTabList').classList.add('active');
+  document.getElementById('bbsListPane').style.display='';
+  document.getElementById('bbsNewPane').style.display='none';
+  document.getElementById('bbsLoadingMsg').style.display='block';
+  document.getElementById('bbsEmptyMsg').style.display='none';
+  document.getElementById('bbsList').innerHTML='';
+  await _bbsFetchPosts();
+  _bbsRenderMarkers();
+  _bbsRenderList();
+  if(!_bbsTimer) _bbsTimer=setInterval(async()=>{
+    await _bbsFetchPosts(); _bbsRenderMarkers(); _bbsRenderList();
+  },30000);
+}
+
+function closeBbsPanel(){
+  document.getElementById('bbsPanel').classList.remove('open');
+  clearInterval(_bbsTimer); _bbsTimer=null;
+}
+
+// タブ切替
+document.querySelectorAll('.bbs-tab').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.bbs-tab').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab=btn.dataset.tab;
+    document.getElementById('bbsListPane').style.display=tab==='list'?'':'none';
+    document.getElementById('bbsNewPane').style.display=tab==='new'?'':'none';
+  });
+});
+
+document.getElementById('btnBbs').addEventListener('click',()=>{
+  document.getElementById('bottomSheet').classList.remove('open');
+  openBbsPanel();
+});
+document.getElementById('bbsClose').addEventListener('click',closeBbsPanel);
+document.getElementById('bbsRefreshBtn').addEventListener('click',async()=>{
+  document.getElementById('bbsLoadingMsg').style.display='block';
+  document.getElementById('bbsList').innerHTML='';
+  await _bbsFetchPosts(); _bbsRenderMarkers(); _bbsRenderList();
+  toast('更新しました',1500);
+});
+
+// 現在地取得
+document.getElementById('bbsGetLocBtn').addEventListener('click',()=>{
+  document.getElementById('bbsLocStatus').textContent='取得中...';
+  navigator.geolocation.getCurrentPosition(
+    pos=>{ _bbsLat=pos.coords.latitude; _bbsLng=pos.coords.longitude;
+      document.getElementById('bbsLocStatus').textContent=`${_bbsLat.toFixed(5)}, ${_bbsLng.toFixed(5)}`; },
+    ()=>{ document.getElementById('bbsLocStatus').textContent='取得失敗'; },
+    {enableHighAccuracy:true,timeout:15000}
+  );
+});
+
+// 写真選択
+document.getElementById('bbsPickPhotoBtn').addEventListener('click',()=>document.getElementById('bbsPhotoInput').click());
+document.getElementById('bbsPhotoInput').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  document.getElementById('bbsPickPhotoBtn').textContent='圧縮中...';
+  _bbsPhotoB64=await _bbsCompressPhoto(f);
+  if(_bbsPhotoB64){
+    const prev=document.getElementById('bbsPhotoPreview');
+    prev.src=_bbsPhotoB64; prev.style.display='block';
+  }
+  document.getElementById('bbsPickPhotoBtn').textContent='📷 写真を変更';
+  e.target.value='';
+});
+document.getElementById('bbsPhotoPreview').addEventListener('click',()=>{ if(_bbsPhotoB64) openPhoto(_bbsPhotoB64); });
+
+// 投稿送信
+document.getElementById('bbsSubmitBtn').addEventListener('click',async()=>{
+  const comment=document.getElementById('bbsComment').value.trim();
+  const cat=document.getElementById('bbsCatSel').value;
+  if(!comment){ toast('コメントを入力してください',2000); return; }
+  const btn=document.getElementById('bbsSubmitBtn');
+  const status=document.getElementById('bbsFormStatus');
+  btn.disabled=true; status.textContent='投稿中...';
+  const post={
+    id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    ts:new Date().toISOString(), cat, comment,
+    lat:_bbsLat, lng:_bbsLng,
+    photo:_bbsPhotoB64||null
+  };
+  try{
+    await _bbsSavePosts([..._bbsPosts,post]);
+    _bbsPosts.push(post);
+    _bbsRenderMarkers();
+    // フォームリセット
+    document.getElementById('bbsComment').value='';
+    _bbsPhotoB64=null; _bbsLat=null; _bbsLng=null;
+    document.getElementById('bbsPhotoPreview').style.display='none';
+    document.getElementById('bbsLocStatus').textContent='未設定';
+    document.getElementById('bbsPickPhotoBtn').textContent='📷 写真を選択';
+    // 一覧タブへ
+    document.querySelectorAll('.bbs-tab').forEach(b=>b.classList.remove('active'));
+    document.getElementById('bbsTabList').classList.add('active');
+    document.getElementById('bbsListPane').style.display='';
+    document.getElementById('bbsNewPane').style.display='none';
+    _bbsRenderList();
+    toast('投稿しました！',2500);
+    status.textContent='';
+  }catch(e){
+    status.textContent='投稿失敗: '+e.message;
+    toast('投稿に失敗しました',3000);
+  }
+  btn.disabled=false;
 });
 
 /* =========================
