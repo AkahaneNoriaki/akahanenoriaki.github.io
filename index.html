@@ -456,20 +456,16 @@ html, body { height:100%; margin:0; }
 
 /* ─── 現場掲示板 楕円ボタン ─────────────────── */
 #bbsFloatBtn {
-  position:fixed; top:100px; right:10px; z-index:9000;
   background:rgba(255,255,255,0.95); border:1px solid rgba(0,0,0,0.18);
-  border-radius:20px; padding:7px 16px;
+  border-radius:20px; padding:6px 14px;
   font-size:12px; font-family:sans-serif; font-weight:bold; color:#333;
-  cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.15);
+  cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.15);
   white-space:nowrap; -webkit-tap-highlight-color:transparent;
   transition:background 0.15s, border-color 0.15s, color 0.15s;
-  user-select:none;
+  user-select:none; display:block;
 }
 #bbsFloatBtn:active { background:#f0f0f0; }
 #bbsFloatBtn.active { background:#eef4ff; border-color:#99bbff; color:#0044cc; }
-@media (min-width:768px){
-  body.sidebar-right #bbsFloatBtn { right:auto; left:10px; }
-}
 
 /* ─── 現場掲示板パネル ─────────────────────── */
 #bbsPanel {
@@ -557,7 +553,6 @@ html, body { height:100%; margin:0; }
 
 <body>
 <div id="map"></div>
-<button id="bbsFloatBtn">📋 現場掲示板</button>
 <div id="rainAnimBar" style="display:none;position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:8000;background:rgba(0,0,0,0.65);color:#fff;font-size:13px;font-weight:bold;padding:5px 16px;border-radius:20px;pointer-events:none;white-space:nowrap"></div>
 <div id="toast"></div>
 <div id="cacheBar"></div>
@@ -908,6 +903,7 @@ function applySidebarSide(){
   const right=sidebarSide==='right';
   document.body.classList.toggle('sidebar-right', right);
   if(typeof zoomCtrl!=='undefined') zoomCtrl.setPosition(right?'topleft':'topright');
+  if(typeof _bbsCtrl!=='undefined') _bbsCtrl.setPosition(right?'topleft':'topright');
   const btn=document.getElementById('btnSideSwitch');
   if(btn) btn.title=right?'サイドバーを左へ':'サイドバーを右へ';
 }
@@ -942,6 +938,17 @@ document.getElementById('map').addEventListener('click',()=>{ if(measuring||shar
 ========================= */
 const map=L.map('map',{maxZoom:22,zoomControl:false}).setView([36.2,138.0],12);
 const zoomCtrl=L.control.zoom({position:'topright'}).addTo(map);
+const _bbsCtrl=(()=>{
+  const ctrl=L.control({position:'topright'});
+  ctrl.onAdd=function(){
+    const c=L.DomUtil.create('div');
+    c.innerHTML='<button id="bbsFloatBtn">📋 現場掲示板</button>';
+    L.DomEvent.disableClickPropagation(c);
+    return c;
+  };
+  ctrl.addTo(map);
+  return ctrl;
+})();
 const gsiStd=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
   {maxNativeZoom:18,maxZoom:22,attribution:'© 地理院'});
 const gsiPhoto=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',
