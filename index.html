@@ -459,6 +459,8 @@ html, body { height:100%; margin:0; }
   position:fixed; top:10px; right:46px; z-index:9000;
   background:rgba(255,255,255,0.95); border:1px solid rgba(0,0,0,0.18);
   border-radius:20px; padding:6px 14px;
+  /* バッジのアンカー用 */
+  overflow:visible;
   font-size:12px; font-family:sans-serif; font-weight:bold; color:#333;
   cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.15);
   white-space:nowrap; -webkit-tap-highlight-color:transparent;
@@ -467,6 +469,13 @@ html, body { height:100%; margin:0; }
 }
 #bbsFloatBtn:active { background:#f0f0f0; }
 #bbsFloatBtn.active { background:#eef4ff; border-color:#99bbff; color:#0044cc; }
+#bbsBadge {
+  position:absolute; top:-5px; right:-5px;
+  width:14px; height:14px;
+  background:#e53935; border-radius:50%;
+  border:2px solid #fff;
+  display:none; pointer-events:none;
+}
 @media (min-width:768px){
   body.sidebar-right #bbsFloatBtn { right:auto; left:46px; }
 }
@@ -559,7 +568,7 @@ html, body { height:100%; margin:0; }
 
 <body>
 <div id="map"></div>
-<button id="bbsFloatBtn">📋 現場掲示板</button>
+<button id="bbsFloatBtn">📋 現場掲示板<span id="bbsBadge"></span></button>
 <div id="rainAnimBar" style="display:none;position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:8000;background:rgba(0,0,0,0.65);color:#fff;font-size:13px;font-weight:bold;padding:5px 16px;border-radius:20px;pointer-events:none;white-space:nowrap"></div>
 <div id="toast"></div>
 <div id="cacheBar"></div>
@@ -2726,6 +2735,7 @@ async function _bbsFetchPosts(){
     _bbsSha=data.sha;
     _bbsPosts=JSON.parse(decodeURIComponent(escape(atob(data.content.replace(/\n/g,'')))))||[];
   }catch(e){ console.error('[BBS fetch]',e); toast('掲示板の読込失敗',2500); }
+  _bbsCheckNew();
 }
 
 async function _bbsSavePosts(posts){
@@ -2864,11 +2874,24 @@ function _bbsCompressPhoto(file){
 
 const bbsPanel=document.getElementById('bbsPanel');
 const bbsFloatBtn=document.getElementById('bbsFloatBtn');
+const bbsBadge=document.getElementById('bbsBadge');
+
+function _bbsCheckNew(){
+  const last=localStorage.getItem('bbsLastSeen')||'';
+  const hasNew=_bbsPosts.some(p=>p.ts>last);
+  bbsBadge.style.display=hasNew?'block':'none';
+}
+function _bbsMarkSeen(){
+  const latest=_bbsPosts.reduce((m,p)=>p.ts>m?p.ts:m,'');
+  if(latest) localStorage.setItem('bbsLastSeen',latest);
+  bbsBadge.style.display='none';
+}
 
 async function openBbsPanel(){
   bbsPanel.style.display='flex';
   bbsPanel.classList.remove('collapsed');
   bbsFloatBtn.classList.add('active');
+  _bbsMarkSeen();
   // リストタブに戻す
   document.querySelectorAll('.bbs-tab').forEach(b=>b.classList.remove('active'));
   document.getElementById('bbsTabList').classList.add('active');
@@ -2906,6 +2929,14 @@ bbsFloatBtn.addEventListener('click',()=>{
   if(bbsPanel.style.display==='flex') closeBbsPanel();
   else openBbsPanel();
 });
+
+// パネルが閉じていてもバックグラウンドで新着チェック
+(async()=>{
+  await _bbsFetchPosts();
+  setInterval(async()=>{
+    if(bbsPanel.style.display!=='flex') await _bbsFetchPosts();
+  },60000);
+})();
 document.getElementById('bbsClose').addEventListener('click',closeBbsPanel);
 document.getElementById('bbsCollapseBtn').addEventListener('click',()=>{ bbsPanel.classList.toggle('collapsed'); });
 document.getElementById('bbsRefreshBtn').addEventListener('click',async()=>{
