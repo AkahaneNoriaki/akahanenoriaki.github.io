@@ -473,16 +473,15 @@ html, body { height:100%; margin:0; }
 
 /* ─── 現場掲示板パネル ─────────────────────── */
 #bbsPanel {
-  position:fixed; top:10px; left:10px; z-index:9100;
+  position:fixed; top:10px; right:46px; z-index:9100;
   background:rgba(255,255,255,0.97); border:1px solid rgba(0,0,0,0.13);
   border-radius:14px; display:none; flex-direction:column;
   font-family:sans-serif; box-shadow:0 4px 20px rgba(0,0,0,0.18);
-  width:min(300px,calc(100vw - 76px)); max-height:70vh;
+  width:min(300px,calc(100vw - 56px)); max-height:70vh;
   overflow:hidden; touch-action:none;
 }
 @media (min-width:768px){
-  #bbsPanel { left:210px; }
-  body.sidebar-right #bbsPanel { left:10px; right:auto; }
+  body.sidebar-right #bbsPanel { right:auto; left:46px; }
 }
 #bbsHandle {
   display:flex; align-items:center;
