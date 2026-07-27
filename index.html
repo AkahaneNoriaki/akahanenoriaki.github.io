@@ -951,14 +951,14 @@ document.getElementById('map').addEventListener('click',()=>{ if(measuring||shar
 /* =========================
    Map
 ========================= */
-const map=L.map('map',{maxZoom:22,zoomControl:false}).setView([36.2,138.0],12);
+const map=L.map('map',{maxZoom:25,zoomControl:false}).setView([36.2,138.0],12);
 const zoomCtrl=L.control.zoom({position:'topright'}).addTo(map);
 const gsiStd=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
-  {maxNativeZoom:18,maxZoom:22,attribution:'© 地理院'});
+  {maxNativeZoom:18,maxZoom:25,attribution:'© 地理院'});
 const gsiPhoto=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',
-  {maxNativeZoom:18,maxZoom:22,attribution:'© 地理院（航空写真）'});
+  {maxNativeZoom:18,maxZoom:25,attribution:'© 地理院（航空写真）'});
 const csLayer=L.tileLayer('https://tile.geospatial.jp/CS/VER2/{z}/{x}/{y}.png',
-  {opacity:1.0,minZoom:8,maxNativeZoom:18,maxZoom:22,attribution:'© 長野県 CS立体図'});
+  {opacity:1.0,minZoom:8,maxNativeZoom:18,maxZoom:25,attribution:'© 長野県 CS立体図'});
 
 let bgMode='cs';
 const csSliderRow=document.getElementById('csSliderRow');
@@ -2178,7 +2178,7 @@ async function wxUpdateLayer(key){
   if(st.layer) map.removeLayer(st.layer);
   st.errCount=0;
   const lbl=document.getElementById(WX_LBL_MAP[key]);
-  const lyr=L.tileLayer(urlTpl,{opacity:0.6,maxNativeZoom:def.zoom,maxZoom:22,attribution:'© 気象庁'});
+  const lyr=L.tileLayer(urlTpl,{opacity:0.6,maxNativeZoom:def.zoom,maxZoom:25,attribution:'© 気象庁'});
   lyr.on('tileerror',()=>{
     st.errCount++;
     if(st.errCount===3&&lbl) lbl.style.borderColor='#ff3b30';
@@ -2257,7 +2257,7 @@ function _stepRainAnim(){
   if(!_rainAnim.on||!_rainAnim.frames.length) return;
   const {bt,vt}=_rainAnim.frames[_rainAnim.idx];
   const url=`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${vt}/surf/hrpns/{z}/{x}/{y}.png`;
-  const newLayer=L.tileLayer(url,{opacity:0.65,maxNativeZoom:10,maxZoom:22,attribution:'© 気象庁'});
+  const newLayer=L.tileLayer(url,{opacity:0.65,maxNativeZoom:10,maxZoom:25,attribution:'© 気象庁'});
   newLayer.addTo(map);
   if(_rainAnim.layer) map.removeLayer(_rainAnim.layer);
   _rainAnim.layer=newLayer;
