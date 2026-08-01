@@ -443,6 +443,7 @@
       </svg>
     </div>
   </div>
+  <div id="printHeaderScale"></div>
   <div id="printLegend"></div>
 </div>
 
@@ -472,6 +473,11 @@
   <div id="printModalBox">
     <div id="printModalTitle">🖨️ 印刷</div>
     <input id="printMapTitle" type="text" placeholder="タイトルを入力（任意）" maxlength="40">
+    <div id="printScaleRow">
+      <span id="printScaleLabel">縮尺</span>
+      <span id="printScaleSep">1 /</span>
+      <input id="printScaleInput" type="number" min="1" max="9999999" placeholder="（省略可）">
+    </div>
     <div class="xlsxBtns">
       <button id="printCancel">キャンセル</button>
       <button id="printOk" class="xlsxOk">印刷する</button>
