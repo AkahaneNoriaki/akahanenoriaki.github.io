@@ -17,6 +17,7 @@
 <script src="https://unpkg.com/georaster"></script>
 <script src="https://unpkg.com/georaster-layer-for-leaflet/dist/georaster-layer-for-leaflet.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/protomaps-leaflet@4.0.1/dist/protomaps-leaflet.js"></script>
 
 <style>
 html, body { height:100%; margin:0; }
@@ -676,6 +677,16 @@ html, body { height:100%; margin:0; }
       </div>
     </div>
 
+    <!-- 連携可能レイヤ -->
+    <div class="s-section">
+      <div class="s-title">連携可能レイヤ</div>
+      <div class="s-grid">
+        <button class="s-btn" id="btnToggleRinpan">
+          <span class="ico">🌲</span>林班
+        </button>
+      </div>
+    </div>
+
     <!-- 計測 -->
     <div class="s-section">
       <div class="s-title">計測</div>
@@ -1326,6 +1337,55 @@ document.getElementById('btnJumpVector').onclick=()=>{
 };
 document.getElementById('btnClearVector').onclick=()=>{
   gjGroup.clearLayers(); map.closePopup(); toast('ベクタデータをクリア'); closeSheet();
+};
+
+/* --- 連携可能レイヤ: 林班 PMTiles --- */
+let _rinpanLayer=null;
+let _rinpanOn=false;
+const _rinpanBtn=document.getElementById('btnToggleRinpan');
+
+function _buildRinpanLayer(){
+  return protomapsL.leafletLayer({
+    url: 'data/tatsuno_rinpan.pmtiles',
+    paintRules:[
+      {
+        dataLayer:'rinpan',
+        symbolizer: new protomapsL.PolygonSymbolizer({
+          fill: 'rgba(0,0,0,0)',
+          stroke: '#2e7d32',
+          width: 1.5
+        })
+      }
+    ],
+    labelRules:[
+      {
+        dataLayer:'rinpan',
+        symbolizer: new protomapsL.CenteredTextSymbolizer({
+          labelProps:['RIN'],
+          font:'bold 11px sans-serif',
+          fill:'#1b5e20',
+          stroke:'rgba(255,255,255,0.8)',
+          width:2
+        })
+      }
+    ]
+  });
+}
+
+_rinpanBtn.onclick=()=>{
+  if(_rinpanOn){
+    if(_rinpanLayer){ map.removeLayer(_rinpanLayer); }
+    _rinpanOn=false;
+    _rinpanBtn.classList.remove('active');
+    toast('林班レイヤを非表示');
+  } else {
+    if(!_rinpanLayer){ _rinpanLayer=_buildRinpanLayer(); }
+    _rinpanLayer.addTo(map);
+    _rinpanOn=true;
+    _rinpanBtn.classList.add('active');
+    toast('林班レイヤを表示');
+  }
+  closeSheet();
 };
 
 /* --- GeoJSON --- */
