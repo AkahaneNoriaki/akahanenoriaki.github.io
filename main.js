@@ -637,9 +637,9 @@ xlsxInput.onchange=()=>{
           const rows=XLSX.utils.sheet_to_json(ws,{defval:'',range:startRow});
           if(!rows.length) continue;
           const keys=Object.keys(rows[0]);
-          // __EMPTY が半数以上 → タイトル行と判断して次の行を試す
+          // __EMPTY が8割以上 → 1セルだけのタイトル行と判断して次の行を試す
           const emptyCount=keys.filter(k=>k===''||k.startsWith('__EMPTY')).length;
-          if(emptyCount>keys.length*0.5) continue;
+          if(emptyCount>keys.length*0.8) continue;
           _xlsxRows=rows;
           loaded=true;
           break;
