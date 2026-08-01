@@ -1174,7 +1174,7 @@ map.on('click',(e)=>{
         html+=`<span class="xlKey">${col}:</span> ${val}<br>`;
       }
     } else {
-      html+=`<span class="noData">Excelデータなし (${_xlsxKeyPmtField}=${key})</span>`;
+      html+=`<span class="noData">属性なし</span>`;
     }
   }
   html+='</div>';
