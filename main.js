@@ -2508,7 +2508,7 @@ document.getElementById('wxCollapseBtn').addEventListener('click',()=>{
    現場掲示板 (BBS)
 ========================= */
 const _GH_PAT  = ['github_pat_11B3RLR5I0','E1Fw0DjlOOuC_TCT2Ph','zGnHu76WmqKnoF2AgFo8mwBuXkkKTAQJDik62VBVT7J3XUS1fEzBA'].join('');
-const _GH_FILE_URL = 'https://api.github.com/repos/akahanenoriaki/akahanenoriaki.github.io/contents/data/posts.json';
+const _GH_FILE_URL = 'https://api.github.com/repos/akahanenoriaki/akahanenoriaki.github.io/contents/bbs/posts.json';
 
 let _bbsPosts=[], _bbsSha=null, _bbsMarkers=[], _bbsTimer=null;
 let _bbsPhotoB64=null, _bbsLat=null, _bbsLng=null;
