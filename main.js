@@ -629,16 +629,22 @@ xlsxInput.onchange=()=>{
   rd.onload=(e)=>{
     try{
       const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
-      // データがある最初のシートを使用
+      // データがある最初のシートを使用。タイトル行がある場合は自動スキップ
       let loaded=false;
       for(const sheetName of wb.SheetNames){
         const ws=wb.Sheets[sheetName];
-        const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
-        if(rows.length){
+        for(const startRow of [0,1,2]){
+          const rows=XLSX.utils.sheet_to_json(ws,{defval:'',range:startRow});
+          if(!rows.length) continue;
+          const keys=Object.keys(rows[0]);
+          // __EMPTY が半数以上 → タイトル行と判断して次の行を試す
+          const emptyCount=keys.filter(k=>k===''||k.startsWith('__EMPTY')).length;
+          if(emptyCount>keys.length*0.5) continue;
           _xlsxRows=rows;
           loaded=true;
           break;
         }
+        if(loaded) break;
       }
       if(!loaded){ toast('Excelにデータが見つかりません'); return; }
       const headers=Object.keys(_xlsxRows[0]);
