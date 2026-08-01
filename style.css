@@ -827,7 +827,7 @@ html, body { height:100%; margin:0; }
 
   #printNorthOnMap {
     display:block !important;
-    position:fixed; top:70px; right:14px; z-index:99999;
+    position:fixed; top:82px; right:14px; z-index:99999;
     background:none; border:none; padding:0; line-height:0;
   }
 }
