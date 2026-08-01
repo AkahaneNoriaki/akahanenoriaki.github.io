@@ -3163,6 +3163,20 @@ document.addEventListener('drop', e=>{
     _buildPrintMeta(title);
     _buildPrintLegend();
 
+    // ヘッダーの実際の高さを測定（コンテンツが入った状態で）
+    const hdr = document.getElementById('printHeader');
+    hdr.style.display = 'flex';
+    const hdrH = hdr.offsetHeight;
+    hdr.style.display = '';
+
+    // 方位記号をヘッダー下端 + 余白に動的配置
+    document.getElementById('printNorthOnMap').style.top = (hdrH + 6) + 'px';
+
+    // @media print の地図 top もヘッダー高さに合わせて上書き
+    let ds = document.getElementById('_pfDynStyle');
+    if(!ds){ ds = document.createElement('style'); ds.id = '_pfDynStyle'; document.head.appendChild(ds); }
+    ds.textContent = `@media print{#map{top:${hdrH}px !important;height:calc(100vh - ${hdrH}px) !important;}}`;
+
     // @page サイズ指定
     let s = document.getElementById('_pfOrientStyle');
     if(!s){ s = document.createElement('style'); s.id = '_pfOrientStyle'; document.head.appendChild(s); }
@@ -3170,9 +3184,8 @@ document.addEventListener('drop', e=>{
 
     if(_pfBounds && _pfCenter){
       const paperW = _pfLandscape ? A4_H : A4_W;
-      const paperH = (_pfLandscape ? A4_W : A4_H) - PRINT_HEADER_H;
+      const paperH = (_pfLandscape ? A4_W : A4_H) - hdrH;
 
-      // 元の状態を記録
       const origCenter = map.getCenter();
       const origZoom   = map.getZoom();
       const mapEl      = map.getContainer();
@@ -3180,25 +3193,22 @@ document.addEventListener('drop', e=>{
       const origH      = mapEl.style.height;
       const origSnap   = map.options.zoomSnap;
 
-      // マップコンテナを紙面サイズにリサイズして Leaflet に認識させる
       mapEl.style.width  = paperW + 'px';
       mapEl.style.height = paperH + 'px';
       map.invalidateSize({animate: false});
-
-      // 紙面サイズ前提で fitBounds → 選んだフレーム範囲を紙面いっぱいに表示
       map.options.zoomSnap = 0;
       map.fitBounds(_pfBounds, {animate: false, padding: [0, 0]});
 
-      // タイルが読み込まれるのを待ってから印刷
       setTimeout(()=>{
         window.print();
         window.addEventListener('afterprint', ()=>{
-          // 元のコンテナサイズ・ビューに戻す
           mapEl.style.width  = origW;
           mapEl.style.height = origH;
           map.options.zoomSnap = origSnap;
           map.invalidateSize({animate: false});
           map.setView(origCenter, origZoom, {animate: false});
+          document.getElementById('printNorthOnMap').style.top = '';
+          ds.textContent = '';
         }, {once: true});
       }, 600);
     } else {
