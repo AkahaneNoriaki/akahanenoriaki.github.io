@@ -19,6 +19,9 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://unpkg.com/protomaps-leaflet@4.0.1/dist/protomaps-leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/pmtiles@3.0.6/dist/pmtiles.js"></script>
+<script src="https://unpkg.com/pbf@3.3.0/dist/pbf.js"></script>
+<script src="https://unpkg.com/polygon-clipping@0.15.7/dist/polygon-clipping.umd.js"></script>
 
 <style>
 html, body { height:100%; margin:0; }
@@ -570,17 +573,45 @@ html, body { height:100%; margin:0; }
 #xlsxStatCard {
   display:none; position:fixed; bottom:56px; left:50%; transform:translateX(-50%);
   z-index:8000; background:rgba(230,81,0,0.92); color:#fff;
-  border-radius:20px; padding:6px 12px 6px 14px;
+  border-radius:20px; padding:6px 8px 6px 14px;
   font-size:12px; font-family:sans-serif; font-weight:bold;
   box-shadow:0 2px 10px rgba(0,0,0,0.2);
-  align-items:center; gap:8px; white-space:nowrap;
+  align-items:center; gap:6px; white-space:nowrap;
   max-width:calc(100vw - 32px);
 }
-#xlsxStatClose {
-  background:none; border:none; color:rgba(255,255,255,0.8);
-  font-size:13px; cursor:pointer; padding:0; line-height:1;
+#xlsxStatExportBtn, #xlsxStatClose {
+  background:rgba(255,255,255,0.2); border:none; color:#fff;
+  font-size:11px; cursor:pointer; padding:3px 7px; border-radius:10px;
   flex-shrink:0;
 }
+
+/* ─── エクスポートモーダル ───────────────────── */
+#exportModal {
+  display:none; position:fixed; inset:0; z-index:11000;
+  background:rgba(0,0,0,0.45);
+  align-items:center; justify-content:center;
+}
+#exportModal.show { display:flex; }
+#exportModalBox {
+  background:#fff; border-radius:14px; padding:20px 20px 16px;
+  width:min(340px,calc(100vw - 32px));
+  box-shadow:0 8px 32px rgba(0,0,0,0.22); font-family:sans-serif;
+}
+#exportModalTitle { font-size:14px; font-weight:bold; color:#333; margin-bottom:16px; }
+.exportFmtBtns { display:flex; gap:6px; }
+.exportFmtBtn {
+  flex:1; padding:8px 4px; border:1px solid #ccc; border-radius:8px;
+  background:#f5f5f5; font-size:12px; cursor:pointer; font-weight:bold;
+}
+.exportFmtBtn.active { background:#0066ff; color:#fff; border-color:#0066ff; }
+#exportProgressTrack {
+  background:#eee; border-radius:4px; height:6px; margin:10px 0 4px; overflow:hidden;
+}
+#exportProgressBar {
+  background:#0066ff; height:6px; border-radius:4px; width:0%;
+  transition:width 0.15s;
+}
+#exportProgressText { font-size:11px; color:#888; text-align:center; }
 
 /* ─── Excel連携モーダル ──────────────────────── */
 #xlsxModal {
@@ -662,6 +693,7 @@ html, body { height:100%; margin:0; }
 <!-- Excel連携 統計カード -->
 <div id="xlsxStatCard">
   <span id="xlsxStatText"></span>
+  <button id="xlsxStatExportBtn" title="エクスポート">📥 出力</button>
   <button id="xlsxStatClose" title="閉じる">✕</button>
 </div>
 
@@ -689,6 +721,36 @@ html, body { height:100%; margin:0; }
     </div>
   </div>
 </div>
+<!-- エクスポートモーダル -->
+<div id="exportModal">
+  <div id="exportModalBox">
+    <div id="exportModalTitle">📥 レイヤのエクスポート</div>
+    <div class="xlsxRow">
+      <label class="xlsxLabel">対象レイヤ</label>
+      <select id="exportLayerSel">
+        <option value="rinpan">🌲 林班</option>
+        <option value="segyohan">🌳 施業班</option>
+      </select>
+    </div>
+    <div class="xlsxRow">
+      <label class="xlsxLabel">出力形式</label>
+      <div class="exportFmtBtns">
+        <button class="exportFmtBtn active" data-fmt="geojson">GeoJSON</button>
+        <button class="exportFmtBtn" data-fmt="gpkg">GPKG</button>
+        <button class="exportFmtBtn" data-fmt="shp">SHP</button>
+      </div>
+    </div>
+    <div id="exportProgress" style="display:none">
+      <div id="exportProgressTrack"><div id="exportProgressBar"></div></div>
+      <div id="exportProgressText">処理中...</div>
+    </div>
+    <div class="xlsxBtns">
+      <button id="exportCancel">キャンセル</button>
+      <button id="exportStart" class="xlsxOk">ダウンロード</button>
+    </div>
+  </div>
+</div>
+
 <input id="gpkgInput"    type="file" accept=".gpkg"          style="display:none">
 <input id="cameraInput"  type="file" accept="image/*" capture="environment" style="display:none">
 <input id="photoLoadInput" type="file" accept="image/*" multiple style="display:none">
@@ -793,6 +855,9 @@ html, body { height:100%; margin:0; }
         </button>
         <button class="s-btn" id="btnExcelClear" style="display:none">
           <span class="ico">🗑️</span>連携解除
+        </button>
+        <button class="s-btn" id="btnExportLayer">
+          <span class="ico">📥</span>出力
         </button>
       </div>
     </div>
@@ -1610,6 +1675,401 @@ xlsxInput.onchange=()=>{
 
 document.getElementById('xlsxModalCancel').onclick=()=>{ xlsxModal.classList.remove('show'); };
 document.getElementById('xlsxStatClose').onclick=()=>{ document.getElementById('xlsxStatCard').style.display='none'; };
+document.getElementById('xlsxStatExportBtn').onclick=()=>{ _openExportModal(); };
+document.getElementById('btnExportLayer').onclick=()=>{ _openExportModal(); closeSheet(); };
+
+/* ===== PMTiles → GeoJSON/GPKG/SHP エクスポートエンジン ===== */
+
+const _EXPORT_CFG = {
+  rinpan:   { url:'data/tatsuno_rinpan.pmtiles',   layer:'rinpan',   idField:'RIN',        label:'林班' },
+  segyohan: { url:'data/tatsuno_segyohan.pmtiles', layer:'segyohan', idField:'SEGYOHANID', label:'施業班' }
+};
+
+/* ---- MVT / PBF デコード ---- */
+const _zz = n => (n>>1)^-(n&1);
+
+function _px2lng(px,ext,z,tx){ return ((px/ext+tx)/(1<<z))*360-180; }
+function _px2lat(py,ext,z,ty){
+  return Math.atan(Math.sinh(Math.PI*(1-2*(py/ext+ty)/(1<<z))))*180/Math.PI;
+}
+
+function _parseMVTLayer(buf, layerName){
+  const pbf = new Pbf(buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf);
+  let found = null;
+  pbf.readFields((tag,_,p)=>{
+    if(tag!==3) return;
+    const lyr = p.readMessage((t,l,p)=>{
+      if(t===1) l.name=p.readString();
+      else if(t===2){ (l.f||(l.f=[])).push(p.readMessage((t,f,p)=>{
+        if(t===2)f.tags=p.readPackedVarint();
+        else if(t===3)f.type=p.readVarint();
+        else if(t===4)f.geom=p.readPackedVarint();
+      },{}));}
+      else if(t===3){(l.k||(l.k=[])).push(p.readString());}
+      else if(t===4){(l.v||(l.v=[])).push(p.readMessage((t,v,p)=>{
+        if(t===1)v.v=p.readString();
+        else if(t===2)v.v=p.readFloat();
+        else if(t===3)v.v=p.readDouble();
+        else if(t===4)v.v=p.readVarint(true);
+        else if(t===5)v.v=p.readVarint();
+        else if(t===6)v.v=p.readSVarint();
+        else if(t===7)v.v=p.readBoolean();
+      },{}));}
+      else if(t===5)l.ext=p.readVarint();
+    },{name:'',f:[],k:[],v:[],ext:4096});
+    if(lyr.name===layerName) found=lyr;
+  },null);
+  return found;
+}
+
+function _mvtProps(f,lyr){
+  const p={},tags=f.tags||[];
+  for(let i=0;i<tags.length;i+=2){
+    const k=lyr.k[tags[i]],v=lyr.v[tags[i+1]];
+    if(k!==undefined&&v!==undefined)p[k]=v.v;
+  }
+  return p;
+}
+
+function _ringSignedArea(r){
+  let a=0;
+  for(let i=0,j=r.length-1;i<r.length;j=i++)a+=r[j][0]*r[i][1]-r[i][0]*r[j][1];
+  return a/2;
+}
+
+function _decodeRings(geom,ext,z,tx,ty){
+  let x=0,y=0,i=0;
+  const rings=[]; let pts=[];
+  while(i<geom.length){
+    const cmd=geom[i]&7,cnt=geom[i]>>3; i++;
+    if(cmd===1||cmd===2){
+      for(let j=0;j<cnt;j++,i+=2){
+        x+=_zz(geom[i]); y+=_zz(geom[i+1]);
+        const pt=[_px2lng(x,ext,z,tx),_px2lat(y,ext,z,ty)];
+        if(cmd===1){
+          if(pts.length>=3) rings.push([...pts,pts[0]]);
+          pts=[pt];
+        } else pts.push(pt);
+      }
+    } else if(cmd===7){
+      if(pts.length>=3) rings.push([...pts,pts[0]]);
+      pts=[];
+    }
+  }
+  if(pts.length>=3) rings.push([...pts,pts[0]]);
+  return rings;
+}
+
+// リングをpolygon-clipping形式のパーツに変換
+function _ringsToParts(rings){
+  const parts=[]; let cur=null;
+  for(const r of rings){
+    if(_ringSignedArea(r)<0){ // MVT exterior = CW in WGS84
+      if(cur) parts.push(cur);
+      cur=[r];
+    } else if(cur) cur.push(r);
+  }
+  if(cur) parts.push(cur);
+  return parts.length ? parts : rings.map(r=>[r]);
+}
+
+/* ---- 全フィーチャー取得 ---- */
+async function _extractFeatures(cfgKey, onProg){
+  const cfg = _EXPORT_CFG[cfgKey];
+  const pm = new pmtiles.PMTiles(cfg.url);
+  const hdr = await pm.getHeader();
+  const z = hdr.maxZoom;
+  const N = 1<<z;
+
+  const d2t = (lon,lat)=>{
+    const tx=Math.floor((lon+180)/360*N);
+    const lr=lat*Math.PI/180;
+    const ty=Math.floor((1-Math.log(Math.tan(lr)+1/Math.cos(lr))/Math.PI)/2*N);
+    return[tx,Math.max(0,Math.min(N-1,ty))];
+  };
+  const [txMin,tyMin]=d2t(hdr.minLon,hdr.maxLat);
+  const [txMax,tyMax]=d2t(hdr.maxLon,hdr.minLat);
+
+  const tiles=[];
+  for(let tx=txMin;tx<=txMax;tx++) for(let ty=tyMin;ty<=tyMax;ty++) tiles.push([tx,ty]);
+  let done=0;
+
+  const feats=new Map();
+
+  const fetchOne=async([tx,ty])=>{
+    const tile=await pm.getZxy(z,tx,ty);
+    done++;
+    onProg(done/tiles.length*0.75,`タイル ${done}/${tiles.length} 読み込み中`);
+    if(!tile?.data) return;
+    const lyr=_parseMVTLayer(tile.data,cfg.layer);
+    if(!lyr) return;
+    for(const f of(lyr.f||[])){
+      if(f.type!==3) continue;
+      const props=_mvtProps(f,lyr);
+      const id=String(props[cfg.idField]??'unknown');
+      const rings=_decodeRings(f.geom||[],lyr.ext,z,tx,ty);
+      const parts=_ringsToParts(rings);
+      if(!feats.has(id)) feats.set(id,{props,parts:[]});
+      feats.get(id).parts.push(...parts);
+    }
+  };
+
+  // 並列 8本でタイルフェッチ
+  const BATCH=8;
+  for(let i=0;i<tiles.length;i+=BATCH) await Promise.all(tiles.slice(i,i+BATCH).map(fetchOne));
+
+  // ポリゴン再結合 + Excel結合
+  const geoFeats=[];
+  let fi=0;
+  for(const[,{props,parts}] of feats){
+    fi++;
+    if(fi%50===0) onProg(0.75+fi/feats.size*0.25,`ポリゴン再結合 ${fi}/${feats.size}`);
+    let coords;
+    if(parts.length===1){
+      coords=[parts[0]];
+    } else {
+      try{ coords=polygonClipping.union(...parts); }
+      catch(_){ coords=parts; }
+    }
+    const p={...props};
+    if(_xlsxJoinMap){
+      const key=String(p[_xlsxKeyPmtField]??'').trim();
+      const row=_xlsxJoinMap.get(key);
+      if(row) for(const[k,v] of Object.entries(row)) if(k!==_xlsxKeyXlsCol) p[k]=v;
+    }
+    geoFeats.push({type:'Feature',geometry:{type:'MultiPolygon',coordinates:coords},properties:p});
+  }
+  onProg(1,'完了');
+  return{type:'FeatureCollection',features:geoFeats};
+}
+
+/* ---- ダウンロードヘルパー ---- */
+function _dl(blob,fname){
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url; a.download=fname; document.body.appendChild(a); a.click();
+  document.body.removeChild(a); setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+/* ---- GeoJSON ---- */
+function _exportGeoJSON(fc,fname){
+  _dl(new Blob([JSON.stringify(fc)],{type:'application/geo+json'}),fname+'.geojson');
+}
+
+/* ---- WKB / GPKG ---- */
+function _multipolygonWKB(coords){
+  let sz=9;
+  for(const poly of coords){sz+=9;for(const ring of poly)sz+=4+ring.length*16;}
+  const buf=new Uint8Array(sz),dv=new DataView(buf.buffer); let o=0;
+  buf[o++]=1; dv.setInt32(o,6,true); o+=4; dv.setInt32(o,coords.length,true); o+=4;
+  for(const poly of coords){
+    buf[o++]=1; dv.setInt32(o,3,true); o+=4; dv.setInt32(o,poly.length,true); o+=4;
+    for(const ring of poly){
+      dv.setInt32(o,ring.length,true); o+=4;
+      for(const[x,y] of ring){dv.setFloat64(o,x,true);o+=8;dv.setFloat64(o,y,true);o+=8;}
+    }
+  }
+  return buf;
+}
+function _gpkgGeom(wkb,srid){
+  const b=new Uint8Array(8+wkb.length),dv=new DataView(b.buffer);
+  b[0]=0x47;b[1]=0x50;b[2]=0;b[3]=1;
+  dv.setInt32(4,srid,false); b.set(wkb,8); return b;
+}
+
+async function _exportGPKG(fc,fname,onProg){
+  if(!window.initSqlJs){
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js';
+      s.onload=res;s.onerror=rej;document.head.appendChild(s);
+    });
+  }
+  const SQL=await initSqlJs({locateFile:f=>`https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}`});
+  const db=new SQL.Database();
+  db.run('PRAGMA application_id=0x47504B47');
+  db.run('PRAGMA user_version=10200');
+  db.run(`CREATE TABLE gpkg_spatial_ref_sys(srs_name TEXT NOT NULL,srs_id INTEGER NOT NULL PRIMARY KEY,organization TEXT NOT NULL,organization_coordsys_id INTEGER NOT NULL,definition TEXT NOT NULL,description TEXT)`);
+  db.run(`INSERT INTO gpkg_spatial_ref_sys VALUES('WGS 84',4326,'EPSG',4326,'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]',NULL)`);
+  db.run(`INSERT INTO gpkg_spatial_ref_sys VALUES('Undefined',-1,'NONE',-1,'undefined',NULL)`);
+  db.run(`INSERT INTO gpkg_spatial_ref_sys VALUES('Undefined geographic SRS',0,'NONE',0,'undefined',NULL)`);
+  db.run(`CREATE TABLE gpkg_contents(table_name TEXT NOT NULL PRIMARY KEY,data_type TEXT NOT NULL,identifier TEXT,description TEXT,last_change DATETIME NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),min_x REAL,min_y REAL,max_x REAL,max_y REAL,srs_id INTEGER)`);
+  db.run(`CREATE TABLE gpkg_geometry_columns(table_name TEXT NOT NULL,column_name TEXT NOT NULL,geometry_type_name TEXT NOT NULL,srs_id INTEGER NOT NULL,z TINYINT NOT NULL,m TINYINT NOT NULL,CONSTRAINT pk PRIMARY KEY(table_name,column_name))`);
+
+  const tbl=fname.replace(/[^a-zA-Z0-9_]/g,'_');
+  const fields=fc.features.length?Object.keys(fc.features[0].properties).slice(0,60):[];
+  const cols=fields.map(f=>`"${f.replace(/"/g,'')}" TEXT`).join(',');
+  db.run(`CREATE TABLE "${tbl}"(fid INTEGER PRIMARY KEY AUTOINCREMENT,geom BLOB${cols?','+cols:''})`);
+  db.run(`INSERT INTO gpkg_contents VALUES('${tbl}','features','${tbl}','',strftime('%Y-%m-%dT%H:%M:%fZ','now'),NULL,NULL,NULL,NULL,4326)`);
+  db.run(`INSERT INTO gpkg_geometry_columns VALUES('${tbl}','geom','MULTIPOLYGON',4326,0,0)`);
+
+  const ph='?'+( fields.length?','+fields.map(()=>'?').join(','):'');
+  const stmt=db.prepare(`INSERT INTO "${tbl}"(geom${fields.length?','+fields.map(f=>`"${f.replace(/"/g,'')}"`).join(','):''})\nVALUES(${ph})`);
+  let fi=0;
+  for(const feat of fc.features){
+    if(++fi%200===0) onProg&&onProg(fi/fc.features.length,`GPKG書き込み ${fi}/${fc.features.length}`);
+    try{
+      const wkb=_multipolygonWKB(feat.geometry.coordinates);
+      stmt.run([_gpkgGeom(wkb,4326),...fields.map(f=>String(feat.properties[f]??''))]);
+    }catch(_){}
+  }
+  stmt.free();
+  const data=db.export(); db.close();
+  _dl(new Blob([data.buffer],{type:'application/geopackage+sqlite3'}),fname+'.gpkg');
+}
+
+/* ---- SHP (ZIP) ---- */
+function _concat(arrays){
+  const n=arrays.reduce((s,a)=>s+a.length,0),out=new Uint8Array(n); let o=0;
+  for(const a of arrays){out.set(a,o);o+=a.length;} return out;
+}
+
+function _buildSHX(offsets,contentLens){
+  const buf=new Uint8Array(100+offsets.length*8),dv=new DataView(buf.buffer);
+  dv.setInt32(0,9994,false); dv.setInt32(24,(100+offsets.length*8)/2,false); dv.setInt32(28,1000,true); dv.setInt32(32,5,true);
+  for(let i=0;i<offsets.length;i++){
+    dv.setInt32(100+i*8,offsets[i]/2,false); dv.setInt32(104+i*8,contentLens[i]/2,false);
+  }
+  return buf;
+}
+
+function _buildSHPRecord(feat,recNo){
+  const rings=feat.geometry.coordinates.flatMap(p=>p);
+  let numPts=0; for(const r of rings)numPts+=r.length;
+  const cLen=4+32+8+numPts*16+rings.length*4; // shape_type+bbox+numparts+numpts+parts+pts
+  const buf=new Uint8Array(8+cLen),dv=new DataView(buf.buffer);
+  dv.setInt32(0,recNo,false); dv.setInt32(4,cLen/2,false);
+
+  let o=8,minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(const r of rings)for(const[x,y] of r){
+    if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+  }
+  dv.setInt32(o,5,true);o+=4;
+  dv.setFloat64(o,minX,true);o+=8;dv.setFloat64(o,minY,true);o+=8;
+  dv.setFloat64(o,maxX,true);o+=8;dv.setFloat64(o,maxY,true);o+=8;
+  dv.setInt32(o,rings.length,true);o+=4;dv.setInt32(o,numPts,true);o+=4;
+  let pStart=0;
+  for(const r of rings){dv.setInt32(o,pStart,true);o+=4;pStart+=r.length;}
+  for(const r of rings)for(const[x,y] of r){dv.setFloat64(o,x,true);o+=8;dv.setFloat64(o,y,true);o+=8;}
+  return buf;
+}
+
+function _buildDBF(feats,fields){
+  const recSize=1+fields.length*50,headerSize=32+fields.length*32+1;
+  const buf=new Uint8Array(headerSize+feats.length*recSize+1),dv=new DataView(buf.buffer);
+  const now=new Date();
+  buf[0]=3;buf[1]=now.getFullYear()-1900;buf[2]=now.getMonth()+1;buf[3]=now.getDate();
+  dv.setInt32(4,feats.length,true);dv.setInt16(8,headerSize,true);dv.setInt16(10,recSize,true);
+  let o=32;
+  for(const f of fields){
+    const n=(f+'          ').substring(0,10);
+    for(let i=0;i<10;i++)buf[o+i]=n.charCodeAt(i)&0xff;
+    buf[o+11]=67;buf[o+16]=50;o+=32;
+  }
+  buf[o++]=0x0D;
+  for(const feat of feats){
+    buf[o++]=0x20;
+    for(const f of fields){
+      const v=(String(feat.properties[f]??'')+'                                                  ').substring(0,50);
+      for(let i=0;i<50;i++)buf[o+i]=v.charCodeAt(i)&0xff;
+      o+=50;
+    }
+  }
+  buf[o]=0x1A; return buf;
+}
+
+async function _exportSHP(fc,fname,onProg){
+  if(!window.JSZip){
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      s.onload=res;s.onerror=rej;document.head.appendChild(s);
+    });
+  }
+  const feats=fc.features;
+  const fields=feats.length?Object.keys(feats[0].properties).slice(0,20):[];
+  const recs=[],offsets=[],contentLens=[];
+  let shpOff=100,minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+
+  for(let i=0;i<feats.length;i++){
+    if(i%500===0)onProg&&onProg(i/feats.length*0.7,`SHP生成 ${i}/${feats.length}`);
+    const rec=_buildSHPRecord(feats[i],i+1);
+    for(const r of feats[i].geometry.coordinates.flatMap(p=>p))
+      for(const[x,y] of r){
+        if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+      }
+    offsets.push(shpOff); contentLens.push(rec.length-8);
+    shpOff+=rec.length; recs.push(rec);
+  }
+
+  const shpHead=new Uint8Array(100),shpHDV=new DataView(shpHead.buffer);
+  shpHDV.setInt32(0,9994,false);shpHDV.setInt32(24,shpOff/2,false);shpHDV.setInt32(28,1000,true);shpHDV.setInt32(32,5,true);
+  shpHDV.setFloat64(36,minX,true);shpHDV.setFloat64(44,minY,true);shpHDV.setFloat64(52,maxX,true);shpHDV.setFloat64(60,maxY,true);
+  const shxHead=new Uint8Array(100),shxHDV=new DataView(shxHead.buffer);
+  shxHDV.setInt32(0,9994,false);shxHDV.setInt32(24,(100+feats.length*8)/2,false);shxHDV.setInt32(28,1000,true);shxHDV.setInt32(32,5,true);
+  shxHDV.setFloat64(36,minX,true);shxHDV.setFloat64(44,minY,true);shxHDV.setFloat64(52,maxX,true);shxHDV.setFloat64(60,maxY,true);
+
+  const prj='GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
+  const zip=new JSZip();
+  zip.file(fname+'.shp',_concat([shpHead,...recs]));
+  zip.file(fname+'.shx',_buildSHX(offsets,contentLens));
+  zip.file(fname+'.dbf',_buildDBF(feats,fields));
+  zip.file(fname+'.prj',prj);
+  const zb=await zip.generateAsync({type:'blob',compression:'DEFLATE'});
+  _dl(zb,fname+'.zip');
+}
+
+/* ---- エクスポートUI ---- */
+let _exportFmt='geojson';
+document.querySelectorAll('.exportFmtBtn').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.exportFmtBtn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    _exportFmt=btn.dataset.fmt;
+  };
+});
+
+function _openExportModal(){
+  document.getElementById('exportProgress').style.display='none';
+  document.getElementById('exportStart').disabled=false;
+  document.getElementById('exportModal').classList.add('show');
+}
+
+document.getElementById('exportCancel').onclick=()=>{
+  document.getElementById('exportModal').classList.remove('show');
+};
+
+document.getElementById('exportStart').onclick=async()=>{
+  const layerKey=document.getElementById('exportLayerSel').value;
+  const cfg=_EXPORT_CFG[layerKey];
+  const fname=cfg.label+'_'+new Date().toISOString().slice(0,10).replace(/-/g,'');
+  const progEl=document.getElementById('exportProgress');
+  const barEl=document.getElementById('exportProgressBar');
+  const txtEl=document.getElementById('exportProgressText');
+  const btnEl=document.getElementById('exportStart');
+
+  const onProg=(pct,msg)=>{
+    barEl.style.width=(pct*100)+'%';
+    txtEl.textContent=msg||'処理中...';
+  };
+
+  btnEl.disabled=true;
+  progEl.style.display='block';
+  try{
+    const fc=await _extractFeatures(layerKey,onProg);
+    txtEl.textContent='ファイル生成中...';
+    if(_exportFmt==='geojson') _exportGeoJSON(fc,fname);
+    else if(_exportFmt==='gpkg') await _exportGPKG(fc,fname,onProg);
+    else if(_exportFmt==='shp') await _exportSHP(fc,fname,onProg);
+    toast(`${cfg.label} をエクスポートしました（${fc.features.length}件）`);
+    document.getElementById('exportModal').classList.remove('show');
+  }catch(err){
+    toast('エクスポート失敗: '+err.message);
+    console.error(err);
+  }finally{
+    btnEl.disabled=false;
+    progEl.style.display='none';
+  }
+};
 
 function _rebuildActiveLayers(){
   if(_rinpanOn&&_rinpanLayer){ map.removeLayer(_rinpanLayer); _rinpanLayer=_buildRinpanLayer(); _rinpanLayer.addTo(map); }
