@@ -1167,14 +1167,12 @@ map.on('click',(e)=>{
   if(_xlsxJoinMap){
     const key=String(props[_xlsxKeyPmtField]??'').trim();
     const row=_xlsxJoinMap.get(key);
-    html+='<hr>';
     if(row){
+      html+='<hr>';
       for(const [col,val] of Object.entries(row)){
         if(col===_xlsxKeyXlsCol) continue;
         html+=`<span class="xlKey">${col}:</span> ${val}<br>`;
       }
-    } else {
-      html+=`<span class="noData">属性なし</span>`;
     }
   }
   html+='</div>';
