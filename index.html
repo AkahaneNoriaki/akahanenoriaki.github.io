@@ -433,18 +433,20 @@
   <div id="printHeaderTop">
     <div id="printHeaderMapTitle">現場確認マップ</div>
     <div id="printHeaderMeta"></div>
-    <div id="printNorthArrow">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 50" width="36" height="45">
-        <text x="20" y="9" text-anchor="middle" font-size="10" font-weight="bold" fill="#c62828" font-family="sans-serif">N</text>
-        <circle cx="20" cy="30" r="17" fill="white" stroke="#bbb" stroke-width="1.5"/>
-        <polygon points="20,14 15,30 20,27 25,30" fill="#c62828"/>
-        <polygon points="20,46 15,30 20,33 25,30" fill="#aaa"/>
-        <circle cx="20" cy="30" r="2.5" fill="#555"/>
-      </svg>
-    </div>
   </div>
   <div id="printHeaderScale"></div>
   <div id="printLegend"></div>
+</div>
+
+<!-- 印刷時に地図上に表示する方位記号 -->
+<div id="printNorthOnMap">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 50" width="44" height="55">
+    <text x="20" y="9" text-anchor="middle" font-size="10" font-weight="bold" fill="#111" font-family="sans-serif">N</text>
+    <circle cx="20" cy="30" r="17" fill="white" stroke="#444" stroke-width="1.5"/>
+    <polygon points="20,14 15,30 20,27 25,30" fill="#111"/>
+    <polygon points="20,46 15,30 20,33 25,30" fill="white" stroke="#444" stroke-width="0.8"/>
+    <circle cx="20" cy="30" r="2" fill="#111"/>
+  </svg>
 </div>
 
 <!-- 印刷範囲フレーム -->
@@ -453,11 +455,11 @@
     <div id="printFrameLabel">印刷範囲（A4）</div>
     <div id="printFrameNorth">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 50" width="36" height="45">
-        <text x="20" y="9" text-anchor="middle" font-size="10" font-weight="bold" fill="#c62828" font-family="sans-serif">N</text>
-        <circle cx="20" cy="30" r="17" fill="white" stroke="#bbb" stroke-width="1.5"/>
-        <polygon points="20,14 15,30 20,27 25,30" fill="#c62828"/>
-        <polygon points="20,46 15,30 20,33 25,30" fill="#aaa"/>
-        <circle cx="20" cy="30" r="2.5" fill="#555"/>
+        <text x="20" y="9" text-anchor="middle" font-size="10" font-weight="bold" fill="#111" font-family="sans-serif">N</text>
+        <circle cx="20" cy="30" r="17" fill="white" stroke="#444" stroke-width="1.5"/>
+        <polygon points="20,14 15,30 20,27 25,30" fill="#111"/>
+        <polygon points="20,46 15,30 20,33 25,30" fill="white" stroke="#444" stroke-width="0.8"/>
+        <circle cx="20" cy="30" r="2" fill="#111"/>
       </svg>
     </div>
   </div>
