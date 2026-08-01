@@ -619,6 +619,8 @@ btnExcelLink.onclick=()=>{ xlsxInput.value=''; xlsxInput.click(); closeSheet(); 
 
 xlsxInput.onchange=()=>{
   const f=xlsxInput.files[0]; if(!f) return;
+  _xlsxRows=[];
+  xlsxKeyXlsSel.innerHTML='';
   const rd=new FileReader();
   rd.onload=(e)=>{
     try{
