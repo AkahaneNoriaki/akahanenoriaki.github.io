@@ -3065,6 +3065,15 @@ document.addEventListener('drop', e=>{
     const zoom   = map.getZoom();
     document.getElementById('printHeaderMapTitle').textContent = title || '現場確認マップ';
     document.getElementById('printHeaderMeta').textContent = `${dateStr} | 緯度 ${center.lat.toFixed(5)} 経度 ${center.lng.toFixed(5)} | Zoom ${zoom}`;
+    const scaleRaw = parseInt(document.getElementById('printScaleInput').value, 10);
+    const scaleDom = document.getElementById('printHeaderScale');
+    if(scaleRaw > 0){
+      scaleDom.textContent = `縮尺 1/${scaleRaw.toLocaleString()}`;
+      scaleDom.style.display = '';
+    } else {
+      scaleDom.textContent = '';
+      scaleDom.style.display = 'none';
+    }
   }
 
   // ── 印刷範囲フレーム ──
@@ -3111,6 +3120,7 @@ document.addEventListener('drop', e=>{
   document.getElementById('printFrameNext').addEventListener('click', ()=>{
     document.getElementById('printFrame').classList.remove('show');
     document.getElementById('printMapTitle').value = '';
+    document.getElementById('printScaleInput').value = '';
     document.getElementById('printModal').classList.add('show');
     setTimeout(()=>document.getElementById('printMapTitle').focus(), 100);
   });
