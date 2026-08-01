@@ -3066,45 +3066,49 @@ document.addEventListener('drop', e=>{
     document.getElementById('printHeaderMapTitle').textContent = title || '現場確認マップ';
     document.getElementById('printHeaderMeta').textContent = `${dateStr} | 緯度 ${center.lat.toFixed(5)} 経度 ${center.lng.toFixed(5)} | Zoom ${zoom}`;
     const scaleRaw = parseInt(document.getElementById('printScaleInput').value, 10);
-    const scaleDom = document.getElementById('printHeaderScale');
+    const scaleDom  = document.getElementById('printHeaderScale');
+    const mapScale  = document.getElementById('printMapScale');
     if(scaleRaw > 0){
-      scaleDom.textContent = `縮尺 1/${scaleRaw.toLocaleString()}`;
+      const txt = `縮尺 1/${scaleRaw.toLocaleString()}`;
+      scaleDom.textContent = txt;
       scaleDom.style.display = '';
+      mapScale.textContent  = txt;
+      mapScale.style.display = '';
     } else {
-      scaleDom.textContent = '';
-      scaleDom.style.display = 'none';
+      scaleDom.textContent = ''; scaleDom.style.display = 'none';
+      mapScale.textContent = ''; mapScale.style.display = 'none';
     }
   }
 
   // ── 印刷範囲フレーム ──
-  let _pfLandscape = false;
+  let _pfLandscape  = false;
+  let _pfCenter     = null;
+  let _pfPrintZoom  = null;
+
+  // A4 in CSS px at 96 DPI (1in = 96px, A4 = 8.268 × 11.693 in)
+  const A4_W = 794, A4_H = 1123;
+  const PRINT_HEADER_H = 64; // matches @media print top:64px
 
   function _pfUpdateFrame(){
     const box = document.getElementById('printFrameBox');
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const barH = 70;
-    const margin = 36;
+    const barH = 70, margin = 36;
     const aw = vw - margin * 2;
     const ah = vh - barH - margin * 2;
     let fw, fh;
+    const ratio = 297 / 210;
     if(_pfLandscape){
-      // A4 横向き: 横/縦 = 297/210
-      const ratio = 297 / 210;
       if(aw / ratio <= ah){ fw = aw; fh = fw / ratio; }
       else { fh = ah; fw = fh * ratio; }
     } else {
-      // A4 縦向き: 縦/横 = 297/210
-      const ratio = 297 / 210;
       if(aw * ratio <= ah){ fw = aw; fh = fw * ratio; }
       else { fh = ah; fw = fh / ratio; }
     }
-    const left = (vw - fw) / 2;
-    const top = margin;
     box.style.width  = fw + 'px';
     box.style.height = fh + 'px';
-    box.style.left   = left + 'px';
-    box.style.top    = top + 'px';
+    box.style.left   = ((vw - fw) / 2) + 'px';
+    box.style.top    = margin + 'px';
   }
 
   document.getElementById('printFrameOrient').addEventListener('click', ()=>{
@@ -3118,8 +3122,27 @@ document.addEventListener('drop', e=>{
   });
 
   document.getElementById('printFrameNext').addEventListener('click', ()=>{
+    // ── 印刷用センター・ズームを確定 ──
+    const box    = document.getElementById('printFrameBox');
+    const mapEl  = map.getContainer();
+    const bRect  = box.getBoundingClientRect();
+    const mRect  = mapEl.getBoundingClientRect();
+
+    // フレームの中心をマップ座標に変換
+    const cx = bRect.left - mRect.left + bRect.width  / 2;
+    const cy = bRect.top  - mRect.top  + bRect.height / 2;
+    _pfCenter = map.containerPointToLatLng(L.point(cx, cy));
+
+    // 印刷紙面でのマップ描画幅
+    const paperMapW = _pfLandscape ? A4_H : A4_W;
+    const paperMapH = (_pfLandscape ? A4_W : A4_H) - PRINT_HEADER_H;
+
+    // フレームのスクリーン幅 → 紙面幅 への比率でズームを補正
+    const zoomDelta = Math.log2(Math.min(paperMapW / bRect.width, paperMapH / bRect.height));
+    _pfPrintZoom = map.getZoom() + zoomDelta;
+
     document.getElementById('printFrame').classList.remove('show');
-    document.getElementById('printMapTitle').value = '';
+    document.getElementById('printMapTitle').value   = '';
     document.getElementById('printScaleInput').value = '';
     document.getElementById('printModal').classList.add('show');
     setTimeout(()=>document.getElementById('printMapTitle').focus(), 100);
@@ -3130,28 +3153,51 @@ document.addEventListener('drop', e=>{
   });
 
   // ── 印刷モーダル ──
-  document.getElementById('btnPrint').addEventListener('click',()=>{
+  document.getElementById('btnPrint').addEventListener('click', ()=>{
     closeSheet();
     _pfLandscape = false;
+    _pfCenter = null; _pfPrintZoom = null;
     document.getElementById('printFrameOrient').textContent = '横向き';
     document.getElementById('printFrame').classList.add('show');
     _pfUpdateFrame();
   });
-  document.getElementById('printCancel').addEventListener('click',()=>{
+
+  document.getElementById('printCancel').addEventListener('click', ()=>{
     document.getElementById('printModal').classList.remove('show');
   });
-  document.getElementById('printOk').addEventListener('click',()=>{
+
+  document.getElementById('printOk').addEventListener('click', ()=>{
     const title = document.getElementById('printMapTitle').value.trim();
     document.getElementById('printModal').classList.remove('show');
     _buildPrintMeta(title);
     _buildPrintLegend();
+
+    // @page サイズ指定
     let s = document.getElementById('_pfOrientStyle');
     if(!s){ s = document.createElement('style'); s.id = '_pfOrientStyle'; document.head.appendChild(s); }
     s.textContent = _pfLandscape ? '@page{size:A4 landscape;}' : '@page{size:A4 portrait;}';
-    setTimeout(()=>window.print(), 80);
+
+    // フレームで選んだ範囲を印刷に反映
+    const origCenter = map.getCenter();
+    const origZoom   = map.getZoom();
+    if(_pfCenter && _pfPrintZoom !== null){
+      const origSnap = map.options.zoomSnap;
+      map.options.zoomSnap = 0;
+      map.setView(_pfCenter, _pfPrintZoom, {animate: false});
+      setTimeout(()=>{
+        window.print();
+        window.addEventListener('afterprint', ()=>{
+          map.options.zoomSnap = origSnap;
+          map.setView(origCenter, origZoom, {animate: false});
+        }, {once: true});
+      }, 300);
+    } else {
+      setTimeout(()=>window.print(), 80);
+    }
   });
-  document.getElementById('printMapTitle').addEventListener('keydown',e=>{
-    if(e.key==='Enter') document.getElementById('printOk').click();
+
+  document.getElementById('printMapTitle').addEventListener('keydown', e=>{
+    if(e.key==='Enter')  document.getElementById('printOk').click();
     if(e.key==='Escape') document.getElementById('printCancel').click();
   });
 })();

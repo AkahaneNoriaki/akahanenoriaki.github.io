@@ -760,6 +760,7 @@ html, body { height:100%; margin:0; }
 #printHeaderScale {
   font-size:11px; color:#444; font-weight:bold; padding-bottom:1px;
 }
+#printMapScale { display:none; }
 
 /* ─── 印刷ヘッダー（画面では非表示）──────── */
 #printHeader {
@@ -815,5 +816,14 @@ html, body { height:100%; margin:0; }
     top:64px !important;
     width:100vw !important;
     height:calc(100vh - 64px) !important;
+  }
+
+  #printMapScale {
+    display:block !important;
+    position:fixed; bottom:12px; left:12px; z-index:99999;
+    background:rgba(255,255,255,0.92);
+    border:1px solid #bbb; border-radius:4px;
+    padding:5px 10px;
+    font-size:12px; font-weight:bold; font-family:sans-serif; color:#333;
   }
 }
