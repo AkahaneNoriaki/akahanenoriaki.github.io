@@ -621,42 +621,24 @@ xlsxInput.addEventListener('click', function(){ this.value=''; });
 
 xlsxInput.onchange=()=>{
   const f=xlsxInput.files[0]; if(!f) return;
-  // 前回データを即座にクリア（古い状態が残らないように）
   _xlsxRows=[];
   xlsxKeyXlsSel.innerHTML='';
-  xlsxModalInfo.textContent='読み込み中…';
   const rd=new FileReader();
   rd.onload=(e)=>{
     try{
       const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
-      // データがある最初のシートを使用。タイトル行がある場合は自動スキップ
-      let loaded=false;
-      for(const sheetName of wb.SheetNames){
-        const ws=wb.Sheets[sheetName];
-        for(const startRow of [0,1,2]){
-          const rows=XLSX.utils.sheet_to_json(ws,{defval:'',range:startRow});
-          if(!rows.length) continue;
-          const keys=Object.keys(rows[0]);
-          // __EMPTY が8割以上 → 1セルだけのタイトル行と判断して次の行を試す
-          const emptyCount=keys.filter(k=>k===''||k.startsWith('__EMPTY')).length;
-          if(emptyCount>keys.length*0.8) continue;
-          _xlsxRows=rows;
-          loaded=true;
-          break;
-        }
-        if(loaded) break;
-      }
-      if(!loaded){ toast('Excelにデータが見つかりません'); return; }
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      _xlsxRows=XLSX.utils.sheet_to_json(ws,{defval:''});
+      if(!_xlsxRows.length){ toast('データが空です'); return; }
       const headers=Object.keys(_xlsxRows[0]);
       xlsxKeyXlsSel.innerHTML=headers.map(h=>`<option value="${h}">${h}</option>`).join('');
       xlsxModalInfo.textContent=`${_xlsxRows.length}行 / ${headers.length}列 読み込み完了`;
       xlsxModal.classList.add('show');
     } catch(err){
       console.error('Excel読み込みエラー:', err);
-      toast('Excelの読み込みに失敗: '+(err.message||'形式を確認してください'));
+      toast('Excelの読み込みに失敗しました');
     }
   };
-  rd.onerror=()=>{ toast('ファイルの読み込みに失敗しました'); };
   rd.readAsArrayBuffer(f);
 };
 
