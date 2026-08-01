@@ -3081,23 +3081,21 @@ document.addEventListener('drop', e=>{
   }
 
   // ── 印刷範囲フレーム ──
-  let _pfLandscape  = false;
-  let _pfCenter     = null;
-  let _pfPrintZoom  = null;
+  let _pfLandscape = false;
+  let _pfCenter    = null;
+  let _pfBounds    = null;
 
-  // A4 in CSS px at 96 DPI (1in = 96px, A4 = 8.268 × 11.693 in)
+  // A4 in CSS px at 96 DPI (1in = 96px)
   const A4_W = 794, A4_H = 1123;
-  const PRINT_HEADER_H = 64; // matches @media print top:64px
+  const PRINT_HEADER_H = 64;
 
   function _pfUpdateFrame(){
     const box = document.getElementById('printFrameBox');
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const vw = window.innerWidth, vh = window.innerHeight;
     const barH = 70, margin = 36;
-    const aw = vw - margin * 2;
-    const ah = vh - barH - margin * 2;
-    let fw, fh;
+    const aw = vw - margin * 2, ah = vh - barH - margin * 2;
     const ratio = 297 / 210;
+    let fw, fh;
     if(_pfLandscape){
       if(aw / ratio <= ah){ fw = aw; fh = fw / ratio; }
       else { fh = ah; fw = fh * ratio; }
@@ -3122,24 +3120,17 @@ document.addEventListener('drop', e=>{
   });
 
   document.getElementById('printFrameNext').addEventListener('click', ()=>{
-    // ── 印刷用センター・ズームを確定 ──
-    const box    = document.getElementById('printFrameBox');
-    const mapEl  = map.getContainer();
-    const bRect  = box.getBoundingClientRect();
-    const mRect  = mapEl.getBoundingClientRect();
+    // フレームボックスの地理的範囲を確定する
+    const box   = document.getElementById('printFrameBox');
+    const mapEl = map.getContainer();
+    const bRect = box.getBoundingClientRect();
+    const mRect = mapEl.getBoundingClientRect();
 
-    // フレームの中心をマップ座標に変換
-    const cx = bRect.left - mRect.left + bRect.width  / 2;
-    const cy = bRect.top  - mRect.top  + bRect.height / 2;
-    _pfCenter = map.containerPointToLatLng(L.point(cx, cy));
-
-    // 印刷紙面でのマップ描画幅
-    const paperMapW = _pfLandscape ? A4_H : A4_W;
-    const paperMapH = (_pfLandscape ? A4_W : A4_H) - PRINT_HEADER_H;
-
-    // フレームのスクリーン幅 → 紙面幅 への比率でズームを補正
-    const zoomDelta = Math.log2(Math.min(paperMapW / bRect.width, paperMapH / bRect.height));
-    _pfPrintZoom = map.getZoom() + zoomDelta;
+    // フレームの四隅を地理座標に変換
+    const tl = map.containerPointToLatLng(L.point(bRect.left - mRect.left, bRect.top  - mRect.top));
+    const br = map.containerPointToLatLng(L.point(bRect.right - mRect.left, bRect.bottom - mRect.top));
+    _pfBounds = L.latLngBounds(tl, br);
+    _pfCenter = _pfBounds.getCenter();
 
     document.getElementById('printFrame').classList.remove('show');
     document.getElementById('printMapTitle').value   = '';
@@ -3156,7 +3147,7 @@ document.addEventListener('drop', e=>{
   document.getElementById('btnPrint').addEventListener('click', ()=>{
     closeSheet();
     _pfLandscape = false;
-    _pfCenter = null; _pfPrintZoom = null;
+    _pfCenter = null; _pfBounds = null;
     document.getElementById('printFrameOrient').textContent = '横向き';
     document.getElementById('printFrame').classList.add('show');
     _pfUpdateFrame();
@@ -3177,20 +3168,39 @@ document.addEventListener('drop', e=>{
     if(!s){ s = document.createElement('style'); s.id = '_pfOrientStyle'; document.head.appendChild(s); }
     s.textContent = _pfLandscape ? '@page{size:A4 landscape;}' : '@page{size:A4 portrait;}';
 
-    // フレームで選んだ範囲を印刷に反映
-    const origCenter = map.getCenter();
-    const origZoom   = map.getZoom();
-    if(_pfCenter && _pfPrintZoom !== null){
-      const origSnap = map.options.zoomSnap;
+    if(_pfBounds && _pfCenter){
+      const paperW = _pfLandscape ? A4_H : A4_W;
+      const paperH = (_pfLandscape ? A4_W : A4_H) - PRINT_HEADER_H;
+
+      // 元の状態を記録
+      const origCenter = map.getCenter();
+      const origZoom   = map.getZoom();
+      const mapEl      = map.getContainer();
+      const origW      = mapEl.style.width;
+      const origH      = mapEl.style.height;
+      const origSnap   = map.options.zoomSnap;
+
+      // マップコンテナを紙面サイズにリサイズして Leaflet に認識させる
+      mapEl.style.width  = paperW + 'px';
+      mapEl.style.height = paperH + 'px';
+      map.invalidateSize({animate: false});
+
+      // 紙面サイズ前提で fitBounds → 選んだフレーム範囲を紙面いっぱいに表示
       map.options.zoomSnap = 0;
-      map.setView(_pfCenter, _pfPrintZoom, {animate: false});
+      map.fitBounds(_pfBounds, {animate: false, padding: [0, 0]});
+
+      // タイルが読み込まれるのを待ってから印刷
       setTimeout(()=>{
         window.print();
         window.addEventListener('afterprint', ()=>{
+          // 元のコンテナサイズ・ビューに戻す
+          mapEl.style.width  = origW;
+          mapEl.style.height = origH;
           map.options.zoomSnap = origSnap;
+          map.invalidateSize({animate: false});
           map.setView(origCenter, origZoom, {animate: false});
         }, {once: true});
-      }, 300);
+      }, 600);
     } else {
       setTimeout(()=>window.print(), 80);
     }
