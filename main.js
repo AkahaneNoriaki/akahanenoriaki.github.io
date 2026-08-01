@@ -626,9 +626,11 @@ xlsxInput.onchange=()=>{
       const ws=wb.Sheets[wb.SheetNames[0]];
       _xlsxRows=XLSX.utils.sheet_to_json(ws,{defval:''});
       if(!_xlsxRows.length){ toast('データが空です'); return; }
+      _csvSource=false;
       const headers=Object.keys(_xlsxRows[0]);
       xlsxKeyXlsSel.innerHTML=headers.map(h=>`<option value="${h}">${h}</option>`).join('');
       xlsxModalInfo.textContent=`${_xlsxRows.length}行 / ${headers.length}列 読み込み完了`;
+      document.getElementById('xlsxModalTitle').textContent='📊 Excel連携 — キー項目の選択';
       xlsxModal.classList.add('show');
     } catch(err){
       toast('Excelの読み込みに失敗しました');
@@ -639,6 +641,79 @@ xlsxInput.onchange=()=>{
 
 document.getElementById('xlsxModalCancel').onclick=()=>{ xlsxModal.classList.remove('show'); };
 document.getElementById('xlsxStatClose').onclick=()=>{ document.getElementById('xlsxStatCard').style.display='none'; };
+
+/* --- CSV連携 --- */
+let _csvSource = false; // true=CSV, false=Excel (for stat card label)
+
+function _parseCsv(text){
+  const lines = text.split(/\r?\n/);
+  if(!lines.length) return [];
+  const headers = _splitCsvRow(lines[0]);
+  const rows = [];
+  for(let i=1;i<lines.length;i++){
+    if(!lines[i].trim()) continue;
+    const vals = _splitCsvRow(lines[i]);
+    const obj = {};
+    headers.forEach((h,j)=>{ obj[h] = vals[j]??''; });
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function _splitCsvRow(line){
+  const cols = [];
+  let cur = '', inQ = false;
+  for(let i=0;i<line.length;i++){
+    const c = line[i];
+    if(inQ){
+      if(c==='"' && line[i+1]==='"'){ cur+='"'; i++; }
+      else if(c==='"'){ inQ=false; }
+      else { cur+=c; }
+    } else {
+      if(c==='"'){ inQ=true; }
+      else if(c===','){ cols.push(cur); cur=''; }
+      else { cur+=c; }
+    }
+  }
+  cols.push(cur);
+  return cols;
+}
+
+const csvInput   = document.getElementById('csvInput');
+const btnCsvLink = document.getElementById('btnCsvLink');
+
+btnCsvLink.onclick=()=>{ csvInput.value=''; csvInput.click(); closeSheet(); };
+
+csvInput.onchange=()=>{
+  const f=csvInput.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=(e)=>{
+    try{
+      let text;
+      try{ text=new TextDecoder('shift-jis').decode(e.target.result); }
+      catch(_){ text=new TextDecoder('utf-8').decode(e.target.result); }
+      const rows=_parseCsv(text);
+      if(!rows.length){ toast('データが空です'); return; }
+      _xlsxRows=rows;
+      _csvSource=true;
+      const headers=Object.keys(rows[0]);
+      xlsxKeyXlsSel.innerHTML=headers.map(h=>`<option value="${h}">${h}</option>`).join('');
+      // pre-select 整理キー if present
+      const defKey=headers.find(h=>h==='整理キー')||headers[0];
+      xlsxKeyXlsSel.value=defKey;
+      // pre-select SEGYOHANID on PMTiles side
+      if([...xlsxKeyPmtSel.options].some(o=>o.value==='SEGYOHANID')){
+        xlsxKeyPmtSel.value='SEGYOHANID';
+      }
+      xlsxModalInfo.textContent=`${rows.length}行 / ${headers.length}列 読み込み完了`;
+      document.getElementById('xlsxModalTitle').textContent='📋 CSV連携 — キー項目の選択';
+      xlsxModal.classList.add('show');
+    } catch(err){
+      toast('CSVの読み込みに失敗しました');
+    }
+  };
+  rd.readAsArrayBuffer(f);
+};
 document.getElementById('xlsxStatExportBtn').onclick=()=>{ _openExportModal(); };
 document.getElementById('btnExportLayer').onclick=()=>{ _openExportModal(); closeSheet(); };
 
@@ -1044,8 +1119,9 @@ function _showXlsxStat(){
   const xlRows=_xlsxRows.length;
   const matched=_xlsxJoinMap?_xlsxJoinMap.size:0;
   const card=document.getElementById('xlsxStatCard');
+  const label=_csvSource?'CSV':'Excel';
   document.getElementById('xlsxStatText').textContent=
-    `📊 Excel連携中 — ${_xlsxKeyPmtField}キーで ${matched.toLocaleString()} / ${xlRows.toLocaleString()} 件`;
+    `${_csvSource?'📋':'📊'} ${label}連携中 — ${_xlsxKeyPmtField}キーで ${matched.toLocaleString()} / ${xlRows.toLocaleString()} 件`;
   card.style.display='flex';
 }
 
@@ -1058,7 +1134,8 @@ document.getElementById('xlsxModalOk').onclick=()=>{
     if(k) _xlsxJoinMap.set(k,row);
   }
   xlsxModal.classList.remove('show');
-  btnExcelLink.classList.add('active');
+  if(_csvSource){ btnCsvLink.classList.add('active'); btnExcelLink.classList.remove('active'); }
+  else { btnExcelLink.classList.add('active'); btnCsvLink.classList.remove('active'); }
   btnExcelClear.style.display='';
   _showXlsxStat();
   _rebuildActiveLayers();
@@ -1066,13 +1143,14 @@ document.getElementById('xlsxModalOk').onclick=()=>{
 };
 
 btnExcelClear.onclick=()=>{
-  _xlsxRows=[]; _xlsxJoinMap=null;
+  _xlsxRows=[]; _xlsxJoinMap=null; _csvSource=false;
   btnExcelLink.classList.remove('active');
+  btnCsvLink.classList.remove('active');
   btnExcelClear.style.display='none';
   document.getElementById('xlsxStatCard').style.display='none';
   map.closePopup();
   _rebuildActiveLayers();
-  toast('Excel連携を解除しました');
+  toast('連携を解除しました');
   closeSheet();
 };
 
@@ -1125,7 +1203,7 @@ map.on('click',(e)=>{
         html+=`<span class="xlKey">${col}:</span> ${val}<br>`;
       }
     } else {
-      html+=`<span class="noData">Excelデータなし (${_xlsxKeyPmtField}=${key})</span>`;
+      html+=`<span class="noData">${_csvSource?'CSV':'Excel'}データなし (${_xlsxKeyPmtField}=${key})</span>`;
     }
   }
   html+='</div>';
