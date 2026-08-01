@@ -132,17 +132,22 @@ new CrsControl().addTo(map);
 /* =========================
    Location + Follow
 ========================= */
-let follow=true, me=null;
+let follow=false, me=null, _gpsInitDone=false;
 if(navigator.geolocation){
   navigator.geolocation.watchPosition(
     pos=>{
       const ll=[pos.coords.latitude,pos.coords.longitude];
       if(!me){
         me=L.circleMarker(ll,{radius:8,color:'#0066ff',fillColor:'#3399ff',fillOpacity:0.9}).addTo(map);
-        if(follow) map.setView(ll,16,{animate:false});
       } else {
         me.setLatLng(ll);
-        if(follow) map.panTo(ll,{animate:true});
+      }
+      if(!_gpsInitDone){
+        // 初回のみ現在位置へ移動（追従はOFFのまま）
+        _gpsInitDone=true;
+        map.setView(ll,16,{animate:false});
+      } else if(follow){
+        map.panTo(ll,{animate:true});
       }
       if(recording) addTrackPoint(pos.coords.latitude,pos.coords.longitude);
     },
@@ -152,9 +157,19 @@ if(navigator.geolocation){
 } else { toast('位置情報に対応していません'); }
 
 const btnFollow=document.getElementById('btnFollow');
+
+// ドラッグ操作で追従を自動解除
+map.on('dragstart',()=>{
+  if(follow){
+    follow=false;
+    btnFollow.innerHTML='<span class="ico">🚶</span>追従 OFF';
+    btnFollow.classList.add('on');
+  }
+});
+
 btnFollow.onclick=()=>{
   follow=!follow;
-  if(follow && me) map.panTo(me.getLatLng(),{animate:true});
+  if(follow&&me) map.panTo(me.getLatLng(),{animate:true});
   btnFollow.innerHTML=`<span class="ico">${follow?'🧍':'🚶'}</span>追従 ${follow?'ON':'OFF'}`;
   btnFollow.classList.toggle('on',!follow);
   toast(follow?'自分を中央 ON':'自分を中央 OFF');
