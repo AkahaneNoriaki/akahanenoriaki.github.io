@@ -615,14 +615,10 @@ const xlsxModalInfo  = document.getElementById('xlsxModalInfo');
 const btnExcelLink   = document.getElementById('btnExcelLink');
 const btnExcelClear  = document.getElementById('btnExcelClear');
 
-btnExcelLink.onclick=()=>{ xlsxInput.click(); closeSheet(); };
-// input自身のclickで value をリセット → 同じファイルの再選択でも onchange が必ず発火する
-xlsxInput.addEventListener('click', function(){ this.value=''; });
+btnExcelLink.onclick=()=>{ xlsxInput.value=''; xlsxInput.click(); closeSheet(); };
 
 xlsxInput.onchange=()=>{
   const f=xlsxInput.files[0]; if(!f) return;
-  _xlsxRows=[];
-  xlsxKeyXlsSel.innerHTML='';
   const rd=new FileReader();
   rd.onload=(e)=>{
     try{
@@ -635,7 +631,6 @@ xlsxInput.onchange=()=>{
       xlsxModalInfo.textContent=`${_xlsxRows.length}行 / ${headers.length}列 読み込み完了`;
       xlsxModal.classList.add('show');
     } catch(err){
-      console.error('Excel読み込みエラー:', err);
       toast('Excelの読み込みに失敗しました');
     }
   };
