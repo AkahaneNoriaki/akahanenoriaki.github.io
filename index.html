@@ -651,6 +651,8 @@ html, body { height:100%; margin:0; }
       <label class="xlsxLabel">PMTiles側キー</label>
       <select id="xlsxKeyPmt">
         <option value="RIN">RIN（林班番号）</option>
+        <option value="KEY_02">KEY_02（施業班キー）</option>
+        <option value="SEGYOHANID">SEGYOHANID（施業班ID）</option>
         <option value="CITY">CITY（市町村）</option>
       </select>
     </div>
@@ -760,6 +762,9 @@ html, body { height:100%; margin:0; }
       <div class="s-grid">
         <button class="s-btn" id="btnToggleRinpan">
           <span class="ico">🌲</span>林班
+        </button>
+        <button class="s-btn" id="btnToggleSegyohan">
+          <span class="ico">🌳</span>施業班
         </button>
         <button class="s-btn" id="btnExcelLink">
           <span class="ico">📊</span>Excel連携
@@ -1471,6 +1476,56 @@ _rinpanBtn.onclick=()=>{
   closeSheet();
 };
 
+/* --- 連携可能レイヤ: 施業班 PMTiles --- */
+let _segyohanLayer=null;
+let _segyohanOn=false;
+const _segyohanBtn=document.getElementById('btnToggleSegyohan');
+
+function _buildSegyohanLayer(){
+  return protomapsL.leafletLayer({
+    url: 'data/tatsuno_segyohan.pmtiles',
+    paintRules:[
+      {
+        dataLayer:'segyohan',
+        symbolizer: new protomapsL.PolygonSymbolizer({
+          fill: 'rgba(0,0,0,0)',
+          stroke: '#e65100',
+          width: 0.8
+        })
+      }
+    ],
+    labelRules:[
+      {
+        dataLayer:'segyohan',
+        minzoom:14,
+        symbolizer: new protomapsL.CenteredTextSymbolizer({
+          labelProps:['SEGYO'],
+          font:'9px sans-serif',
+          fill:'#bf360c',
+          stroke:'rgba(255,255,255,0.8)',
+          width:1.5
+        })
+      }
+    ]
+  });
+}
+
+_segyohanBtn.onclick=()=>{
+  if(_segyohanOn){
+    if(_segyohanLayer){ map.removeLayer(_segyohanLayer); }
+    _segyohanOn=false;
+    _segyohanBtn.classList.remove('active');
+    toast('施業班レイヤを非表示');
+  } else {
+    if(!_segyohanLayer){ _segyohanLayer=_buildSegyohanLayer(); }
+    _segyohanLayer.addTo(map);
+    _segyohanOn=true;
+    _segyohanBtn.classList.add('active');
+    toast('施業班レイヤを表示');
+  }
+  closeSheet();
+};
+
 /* --- Excel連携 --- */
 let _xlsxRows=[];        // [{col:val, ...}, ...]
 let _xlsxJoinMap=null;   // Map<string, row>
@@ -1533,23 +1588,44 @@ btnExcelClear.onclick=()=>{
   closeSheet();
 };
 
-/* 林班クリック → ポップアップ */
-map.on('click',(e)=>{
-  if(!_rinpanOn || !_rinpanLayer) return;
-  let props=null;
+/* 林班・施業班クリック → ポップアップ */
+function _queryLayer(layer, layerName, latlng){
   try{
-    const results=_rinpanLayer.queryTileFeaturesDebug(e.latlng.lng,e.latlng.lat);
+    const results=layer.queryTileFeaturesDebug(latlng.lng,latlng.lat);
     for(const [,feats] of results){
       for(const f of feats){
-        if(f.layerName==='rinpan'){ props=f.feature.props; break; }
+        if(f.layerName===layerName) return f.feature.props;
       }
-      if(props) break;
     }
-  } catch(_){ return; }
+  } catch(_){}
+  return null;
+}
+
+map.on('click',(e)=>{
+  const hasPmt=(_rinpanOn&&_rinpanLayer)||(_segyohanOn&&_segyohanLayer);
+  if(!hasPmt) return;
+
+  let props=null, layerLabel='', layerColor='';
+  if(_segyohanOn&&_segyohanLayer){
+    props=_queryLayer(_segyohanLayer,'segyohan',e.latlng);
+    layerLabel='施業班'; layerColor='#e65100';
+  }
+  if(!props&&_rinpanOn&&_rinpanLayer){
+    props=_queryLayer(_rinpanLayer,'rinpan',e.latlng);
+    layerLabel='林班'; layerColor='#2e7d32';
+  }
   if(!props) return;
 
-  let html=`<div class="rinpanPopup"><b>林班 ${props.RIN||'-'}</b>`;
-  if(props.CITY) html+=`<br><span class="xlKey">市町村:</span> ${props.CITY}`;
+  let title='';
+  if(layerLabel==='施業班'){
+    title=`林班${props.RIN||'-'} ${props.SHO||''}-${props.SEGYO||''}${props.EDA&&props.EDA!=='-'?props.EDA:''}`;
+  } else {
+    title=`林班 ${props.RIN||'-'}`;
+  }
+
+  let html=`<div class="rinpanPopup">`;
+  html+=`<b style="color:${layerColor}">[${layerLabel}] ${title}</b>`;
+  if(props.CITY) html+=`<br><span class="xlKey">市町村コード:</span> ${props.CITY}`;
 
   if(_xlsxJoinMap){
     const key=String(props[_xlsxKeyPmtField]??'').trim();
