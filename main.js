@@ -3034,20 +3034,16 @@ document.addEventListener('drop', e=>{
   function _buildPrintLegend(){
     const el = document.getElementById('printLegend');
     el.innerHTML = '';
-
-    // 林班レイヤ
     if(typeof _rinpanLayer !== 'undefined' && _rinpanLayer && map.hasLayer(_rinpanLayer)){
       const d = document.createElement('div'); d.className = 'print-legend-item';
       d.innerHTML = '<div class="print-legend-line" style="background:#2e7d32;border:1.5px solid #2e7d32;"></div><span>林班</span>';
       el.appendChild(d);
     }
-    // 施業班レイヤ
     if(typeof _segyohanLayer !== 'undefined' && _segyohanLayer && map.hasLayer(_segyohanLayer)){
       const d = document.createElement('div'); d.className = 'print-legend-item';
       d.innerHTML = '<div class="print-legend-line" style="background:#e65100;border:1.5px solid #e65100;"></div><span>施業班</span>';
       el.appendChild(d);
     }
-    // BBS カテゴリ（投稿があるもの）
     const usedCats = new Set((_bbsPosts||[]).map(p=>p.cat));
     for(const [cat, col] of Object.entries(BBS_CAT_COL)){
       if(!usedCats.has(cat)) continue;
@@ -3055,7 +3051,6 @@ document.addEventListener('drop', e=>{
       d.innerHTML = `<div class="print-legend-dot" style="background:${col};"></div><span>${BBS_CAT_EMO[cat]} ${cat}</span>`;
       el.appendChild(d);
     }
-    // ベクタレイヤ
     if(typeof gjGroup !== 'undefined' && gjGroup && gjGroup.getLayers().length){
       const d = document.createElement('div'); d.className = 'print-legend-item';
       d.innerHTML = '<div class="print-legend-dot" style="background:#0066ff;border-radius:0;"></div><span>ベクタデータ</span>';
@@ -3072,12 +3067,65 @@ document.addEventListener('drop', e=>{
     document.getElementById('printHeaderMeta').textContent = `${dateStr} | 緯度 ${center.lat.toFixed(5)} 経度 ${center.lng.toFixed(5)} | Zoom ${zoom}`;
   }
 
-  // モーダル開閉
-  document.getElementById('btnPrint').addEventListener('click',()=>{
+  // ── 印刷範囲フレーム ──
+  let _pfLandscape = false;
+
+  function _pfUpdateFrame(){
+    const box = document.getElementById('printFrameBox');
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const barH = 70;
+    const margin = 36;
+    const aw = vw - margin * 2;
+    const ah = vh - barH - margin * 2;
+    let fw, fh;
+    if(_pfLandscape){
+      // A4 横向き: 横/縦 = 297/210
+      const ratio = 297 / 210;
+      if(aw / ratio <= ah){ fw = aw; fh = fw / ratio; }
+      else { fh = ah; fw = fh * ratio; }
+    } else {
+      // A4 縦向き: 縦/横 = 297/210
+      const ratio = 297 / 210;
+      if(aw * ratio <= ah){ fw = aw; fh = fw * ratio; }
+      else { fh = ah; fw = fh / ratio; }
+    }
+    const left = (vw - fw) / 2;
+    const top = margin;
+    box.style.width  = fw + 'px';
+    box.style.height = fh + 'px';
+    box.style.left   = left + 'px';
+    box.style.top    = top + 'px';
+  }
+
+  document.getElementById('printFrameOrient').addEventListener('click', ()=>{
+    _pfLandscape = !_pfLandscape;
+    document.getElementById('printFrameOrient').textContent = _pfLandscape ? '縦向き' : '横向き';
+    _pfUpdateFrame();
+  });
+
+  document.getElementById('printFrameCancel').addEventListener('click', ()=>{
+    document.getElementById('printFrame').classList.remove('show');
+  });
+
+  document.getElementById('printFrameNext').addEventListener('click', ()=>{
+    document.getElementById('printFrame').classList.remove('show');
     document.getElementById('printMapTitle').value = '';
     document.getElementById('printModal').classList.add('show');
-    setTimeout(()=>document.getElementById('printMapTitle').focus(),100);
+    setTimeout(()=>document.getElementById('printMapTitle').focus(), 100);
+  });
+
+  window.addEventListener('resize', ()=>{
+    if(document.getElementById('printFrame').classList.contains('show')) _pfUpdateFrame();
+  });
+
+  // ── 印刷モーダル ──
+  document.getElementById('btnPrint').addEventListener('click',()=>{
     closeSheet();
+    _pfLandscape = false;
+    document.getElementById('printFrameOrient').textContent = '横向き';
+    document.getElementById('printFrame').classList.add('show');
+    _pfUpdateFrame();
   });
   document.getElementById('printCancel').addEventListener('click',()=>{
     document.getElementById('printModal').classList.remove('show');
@@ -3087,6 +3135,9 @@ document.addEventListener('drop', e=>{
     document.getElementById('printModal').classList.remove('show');
     _buildPrintMeta(title);
     _buildPrintLegend();
+    let s = document.getElementById('_pfOrientStyle');
+    if(!s){ s = document.createElement('style'); s.id = '_pfOrientStyle'; document.head.appendChild(s); }
+    s.textContent = _pfLandscape ? '@page{size:A4 landscape;}' : '@page{size:A4 portrait;}';
     setTimeout(()=>window.print(), 80);
   });
   document.getElementById('printMapTitle').addEventListener('keydown',e=>{

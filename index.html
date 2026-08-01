@@ -433,8 +433,38 @@
   <div id="printHeaderTop">
     <div id="printHeaderMapTitle">現場確認マップ</div>
     <div id="printHeaderMeta"></div>
+    <div id="printNorthArrow">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 50" width="36" height="45">
+        <text x="20" y="9" text-anchor="middle" font-size="10" font-weight="bold" fill="#c62828" font-family="sans-serif">N</text>
+        <circle cx="20" cy="30" r="17" fill="white" stroke="#bbb" stroke-width="1.5"/>
+        <polygon points="20,14 15,30 20,27 25,30" fill="#c62828"/>
+        <polygon points="20,46 15,30 20,33 25,30" fill="#aaa"/>
+        <circle cx="20" cy="30" r="2.5" fill="#555"/>
+      </svg>
+    </div>
   </div>
   <div id="printLegend"></div>
+</div>
+
+<!-- 印刷範囲フレーム -->
+<div id="printFrame">
+  <div id="printFrameBox">
+    <div id="printFrameLabel">印刷範囲（A4）</div>
+    <div id="printFrameNorth">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 50" width="36" height="45">
+        <text x="20" y="9" text-anchor="middle" font-size="10" font-weight="bold" fill="#c62828" font-family="sans-serif">N</text>
+        <circle cx="20" cy="30" r="17" fill="white" stroke="#bbb" stroke-width="1.5"/>
+        <polygon points="20,14 15,30 20,27 25,30" fill="#c62828"/>
+        <polygon points="20,46 15,30 20,33 25,30" fill="#aaa"/>
+        <circle cx="20" cy="30" r="2.5" fill="#555"/>
+      </svg>
+    </div>
+  </div>
+  <div id="printFrameBar">
+    <button id="printFrameCancel">キャンセル</button>
+    <button id="printFrameOrient">横向き</button>
+    <button id="printFrameNext">次へ →</button>
+  </div>
 </div>
 
 <!-- 印刷モーダル -->
