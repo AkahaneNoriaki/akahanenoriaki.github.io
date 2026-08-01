@@ -152,6 +152,9 @@
         <button class="s-btn" id="btnAddrClear" style="display:none">
           <span class="ico">🗑️</span>ピン削除
         </button>
+        <button class="s-btn" id="btnPrint">
+          <span class="ico">🖨️</span>印刷
+        </button>
       </div>
       <div id="addrSearchRow" style="display:none">
         <input id="addrInput" type="search" placeholder="住所を入力（例：長野県○○市...）" autocomplete="off">
@@ -421,6 +424,27 @@
       </div>
       <button id="bbsSubmitBtn">📤 投稿する</button>
       <div id="bbsFormStatus"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 印刷ヘッダー（@media print 時のみ表示） -->
+<div id="printHeader">
+  <div id="printHeaderTop">
+    <div id="printHeaderMapTitle">現場確認マップ</div>
+    <div id="printHeaderMeta"></div>
+  </div>
+  <div id="printLegend"></div>
+</div>
+
+<!-- 印刷モーダル -->
+<div id="printModal">
+  <div id="printModalBox">
+    <div id="printModalTitle">🖨️ 印刷</div>
+    <input id="printMapTitle" type="text" placeholder="タイトルを入力（任意）" maxlength="40">
+    <div class="xlsxBtns">
+      <button id="printCancel">キャンセル</button>
+      <button id="printOk" class="xlsxOk">印刷する</button>
     </div>
   </div>
 </div>

@@ -674,3 +674,79 @@ html, body { height:100%; margin:0; }
 #bbsAuthorInput { flex:1; border:1px solid #ddd; border-radius:7px; padding:5px 8px; font-size:12px; }
 #bbsAuthorSaveBtn { padding:5px 12px; background:#06f; color:#fff; border:none; border-radius:7px; font-size:12px; font-weight:bold; cursor:pointer; }
 .bbs-author { font-size:10px; color:#666; margin-top:3px; }
+
+/* ─── 印刷モーダル ──────────────────────────── */
+#printModal {
+  display:none; position:fixed; inset:0; z-index:11000;
+  background:rgba(0,0,0,0.45);
+  align-items:center; justify-content:center;
+}
+#printModal.show { display:flex; }
+#printModalBox {
+  background:#fff; border-radius:14px; padding:20px 20px 16px;
+  width:min(340px,calc(100vw - 32px));
+  box-shadow:0 8px 32px rgba(0,0,0,0.22); font-family:sans-serif;
+}
+#printModalTitle { font-size:14px; font-weight:bold; color:#333; margin-bottom:14px; }
+#printMapTitle {
+  width:100%; box-sizing:border-box; border:1px solid #ddd;
+  border-radius:8px; padding:8px 10px; font-size:14px; margin-bottom:14px;
+  font-family:sans-serif;
+}
+
+/* ─── 印刷ヘッダー（画面では非表示）──────── */
+#printHeader {
+  display:none;
+  position:fixed; top:0; left:0; right:0; z-index:99999;
+  background:#fff; border-bottom:2px solid #333;
+  padding:8px 16px 6px; font-family:sans-serif;
+  flex-direction:column; gap:4px;
+}
+#printHeaderTop {
+  display:flex; align-items:baseline; gap:12px;
+}
+#printHeaderMapTitle {
+  font-size:18px; font-weight:bold; color:#111; flex:1;
+}
+#printHeaderMeta {
+  font-size:10px; color:#666; white-space:nowrap;
+}
+#printLegend {
+  display:flex; flex-wrap:wrap; gap:8px; font-size:10px; color:#444; align-items:center;
+}
+.print-legend-item {
+  display:flex; align-items:center; gap:3px;
+}
+.print-legend-dot {
+  width:10px; height:10px; border-radius:50%; flex-shrink:0;
+}
+.print-legend-line {
+  width:20px; height:3px; flex-shrink:0;
+}
+
+/* ─── @media print ─────────────────────────── */
+@media print {
+  #bottomSheet, #bbsFloatBtn, #bbsBadge, #bbsPanel,
+  #wxPanel, #chartChips, #chartSheet,
+  #toast, #recBadge, #measureBadge, #shareBadge, #cacheBar,
+  #confirmOverlay, #xlsxModal, #exportModal, #printModal,
+  #xlsxStatCard, #dropOverlay, #rainAnimBar,
+  .leaflet-control-zoom, .leaflet-control-attribution,
+  .leaflet-control-scale { display:none !important; }
+
+  html, body { margin:0; padding:0; }
+
+  #printHeader {
+    display:flex !important;
+    position:fixed; top:0; left:0; right:0;
+    padding:6px 12px 5px;
+  }
+
+  #map {
+    position:fixed !important;
+    left:0 !important; right:0 !important;
+    top:64px !important;
+    width:100vw !important;
+    height:calc(100vh - 64px) !important;
+  }
+}

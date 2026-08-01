@@ -3023,3 +3023,74 @@ document.addEventListener('drop', e=>{
      .openPopup();
   }
 })();
+
+/* =========================
+   印刷機能
+========================= */
+(()=>{
+  const BBS_CAT_COL = {'道路':'#e65100','河川':'#0277bd','土砂':'#4e342e','施設':'#2e7d32','その他':'#37474f'};
+  const BBS_CAT_EMO = {'道路':'🛣','河川':'💧','土砂':'⛰','施設':'🏢','その他':'📌'};
+
+  function _buildPrintLegend(){
+    const el = document.getElementById('printLegend');
+    el.innerHTML = '';
+
+    // 林班レイヤ
+    if(typeof _rinpanLayer !== 'undefined' && _rinpanLayer && map.hasLayer(_rinpanLayer)){
+      const d = document.createElement('div'); d.className = 'print-legend-item';
+      d.innerHTML = '<div class="print-legend-line" style="background:#2e7d32;border:1.5px solid #2e7d32;"></div><span>林班</span>';
+      el.appendChild(d);
+    }
+    // 施業班レイヤ
+    if(typeof _segyohanLayer !== 'undefined' && _segyohanLayer && map.hasLayer(_segyohanLayer)){
+      const d = document.createElement('div'); d.className = 'print-legend-item';
+      d.innerHTML = '<div class="print-legend-line" style="background:#e65100;border:1.5px solid #e65100;"></div><span>施業班</span>';
+      el.appendChild(d);
+    }
+    // BBS カテゴリ（投稿があるもの）
+    const usedCats = new Set((_bbsPosts||[]).map(p=>p.cat));
+    for(const [cat, col] of Object.entries(BBS_CAT_COL)){
+      if(!usedCats.has(cat)) continue;
+      const d = document.createElement('div'); d.className = 'print-legend-item';
+      d.innerHTML = `<div class="print-legend-dot" style="background:${col};"></div><span>${BBS_CAT_EMO[cat]} ${cat}</span>`;
+      el.appendChild(d);
+    }
+    // ベクタレイヤ
+    if(typeof gjGroup !== 'undefined' && gjGroup && gjGroup.getLayers().length){
+      const d = document.createElement('div'); d.className = 'print-legend-item';
+      d.innerHTML = '<div class="print-legend-dot" style="background:#0066ff;border-radius:0;"></div><span>ベクタデータ</span>';
+      el.appendChild(d);
+    }
+  }
+
+  function _buildPrintMeta(title){
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    const center = map.getCenter();
+    const zoom   = map.getZoom();
+    document.getElementById('printHeaderMapTitle').textContent = title || '現場確認マップ';
+    document.getElementById('printHeaderMeta').textContent = `${dateStr} | 緯度 ${center.lat.toFixed(5)} 経度 ${center.lng.toFixed(5)} | Zoom ${zoom}`;
+  }
+
+  // モーダル開閉
+  document.getElementById('btnPrint').addEventListener('click',()=>{
+    document.getElementById('printMapTitle').value = '';
+    document.getElementById('printModal').classList.add('show');
+    setTimeout(()=>document.getElementById('printMapTitle').focus(),100);
+    closeSheet();
+  });
+  document.getElementById('printCancel').addEventListener('click',()=>{
+    document.getElementById('printModal').classList.remove('show');
+  });
+  document.getElementById('printOk').addEventListener('click',()=>{
+    const title = document.getElementById('printMapTitle').value.trim();
+    document.getElementById('printModal').classList.remove('show');
+    _buildPrintMeta(title);
+    _buildPrintLegend();
+    setTimeout(()=>window.print(), 80);
+  });
+  document.getElementById('printMapTitle').addEventListener('keydown',e=>{
+    if(e.key==='Enter') document.getElementById('printOk').click();
+    if(e.key==='Escape') document.getElementById('printCancel').click();
+  });
+})();
