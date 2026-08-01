@@ -18,6 +18,7 @@
 <script src="https://unpkg.com/georaster-layer-for-leaflet/dist/georaster-layer-for-leaflet.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://unpkg.com/protomaps-leaflet@4.0.1/dist/protomaps-leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <style>
 html, body { height:100%; margin:0; }
@@ -564,6 +565,58 @@ html, body { height:100%; margin:0; }
 #bbsSubmitBtn:disabled { background:#aaa; cursor:default; }
 #bbsFormStatus { font-size:11px; color:#888; text-align:center; margin-top:6px; min-height:16px; }
 #bbsLoadingMsg, #bbsEmptyMsg { text-align:center; color:#999; font-size:12px; padding:24px 0; }
+
+/* ─── Excel連携モーダル ──────────────────────── */
+#xlsxModal {
+  display:none; position:fixed; inset:0; z-index:11000;
+  background:rgba(0,0,0,0.45);
+  align-items:center; justify-content:center;
+}
+#xlsxModal.show { display:flex; }
+#xlsxModalBox {
+  background:#fff; border-radius:14px;
+  padding:20px 20px 16px;
+  width:min(340px,calc(100vw - 32px));
+  box-shadow:0 8px 32px rgba(0,0,0,0.22);
+  font-family:sans-serif;
+}
+#xlsxModalTitle {
+  font-size:14px; font-weight:bold; color:#333;
+  margin-bottom:16px;
+}
+.xlsxRow { margin-bottom:12px; }
+.xlsxLabel {
+  display:block; font-size:11px; color:#888;
+  margin-bottom:4px;
+}
+.xlsxRow select {
+  width:100%; padding:8px 10px;
+  border:1px solid #ccc; border-radius:8px;
+  font-size:13px; background:#fafafa;
+  outline:none;
+}
+#xlsxModalInfo {
+  font-size:11px; color:#555;
+  margin-bottom:12px; min-height:14px;
+}
+.xlsxBtns {
+  display:flex; gap:8px; justify-content:flex-end;
+}
+.xlsxBtns button {
+  padding:8px 18px; border-radius:8px; border:none;
+  font-size:13px; cursor:pointer;
+}
+.xlsxBtns button:first-child {
+  background:#eee; color:#333;
+}
+.xlsxOk { background:#0066ff; color:#fff; font-weight:bold; }
+
+/* 林班ポップアップ */
+.rinpanPopup { font-family:sans-serif; font-size:12px; line-height:1.8; }
+.rinpanPopup b { font-size:13px; }
+.rinpanPopup hr { border:none; border-top:1px solid #eee; margin:6px 0; }
+.rinpanPopup .xlKey { color:#888; font-size:10px; }
+.rinpanPopup .noData { color:#bbb; font-style:italic; }
 </style>
 </head>
 
@@ -588,6 +641,30 @@ html, body { height:100%; margin:0; }
 <div id="shareBadge">📍 共有したい場所をタップ</div>
 
 <input id="geojsonInput" type="file" accept=".geojson,.json" style="display:none">
+<input id="xlsxInput"   type="file" accept=".xlsx,.xls"   style="display:none">
+
+<!-- Excel連携 キー選択モーダル -->
+<div id="xlsxModal">
+  <div id="xlsxModalBox">
+    <div id="xlsxModalTitle">📊 Excel連携 — キー項目の選択</div>
+    <div class="xlsxRow">
+      <label class="xlsxLabel">PMTiles側キー</label>
+      <select id="xlsxKeyPmt">
+        <option value="RIN">RIN（林班番号）</option>
+        <option value="CITY">CITY（市町村）</option>
+      </select>
+    </div>
+    <div class="xlsxRow">
+      <label class="xlsxLabel">Excel側キー列</label>
+      <select id="xlsxKeyXls"></select>
+    </div>
+    <div id="xlsxModalInfo"></div>
+    <div class="xlsxBtns">
+      <button id="xlsxModalCancel">キャンセル</button>
+      <button id="xlsxModalOk" class="xlsxOk">連携する</button>
+    </div>
+  </div>
+</div>
 <input id="gpkgInput"    type="file" accept=".gpkg"          style="display:none">
 <input id="cameraInput"  type="file" accept="image/*" capture="environment" style="display:none">
 <input id="photoLoadInput" type="file" accept="image/*" multiple style="display:none">
@@ -683,6 +760,12 @@ html, body { height:100%; margin:0; }
       <div class="s-grid">
         <button class="s-btn" id="btnToggleRinpan">
           <span class="ico">🌲</span>林班
+        </button>
+        <button class="s-btn" id="btnExcelLink">
+          <span class="ico">📊</span>Excel連携
+        </button>
+        <button class="s-btn" id="btnExcelClear" style="display:none">
+          <span class="ico">🗑️</span>連携解除
         </button>
       </div>
     </div>
@@ -1387,6 +1470,104 @@ _rinpanBtn.onclick=()=>{
   }
   closeSheet();
 };
+
+/* --- Excel連携 --- */
+let _xlsxRows=[];        // [{col:val, ...}, ...]
+let _xlsxJoinMap=null;   // Map<string, row>
+let _xlsxKeyPmtField='RIN';
+let _xlsxKeyXlsCol='';
+
+const xlsxInput      = document.getElementById('xlsxInput');
+const xlsxModal      = document.getElementById('xlsxModal');
+const xlsxKeyPmtSel  = document.getElementById('xlsxKeyPmt');
+const xlsxKeyXlsSel  = document.getElementById('xlsxKeyXls');
+const xlsxModalInfo  = document.getElementById('xlsxModalInfo');
+const btnExcelLink   = document.getElementById('btnExcelLink');
+const btnExcelClear  = document.getElementById('btnExcelClear');
+
+btnExcelLink.onclick=()=>{ xlsxInput.value=''; xlsxInput.click(); closeSheet(); };
+
+xlsxInput.onchange=()=>{
+  const f=xlsxInput.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=(e)=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      _xlsxRows=XLSX.utils.sheet_to_json(ws,{defval:''});
+      if(!_xlsxRows.length){ toast('データが空です'); return; }
+      const headers=Object.keys(_xlsxRows[0]);
+      xlsxKeyXlsSel.innerHTML=headers.map(h=>`<option value="${h}">${h}</option>`).join('');
+      xlsxModalInfo.textContent=`${_xlsxRows.length}行 / ${headers.length}列 読み込み完了`;
+      xlsxModal.classList.add('show');
+    } catch(err){
+      toast('Excelの読み込みに失敗しました');
+    }
+  };
+  rd.readAsArrayBuffer(f);
+};
+
+document.getElementById('xlsxModalCancel').onclick=()=>{ xlsxModal.classList.remove('show'); };
+
+document.getElementById('xlsxModalOk').onclick=()=>{
+  _xlsxKeyPmtField=xlsxKeyPmtSel.value;
+  _xlsxKeyXlsCol=xlsxKeyXlsSel.value;
+  _xlsxJoinMap=new Map();
+  for(const row of _xlsxRows){
+    const k=String(row[_xlsxKeyXlsCol]??'').trim();
+    if(k) _xlsxJoinMap.set(k,row);
+  }
+  xlsxModal.classList.remove('show');
+  btnExcelLink.classList.add('active');
+  btnExcelClear.style.display='';
+  toast(`Excel連携完了（${_xlsxJoinMap.size}件一致可能）`);
+  if(!_rinpanOn){ _rinpanBtn.click(); }
+};
+
+btnExcelClear.onclick=()=>{
+  _xlsxRows=[]; _xlsxJoinMap=null;
+  btnExcelLink.classList.remove('active');
+  btnExcelClear.style.display='none';
+  map.closePopup();
+  toast('Excel連携を解除しました');
+  closeSheet();
+};
+
+/* 林班クリック → ポップアップ */
+map.on('click',(e)=>{
+  if(!_rinpanOn || !_rinpanLayer) return;
+  let props=null;
+  try{
+    const results=_rinpanLayer.queryTileFeaturesDebug(e.latlng.lng,e.latlng.lat);
+    for(const [,feats] of results){
+      for(const f of feats){
+        if(f.layerName==='rinpan'){ props=f.feature.props; break; }
+      }
+      if(props) break;
+    }
+  } catch(_){ return; }
+  if(!props) return;
+
+  let html=`<div class="rinpanPopup"><b>林班 ${props.RIN||'-'}</b>`;
+  if(props.CITY) html+=`<br><span class="xlKey">市町村:</span> ${props.CITY}`;
+
+  if(_xlsxJoinMap){
+    const key=String(props[_xlsxKeyPmtField]??'').trim();
+    const row=_xlsxJoinMap.get(key);
+    html+='<hr>';
+    if(row){
+      for(const [col,val] of Object.entries(row)){
+        if(col===_xlsxKeyXlsCol) continue;
+        html+=`<span class="xlKey">${col}:</span> ${val}<br>`;
+      }
+    } else {
+      html+=`<span class="noData">Excelデータなし (${_xlsxKeyPmtField}=${key})</span>`;
+    }
+  }
+  html+='</div>';
+
+  L.popup({maxWidth:280}).setLatLng(e.latlng).setContent(html).openOn(map);
+});
 
 /* --- GeoJSON --- */
 const geojsonInput=document.getElementById('geojsonInput');
