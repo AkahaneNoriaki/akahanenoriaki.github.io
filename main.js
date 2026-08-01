@@ -615,25 +615,42 @@ const xlsxModalInfo  = document.getElementById('xlsxModalInfo');
 const btnExcelLink   = document.getElementById('btnExcelLink');
 const btnExcelClear  = document.getElementById('btnExcelClear');
 
-btnExcelLink.onclick=()=>{ xlsxInput.value=''; xlsxInput.click(); closeSheet(); };
+btnExcelLink.onclick=()=>{ xlsxInput.click(); closeSheet(); };
+// input自身のclickで value をリセット → 同じファイルの再選択でも onchange が必ず発火する
+xlsxInput.addEventListener('click', function(){ this.value=''; });
 
 xlsxInput.onchange=()=>{
   const f=xlsxInput.files[0]; if(!f) return;
+  // 前回データを即座にクリア（古い状態が残らないように）
+  _xlsxRows=[];
+  xlsxKeyXlsSel.innerHTML='';
+  xlsxModalInfo.textContent='読み込み中…';
   const rd=new FileReader();
   rd.onload=(e)=>{
     try{
       const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
-      const ws=wb.Sheets[wb.SheetNames[0]];
-      _xlsxRows=XLSX.utils.sheet_to_json(ws,{defval:''});
-      if(!_xlsxRows.length){ toast('データが空です'); return; }
+      // データがある最初のシートを使用
+      let loaded=false;
+      for(const sheetName of wb.SheetNames){
+        const ws=wb.Sheets[sheetName];
+        const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+        if(rows.length){
+          _xlsxRows=rows;
+          loaded=true;
+          break;
+        }
+      }
+      if(!loaded){ toast('Excelにデータが見つかりません'); return; }
       const headers=Object.keys(_xlsxRows[0]);
       xlsxKeyXlsSel.innerHTML=headers.map(h=>`<option value="${h}">${h}</option>`).join('');
       xlsxModalInfo.textContent=`${_xlsxRows.length}行 / ${headers.length}列 読み込み完了`;
       xlsxModal.classList.add('show');
     } catch(err){
-      toast('Excelの読み込みに失敗しました');
+      console.error('Excel読み込みエラー:', err);
+      toast('Excelの読み込みに失敗: '+(err.message||'形式を確認してください'));
     }
   };
+  rd.onerror=()=>{ toast('ファイルの読み込みに失敗しました'); };
   rd.readAsArrayBuffer(f);
 };
 
