@@ -566,6 +566,22 @@ html, body { height:100%; margin:0; }
 #bbsFormStatus { font-size:11px; color:#888; text-align:center; margin-top:6px; min-height:16px; }
 #bbsLoadingMsg, #bbsEmptyMsg { text-align:center; color:#999; font-size:12px; padding:24px 0; }
 
+/* ─── Excel連携 統計カード ───────────────────── */
+#xlsxStatCard {
+  display:none; position:fixed; bottom:56px; left:50%; transform:translateX(-50%);
+  z-index:8000; background:rgba(230,81,0,0.92); color:#fff;
+  border-radius:20px; padding:6px 12px 6px 14px;
+  font-size:12px; font-family:sans-serif; font-weight:bold;
+  box-shadow:0 2px 10px rgba(0,0,0,0.2);
+  align-items:center; gap:8px; white-space:nowrap;
+  max-width:calc(100vw - 32px);
+}
+#xlsxStatClose {
+  background:none; border:none; color:rgba(255,255,255,0.8);
+  font-size:13px; cursor:pointer; padding:0; line-height:1;
+  flex-shrink:0;
+}
+
 /* ─── Excel連携モーダル ──────────────────────── */
 #xlsxModal {
   display:none; position:fixed; inset:0; z-index:11000;
@@ -642,6 +658,12 @@ html, body { height:100%; margin:0; }
 
 <input id="geojsonInput" type="file" accept=".geojson,.json" style="display:none">
 <input id="xlsxInput"   type="file" accept=".xlsx,.xls"   style="display:none">
+
+<!-- Excel連携 統計カード -->
+<div id="xlsxStatCard">
+  <span id="xlsxStatText"></span>
+  <button id="xlsxStatClose" title="閉じる">✕</button>
+</div>
 
 <!-- Excel連携 キー選択モーダル -->
 <div id="xlsxModal">
@@ -1433,18 +1455,30 @@ let _rinpanOn=false;
 const _rinpanBtn=document.getElementById('btnToggleRinpan');
 
 function _buildRinpanLayer(){
+  const paintRules=[
+    {
+      dataLayer:'rinpan',
+      symbolizer: new protomapsL.PolygonSymbolizer({
+        fill: 'rgba(0,0,0,0)',
+        stroke: '#2e7d32',
+        width: 1.5
+      })
+    }
+  ];
+  if(_xlsxJoinMap){
+    paintRules.unshift({
+      dataLayer:'rinpan',
+      filter:(zoom,feat)=>_xlsxJoinMap.has(String(feat.props[_xlsxKeyPmtField]??'').trim()),
+      symbolizer: new protomapsL.PolygonSymbolizer({
+        fill:'rgba(46,125,50,0.18)',
+        stroke:'#2e7d32',
+        width:2
+      })
+    });
+  }
   return protomapsL.leafletLayer({
     url: 'data/tatsuno_rinpan.pmtiles',
-    paintRules:[
-      {
-        dataLayer:'rinpan',
-        symbolizer: new protomapsL.PolygonSymbolizer({
-          fill: 'rgba(0,0,0,0)',
-          stroke: '#2e7d32',
-          width: 1.5
-        })
-      }
-    ],
+    paintRules,
     labelRules:[
       {
         dataLayer:'rinpan',
@@ -1482,18 +1516,30 @@ let _segyohanOn=false;
 const _segyohanBtn=document.getElementById('btnToggleSegyohan');
 
 function _buildSegyohanLayer(){
+  const paintRules=[
+    {
+      dataLayer:'segyohan',
+      symbolizer: new protomapsL.PolygonSymbolizer({
+        fill: 'rgba(0,0,0,0)',
+        stroke: '#e65100',
+        width: 0.8
+      })
+    }
+  ];
+  if(_xlsxJoinMap){
+    paintRules.unshift({
+      dataLayer:'segyohan',
+      filter:(zoom,feat)=>_xlsxJoinMap.has(String(feat.props[_xlsxKeyPmtField]??'').trim()),
+      symbolizer: new protomapsL.PolygonSymbolizer({
+        fill:'rgba(230,81,0,0.18)',
+        stroke:'#e65100',
+        width:1.4
+      })
+    });
+  }
   return protomapsL.leafletLayer({
     url: 'data/tatsuno_segyohan.pmtiles',
-    paintRules:[
-      {
-        dataLayer:'segyohan',
-        symbolizer: new protomapsL.PolygonSymbolizer({
-          fill: 'rgba(0,0,0,0)',
-          stroke: '#e65100',
-          width: 0.8
-        })
-      }
-    ],
+    paintRules,
     labelRules:[
       {
         dataLayer:'segyohan',
@@ -1563,6 +1609,21 @@ xlsxInput.onchange=()=>{
 };
 
 document.getElementById('xlsxModalCancel').onclick=()=>{ xlsxModal.classList.remove('show'); };
+document.getElementById('xlsxStatClose').onclick=()=>{ document.getElementById('xlsxStatCard').style.display='none'; };
+
+function _rebuildActiveLayers(){
+  if(_rinpanOn&&_rinpanLayer){ map.removeLayer(_rinpanLayer); _rinpanLayer=_buildRinpanLayer(); _rinpanLayer.addTo(map); }
+  if(_segyohanOn&&_segyohanLayer){ map.removeLayer(_segyohanLayer); _segyohanLayer=_buildSegyohanLayer(); _segyohanLayer.addTo(map); }
+}
+
+function _showXlsxStat(){
+  const xlRows=_xlsxRows.length;
+  const matched=_xlsxJoinMap?_xlsxJoinMap.size:0;
+  const card=document.getElementById('xlsxStatCard');
+  document.getElementById('xlsxStatText').textContent=
+    `📊 Excel連携中 — ${_xlsxKeyPmtField}キーで ${matched.toLocaleString()} / ${xlRows.toLocaleString()} 件`;
+  card.style.display='flex';
+}
 
 document.getElementById('xlsxModalOk').onclick=()=>{
   _xlsxKeyPmtField=xlsxKeyPmtSel.value;
@@ -1575,15 +1636,18 @@ document.getElementById('xlsxModalOk').onclick=()=>{
   xlsxModal.classList.remove('show');
   btnExcelLink.classList.add('active');
   btnExcelClear.style.display='';
-  toast(`Excel連携完了（${_xlsxJoinMap.size}件一致可能）`);
-  if(!_rinpanOn){ _rinpanBtn.click(); }
+  _showXlsxStat();
+  _rebuildActiveLayers();
+  if(!_rinpanOn&&!_segyohanOn){ _rinpanBtn.click(); }
 };
 
 btnExcelClear.onclick=()=>{
   _xlsxRows=[]; _xlsxJoinMap=null;
   btnExcelLink.classList.remove('active');
   btnExcelClear.style.display='none';
+  document.getElementById('xlsxStatCard').style.display='none';
   map.closePopup();
+  _rebuildActiveLayers();
   toast('Excel連携を解除しました');
   closeSheet();
 };
