@@ -550,6 +550,74 @@ _rinpanBtn.onclick=()=>{
   closeSheet();
 };
 
+/* --- 連携可能レイヤ: 小班 PMTiles --- */
+const _IROHA=['い','ろ','は','に','ほ','へ','と','ち','り','ぬ','る','を','わ','か','よ','た','れ','そ','つ','ね','な','ら','む','う','ゐ','の','お','く','や','ま','け','ふ','こ','え','て','あ','さ','き','ゆ','め','み','し','ゑ','ひ','も','せ','す'];
+function _shoToIroha(sho){
+  if(!sho) return '';
+  const idx=sho.toUpperCase().charCodeAt(0)-65;
+  return (idx>=0&&idx<_IROHA.length)?_IROHA[idx]:String(sho);
+}
+
+let _shohanLayer=null;
+let _shohanOn=false;
+const _shohanBtn=document.getElementById('btnToggleShohan');
+
+function _buildShohanLayer(){
+  return protomapsL.leafletLayer({
+    url:'data/tatsuno_shohan.pmtiles',
+    paintRules:[
+      {
+        dataLayer:'shohan',
+        symbolizer: new protomapsL.PolygonSymbolizer({
+          fill:'rgba(0,0,0,0)',
+          stroke:'#1565c0',
+          width:1.2
+        })
+      }
+    ],
+    labelRules:[
+      {
+        dataLayer:'shohan',
+        minzoom:13,
+        symbolizer:(()=>{
+          const _inner=new protomapsL.CenteredTextSymbolizer({
+            labelProps:['_I'],
+            font:'bold 11px sans-serif',
+            fill:'#0d47a1',
+            stroke:'rgba(255,255,255,0.8)',
+            width:2
+          });
+          return {
+            place(layout,geom,feature){
+              const orig=feature.props;
+              feature.props=Object.assign({},orig,{_I:_shoToIroha(orig['SHO'])});
+              const r=_inner.place(layout,geom,feature);
+              feature.props=orig;
+              return r;
+            }
+          };
+        })()
+      }
+    ]
+  });
+}
+
+_shohanBtn.onclick=()=>{
+  if(_shohanOn){
+    if(_shohanLayer){ map.removeLayer(_shohanLayer); }
+    _shohanOn=false;
+    _shohanBtn.classList.remove('active');
+    toast('小班レイヤを非表示');
+  } else {
+    if(!_shohanLayer){ _shohanLayer=_buildShohanLayer(); }
+    _shohanLayer.addTo(map);
+    _shohanOn=true;
+    _shohanBtn.classList.add('active');
+    toast('小班レイヤを表示');
+  }
+  closeSheet();
+};
+
 /* --- 連携可能レイヤ: 施業班 PMTiles --- */
 let _segyohanLayer=null;
 let _segyohanOn=false;
