@@ -806,6 +806,7 @@ document.getElementById('btnExportLayer').onclick=()=>{ _openExportModal(); clos
 
 const _EXPORT_CFG = {
   rinpan:   { url:'data/tatsuno_rinpan.pmtiles',   layer:'rinpan',   idField:'RIN',        label:'林班' },
+  shohan:   { url:'data/tatsuno_shohan.pmtiles',   layer:'shohan',   idField:'SHO',        label:'小班' },
   segyohan: { url:'data/tatsuno_segyohan.pmtiles', layer:'segyohan', idField:'SEGYOHANID', label:'施業班' }
 };
 
