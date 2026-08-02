@@ -512,8 +512,8 @@ function _buildRinpanLayer(){
       {
         dataLayer:'rinpan',
         symbolizer: new protomapsL.CenteredTextSymbolizer({
-          labelProps:['RIN'],
-          font:'bold 11px sans-serif',
+          labelPropsFunc:(props)=>String(parseInt(props['RIN']||'0',10)),
+          font:'bold 14px sans-serif',
           fill:'#1b5e20',
           stroke:'rgba(255,255,255,0.8)',
           width:2
