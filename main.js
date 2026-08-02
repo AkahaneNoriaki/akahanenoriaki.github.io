@@ -584,21 +584,22 @@ function _buildShohanLayer(){
     labelRules:[
       {
         dataLayer:'shohan',
-        filter:(zoom)=>zoom>=13&&zoom<=13,
+        filter:(zoom)=>zoom>=13,
         symbolizer:(()=>{
+          const _IROHA_LOCAL=['い','ろ','は','に','ほ','へ','と','ち','り','ぬ','る','を','わ','か','よ','た','れ','そ','つ','ね','な','ら','む','う','ゐ','の','お','く','や','ま','け','ふ','こ','え','て','あ','さ','き','ゆ','め','み','し','ゑ','ひ','も','せ','す'];
           const _inner=new protomapsL.CenteredTextSymbolizer({
             labelProps:['_S'],
-            font:'bold 11px sans-serif',
+            font:'bold 12px "Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif',
             fill:'#0d47a1',
-            stroke:'rgba(255,255,255,0.8)',
-            width:2
+            stroke:'rgba(255,255,255,0.9)',
+            width:3
           });
           return {
             place(layout,geom,feature){
               const orig=feature.props;
-              const _sho=orig['SHO']||'';
+              const _sho=(orig['SHO']||'').toUpperCase();
               const _idx=_sho.charCodeAt(0)-65;
-              const _lbl=(_idx>=0&&_idx<_IROHA.length)?_IROHA[_idx]:_sho;
+              const _lbl=(_idx>=0&&_idx<_IROHA_LOCAL.length)?_IROHA_LOCAL[_idx]:_sho;
               feature.props=Object.assign({},orig,{_S:_lbl});
               const r=_inner.place(layout,geom,feature);
               feature.props=orig;
