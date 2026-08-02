@@ -597,12 +597,26 @@ function _buildShohanLayer(){
           });
           return {
             place(layout,geom,feature){
+              /* compute polygon centroid from outer ring */
+              const ring=geom[0];
+              if(!ring||ring.length===0) return;
+              let cx=0,cy=0;
+              const n=ring.length;
+              const cnt=(ring[0].x===ring[n-1].x&&ring[0].y===ring[n-1].y)?n-1:n;
+              for(let i=0;i<cnt;i++){cx+=ring[i].x;cy+=ring[i].y;}
+              cx/=cnt; cy/=cnt;
+
+              /* iroha conversion */
               const orig=feature.props;
-              /* DEBUG: hardcode 'い' to confirm Japanese rendering works */
+              const sho=(orig['SHO']||'').toUpperCase();
+              const idx=sho.length>0?sho.charCodeAt(0)-65:-1;
+              const lbl=(idx>=0&&idx<_IR.length)?_IR[idx]:sho;
               const fakeProps=Object.assign({},orig);
-              fakeProps['_S']='い'; /* い */
+              fakeProps['_S']=lbl;
               feature.props=fakeProps;
-              const r=_inner.place(layout,geom,feature);
+
+              /* pass centroid as anchor geometry */
+              const r=_inner.place(layout,[[{x:cx,y:cy}]],feature);
               feature.props=orig;
               return r;
             }
