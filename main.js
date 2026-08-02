@@ -584,13 +584,24 @@ function _buildSegyohanLayer(){
       {
         dataLayer:'segyohan',
         minzoom:14,
-        symbolizer: new protomapsL.CenteredTextSymbolizer({
-          labelProps:['SEGYO'],
-          font:'9px sans-serif',
-          fill:'#bf360c',
-          stroke:'rgba(255,255,255,0.8)',
-          width:1.5
-        })
+        symbolizer:(()=>{
+          const _inner=new protomapsL.CenteredTextSymbolizer({
+            labelProps:['_S'],
+            font:'9px sans-serif',
+            fill:'#bf360c',
+            stroke:'rgba(255,255,255,0.8)',
+            width:1.5
+          });
+          return {
+            place(layout,geom,feature){
+              const orig=feature.props;
+              feature.props=Object.assign({},orig,{_S:String(parseInt(orig['SEGYO']||'0',10))});
+              const r=_inner.place(layout,geom,feature);
+              feature.props=orig;
+              return r;
+            }
+          };
+        })()
       }
     ]
   });
