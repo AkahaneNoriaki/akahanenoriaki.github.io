@@ -526,9 +526,18 @@ function _buildRinpanLayer(){
           });
           return {
             place(layout,geom,feature){
+              const ring=geom[0];
+              if(!ring||ring.length===0) return;
+              let cx=0,cy=0;
+              const n=ring.length;
+              const cnt=(ring[0].x===ring[n-1].x&&ring[0].y===ring[n-1].y)?n-1:n;
+              for(let i=0;i<cnt;i++){cx+=ring[i].x;cy+=ring[i].y;}
+              cx/=cnt; cy/=cnt;
               const orig=feature.props;
-              feature.props=Object.assign({},orig,{_R:String(parseInt(orig['RIN']||'0',10))});
-              const r=_inner.place(layout,geom,feature);
+              const fakeProps=Object.assign({},orig);
+              fakeProps['_R']=String(parseInt(orig['RIN']||'0',10));
+              feature.props=fakeProps;
+              const r=_inner.place(layout,[[{x:cx,y:cy}]],feature);
               feature.props=orig;
               return r;
             }
