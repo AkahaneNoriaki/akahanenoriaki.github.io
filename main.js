@@ -490,7 +490,7 @@ function _buildRinpanLayer(){
       symbolizer: new protomapsL.PolygonSymbolizer({
         fill: 'rgba(0,0,0,0)',
         stroke: '#2e7d32',
-        width: 1.5
+        width: 2.0
       })
     }
   ];
@@ -630,7 +630,7 @@ function _buildSegyohanLayer(){
       symbolizer: new protomapsL.PolygonSymbolizer({
         fill: 'rgba(0,0,0,0)',
         stroke: '#e65100',
-        width: 0.8
+        width: 0.6
       })
     }
   ];
