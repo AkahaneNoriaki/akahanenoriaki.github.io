@@ -481,6 +481,21 @@ document.getElementById('btnClearVector').onclick=()=>{
   gjGroup.clearLayers(); map.closePopup(); toast('ベクタデータをクリア'); closeSheet();
 };
 
+/* --- ポリゴン面積重心 --- */
+function _polygonCentroid(ring){
+  let area=0,cx=0,cy=0;
+  const n=(ring[0].x===ring[ring.length-1].x&&ring[0].y===ring[ring.length-1].y)?ring.length-1:ring.length;
+  for(let i=0,j=n-1;i<n;j=i++){
+    const cross=ring[j].x*ring[i].y-ring[i].x*ring[j].y;
+    area+=cross; cx+=(ring[j].x+ring[i].x)*cross; cy+=(ring[j].y+ring[i].y)*cross;
+  }
+  area/=2;
+  if(Math.abs(area)<1e-10){
+    let sx=0,sy=0; for(let i=0;i<n;i++){sx+=ring[i].x;sy+=ring[i].y;} return{x:sx/n,y:sy/n};
+  }
+  return{x:cx/(6*area),y:cy/(6*area)};
+}
+
 /* --- 連携可能レイヤ: 林班 PMTiles --- */
 let _rinpanLayer=null;
 let _rinpanOn=false;
@@ -515,14 +530,30 @@ function _buildRinpanLayer(){
     labelRules:[
       {
         dataLayer:'rinpan',
-        /* DEBUG: plain symbolizer, no wrapper, label=RIN raw value */
-        symbolizer: new protomapsL.CenteredTextSymbolizer({
-          labelProps:['RIN'],
-          font:'bold 16px sans-serif',
-          fill:'#1b5e20',
-          stroke:'rgba(255,255,255,0.9)',
-          width:3
-        })
+        minzoom:10,
+        symbolizer:(()=>{
+          const _inner=new protomapsL.CenteredTextSymbolizer({
+            labelProps:['_R'],
+            font:'bold 14px sans-serif',
+            fill:'#1b5e20',
+            stroke:'rgba(255,255,255,0.8)',
+            width:2
+          });
+          return {
+            place(layout,geom,feature){
+              const ring=geom[0];
+              if(!ring||ring.length===0) return;
+              const{x:cx,y:cy}=_polygonCentroid(ring);
+              const orig=feature.props;
+              const fakeProps=Object.assign({},orig);
+              fakeProps['_R']=String(parseInt(orig['RIN']||'0',10));
+              feature.props=fakeProps;
+              const r=_inner.place(layout,[[{x:cx,y:cy}]],feature);
+              feature.props=orig;
+              return r;
+            }
+          };
+        })()
       }
     ]
   });
@@ -573,9 +604,8 @@ function _buildShohanLayer(){
     labelRules:[
       {
         dataLayer:'shohan',
-        /* filter removed for debug - show at all zooms */
+        minzoom:13,
         symbolizer:(()=>{
-          /* Unicode escapes to avoid any encoding ambiguity */
           const _IR=['い','ろ','は','に','ほ','へ','と','ち','り','ぬ','る','を','わ','か','よ','た','れ','そ','つ','ね','な','ら','む','う','ゐ','の','お','く','や','ま','け','ふ','こ','え','て','あ','さ','き','ゆ','め','み','し','ゑ','ひ','も','せ','す'];
           const _inner=new protomapsL.CenteredTextSymbolizer({
             labelProps:['_S'],
@@ -586,16 +616,9 @@ function _buildShohanLayer(){
           });
           return {
             place(layout,geom,feature){
-              /* compute polygon centroid from outer ring */
               const ring=geom[0];
               if(!ring||ring.length===0) return;
-              let cx=0,cy=0;
-              const n=ring.length;
-              const cnt=(ring[0].x===ring[n-1].x&&ring[0].y===ring[n-1].y)?n-1:n;
-              for(let i=0;i<cnt;i++){cx+=ring[i].x;cy+=ring[i].y;}
-              cx/=cnt; cy/=cnt;
-
-              /* iroha conversion */
+              const{x:cx,y:cy}=_polygonCentroid(ring);
               const orig=feature.props;
               const sho=(orig['SHO']||'').toUpperCase();
               const idx=sho.length>0?sho.charCodeAt(0)-65:-1;
@@ -603,8 +626,6 @@ function _buildShohanLayer(){
               const fakeProps=Object.assign({},orig);
               fakeProps['_S']=lbl;
               feature.props=fakeProps;
-
-              /* pass centroid as anchor geometry */
               const r=_inner.place(layout,[[{x:cx,y:cy}]],feature);
               feature.props=orig;
               return r;
@@ -677,9 +698,12 @@ function _buildSegyohanLayer(){
           });
           return {
             place(layout,geom,feature){
+              const ring=geom[0];
+              if(!ring||ring.length===0) return;
+              const{x:cx,y:cy}=_polygonCentroid(ring);
               const orig=feature.props;
               feature.props=Object.assign({},orig,{_S:String(parseInt(orig['SEGYO']||'0',10))});
-              const r=_inner.place(layout,geom,feature);
+              const r=_inner.place(layout,[[{x:cx,y:cy}]],feature);
               feature.props=orig;
               return r;
             }
