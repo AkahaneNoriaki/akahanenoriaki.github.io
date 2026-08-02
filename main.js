@@ -512,7 +512,7 @@ function _buildRinpanLayer(){
       })
     }
   ];
-  if(_xlsxJoinMap){
+  if(_xlsxJoinMap&&_xlsxTargetLayer==='rinpan'){
     paintRules.unshift({
       dataLayer:'rinpan',
       filter:(zoom,feat)=>_xlsxJoinMap.has(String(feat.props[_xlsxKeyPmtField]??'').trim()),
@@ -588,19 +588,31 @@ let _shohanOn=false;
 const _shohanBtn=document.getElementById('btnToggleShohan');
 
 function _buildShohanLayer(){
+  const paintRules=[
+    {
+      dataLayer:'shohan',
+      symbolizer: new protomapsL.PolygonSymbolizer({
+        fill:'rgba(0,0,0,0)',
+        stroke:'#1565c0',
+        width:1.2
+      })
+    }
+  ];
+  if(_xlsxJoinMap&&_xlsxTargetLayer==='shohan'){
+    paintRules.unshift({
+      dataLayer:'shohan',
+      filter:(zoom,feat)=>_xlsxJoinMap.has(String(feat.props[_xlsxKeyPmtField]??'').trim()),
+      symbolizer: new protomapsL.PolygonSymbolizer({
+        fill:'rgba(21,101,192,0.18)',
+        stroke:'#1565c0',
+        width:1.6
+      })
+    });
+  }
   return protomapsL.leafletLayer({
     url:'data/tatsuno_shohan.pmtiles',
     pane:'shohanPane',
-    paintRules:[
-      {
-        dataLayer:'shohan',
-        symbolizer: new protomapsL.PolygonSymbolizer({
-          fill:'rgba(0,0,0,0)',
-          stroke:'#1565c0',
-          width:1.2
-        })
-      }
-    ],
+    paintRules,
     labelRules:[
       {
         dataLayer:'shohan',
@@ -669,7 +681,7 @@ function _buildSegyohanLayer(){
       })
     }
   ];
-  if(_xlsxJoinMap){
+  if(_xlsxJoinMap&&_xlsxTargetLayer==='segyohan'){
     paintRules.unshift({
       dataLayer:'segyohan',
       filter:(zoom,feat)=>_xlsxJoinMap.has(String(feat.props[_xlsxKeyPmtField]??'').trim()),
@@ -731,18 +743,33 @@ _segyohanBtn.onclick=()=>{
 };
 
 /* --- Excel連携 --- */
-let _xlsxRows=[];        // [{col:val, ...}, ...]
-let _xlsxJoinMap=null;   // Map<string, row>
+const _LAYER_JOIN_CFG={
+  rinpan:  {label:'林班',  keys:[{v:'RIN',       l:'RIN（林班番号）'}]},
+  shohan:  {label:'小班',  keys:[{v:'SHO',       l:'SHO（小班記号）'}]},
+  segyohan:{label:'施業班',keys:[{v:'KEY_02',    l:'KEY_02（施業班キー）'},{v:'SEGYOHANID',l:'SEGYOHANID（施業班ID）'}]},
+};
+
+let _xlsxRows=[];
+let _xlsxJoinMap=null;
+let _xlsxTargetLayer='rinpan';
 let _xlsxKeyPmtField='RIN';
 let _xlsxKeyXlsCol='';
 
 const xlsxInput      = document.getElementById('xlsxInput');
 const xlsxModal      = document.getElementById('xlsxModal');
+const xlsxLayerSel   = document.getElementById('xlsxLayerSel');
 const xlsxKeyPmtSel  = document.getElementById('xlsxKeyPmt');
 const xlsxKeyXlsSel  = document.getElementById('xlsxKeyXls');
 const xlsxModalInfo  = document.getElementById('xlsxModalInfo');
 const btnExcelLink   = document.getElementById('btnExcelLink');
 const btnExcelClear  = document.getElementById('btnExcelClear');
+
+function _updateXlsxKeyOptions(){
+  const cfg=_LAYER_JOIN_CFG[xlsxLayerSel.value];
+  xlsxKeyPmtSel.innerHTML=cfg.keys.map(k=>`<option value="${k.v}">${k.l}</option>`).join('');
+}
+xlsxLayerSel.onchange=_updateXlsxKeyOptions;
+_updateXlsxKeyOptions();
 
 btnExcelLink.onclick=()=>{ xlsxInput.value=''; xlsxInput.click(); closeSheet(); };
 
@@ -760,6 +787,7 @@ xlsxInput.onchange=()=>{
       const headers=Object.keys(_xlsxRows[0]);
       xlsxKeyXlsSel.innerHTML=headers.map(h=>`<option value="${h}">${h}</option>`).join('');
       xlsxModalInfo.textContent=`${_xlsxRows.length}行 / ${headers.length}列 読み込み完了`;
+      _updateXlsxKeyOptions();
       xlsxModal.classList.add('show');
     } catch(err){
       toast('Excelの読み込みに失敗しました');
@@ -1169,19 +1197,22 @@ document.getElementById('exportStart').onclick=async()=>{
 
 function _rebuildActiveLayers(){
   if(_rinpanOn&&_rinpanLayer){ map.removeLayer(_rinpanLayer); _rinpanLayer=_buildRinpanLayer(); _rinpanLayer.addTo(map); }
+  if(_shohanOn&&_shohanLayer){ map.removeLayer(_shohanLayer); _shohanLayer=_buildShohanLayer(); _shohanLayer.addTo(map); }
   if(_segyohanOn&&_segyohanLayer){ map.removeLayer(_segyohanLayer); _segyohanLayer=_buildSegyohanLayer(); _segyohanLayer.addTo(map); }
 }
 
 function _showXlsxStat(){
   const xlRows=_xlsxRows.length;
   const matched=_xlsxJoinMap?_xlsxJoinMap.size:0;
+  const layerLabel=_LAYER_JOIN_CFG[_xlsxTargetLayer]?.label||_xlsxTargetLayer;
   const card=document.getElementById('xlsxStatCard');
   document.getElementById('xlsxStatText').textContent=
-    `📊 Excel連携中 — ${_xlsxKeyPmtField}キーで ${matched.toLocaleString()} / ${xlRows.toLocaleString()} 件`;
+    `📊 Excel連携中 — ${layerLabel}/${_xlsxKeyPmtField}キー ${matched.toLocaleString()} / ${xlRows.toLocaleString()} 件`;
   card.style.display='flex';
 }
 
 document.getElementById('xlsxModalOk').onclick=()=>{
+  _xlsxTargetLayer=xlsxLayerSel.value;
   _xlsxKeyPmtField=xlsxKeyPmtSel.value;
   _xlsxKeyXlsCol=xlsxKeyXlsSel.value;
   _xlsxJoinMap=new Map();
@@ -1194,7 +1225,9 @@ document.getElementById('xlsxModalOk').onclick=()=>{
   btnExcelClear.style.display='';
   _showXlsxStat();
   _rebuildActiveLayers();
-  if(!_rinpanOn&&!_segyohanOn){ _rinpanBtn.click(); }
+  const _layerOnMap={rinpan:()=>_rinpanOn, shohan:()=>_shohanOn, segyohan:()=>_segyohanOn};
+  const _layerBtnMap={rinpan:_rinpanBtn, shohan:_shohanBtn, segyohan:_segyohanBtn};
+  if(!_layerOnMap[_xlsxTargetLayer]()) _layerBtnMap[_xlsxTargetLayer].click();
 };
 
 btnExcelClear.onclick=()=>{
