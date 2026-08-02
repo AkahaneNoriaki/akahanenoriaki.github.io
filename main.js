@@ -515,6 +515,7 @@ function _buildRinpanLayer(){
     labelRules:[
       {
         dataLayer:'rinpan',
+        maxzoom:12,
         symbolizer:(()=>{
           const _inner=new protomapsL.CenteredTextSymbolizer({
             labelProps:['_R'],
@@ -584,6 +585,7 @@ function _buildShohanLayer(){
       {
         dataLayer:'shohan',
         minzoom:13,
+        maxzoom:13,
         symbolizer:(()=>{
           const _inner=new protomapsL.CenteredTextSymbolizer({
             labelProps:['_I'],
