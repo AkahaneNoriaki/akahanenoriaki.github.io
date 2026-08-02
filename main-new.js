@@ -515,14 +515,34 @@ function _buildRinpanLayer(){
     labelRules:[
       {
         dataLayer:'rinpan',
-        /* DEBUG: plain symbolizer, no wrapper, label=RIN raw value */
-        symbolizer: new protomapsL.CenteredTextSymbolizer({
-          labelProps:['RIN'],
-          font:'bold 16px sans-serif',
-          fill:'#1b5e20',
-          stroke:'rgba(255,255,255,0.9)',
-          width:3
-        })
+        filter:(zoom)=>zoom>=10&&zoom<=12,
+        symbolizer:(()=>{
+          const _inner=new protomapsL.CenteredTextSymbolizer({
+            labelProps:['_R'],
+            font:'bold 14px sans-serif',
+            fill:'#1b5e20',
+            stroke:'rgba(255,255,255,0.8)',
+            width:2
+          });
+          return {
+            place(layout,geom,feature){
+              const ring=geom[0];
+              if(!ring||ring.length===0) return;
+              let cx=0,cy=0;
+              const n=ring.length;
+              const cnt=(ring[0].x===ring[n-1].x&&ring[0].y===ring[n-1].y)?n-1:n;
+              for(let i=0;i<cnt;i++){cx+=ring[i].x;cy+=ring[i].y;}
+              cx/=cnt; cy/=cnt;
+              const orig=feature.props;
+              const fakeProps=Object.assign({},orig);
+              fakeProps['_R']=String(parseInt(orig['RIN']||'0',10));
+              feature.props=fakeProps;
+              const r=_inner.place(layout,[[{x:cx,y:cy}]],feature);
+              feature.props=orig;
+              return r;
+            }
+          };
+        })()
       }
     ]
   });
