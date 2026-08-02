@@ -87,9 +87,9 @@ document.getElementById('map').addEventListener('click',()=>{ if(measuring||shar
    Map
 ========================= */
 const map=L.map('map',{maxZoom:25,zoomControl:false}).setView([36.2,138.0],12);
-map.createPane('rinpanPane').style.zIndex='410';
+map.createPane('segyohanPane').style.zIndex='410';
 map.createPane('shohanPane').style.zIndex='420';
-map.createPane('segyohanPane').style.zIndex='430';
+map.createPane('rinpanPane').style.zIndex='430';
 const zoomCtrl=L.control.zoom({position:'topright'}).addTo(map);
 const gsiStd=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
   {maxNativeZoom:18,maxZoom:25,attribution:'© 地理院'});
