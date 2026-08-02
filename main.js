@@ -612,7 +612,7 @@ function _buildShohanLayer(){
               const idx=sho.length>0?sho.charCodeAt(0)-65:-1;
               const lbl=(idx>=0&&idx<_IR.length)?_IR[idx]:sho;
               const fakeProps=Object.assign({},orig);
-              fakeProps['_S']=lbl;
+              fakeProps['_S']=sho||'?'; /* DEBUG: raw SHO value */
               feature.props=fakeProps;
 
               /* pass centroid as anchor geometry */
