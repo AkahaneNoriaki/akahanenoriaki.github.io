@@ -87,6 +87,9 @@ document.getElementById('map').addEventListener('click',()=>{ if(measuring||shar
    Map
 ========================= */
 const map=L.map('map',{maxZoom:25,zoomControl:false}).setView([36.2,138.0],12);
+map.createPane('rinpanPane').style.zIndex='410';
+map.createPane('shohanPane').style.zIndex='420';
+map.createPane('segyohanPane').style.zIndex='430';
 const zoomCtrl=L.control.zoom({position:'topright'}).addTo(map);
 const gsiStd=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
   {maxNativeZoom:18,maxZoom:25,attribution:'© 地理院'});
@@ -507,6 +510,7 @@ function _buildRinpanLayer(){
   }
   return protomapsL.leafletLayer({
     url: 'data/tatsuno_rinpan.pmtiles',
+    pane:'rinpanPane',
     paintRules,
     labelRules:[
       {
@@ -565,6 +569,7 @@ const _shohanBtn=document.getElementById('btnToggleShohan');
 function _buildShohanLayer(){
   return protomapsL.leafletLayer({
     url:'data/tatsuno_shohan.pmtiles',
+    pane:'shohanPane',
     paintRules:[
       {
         dataLayer:'shohan',
@@ -647,6 +652,7 @@ function _buildSegyohanLayer(){
   }
   return protomapsL.leafletLayer({
     url: 'data/tatsuno_segyohan.pmtiles',
+    pane:'segyohanPane',
     paintRules,
     labelRules:[
       {
