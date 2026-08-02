@@ -515,7 +515,6 @@ function _buildRinpanLayer(){
     labelRules:[
       {
         dataLayer:'rinpan',
-        filter:(zoom)=>zoom>=10&&zoom<=12,
         symbolizer:(()=>{
           const _inner=new protomapsL.CenteredTextSymbolizer({
             labelProps:['_R'],
