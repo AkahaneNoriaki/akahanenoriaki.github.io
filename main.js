@@ -1143,12 +1143,10 @@ async function _exportSHP(fc,fname,onProg){
 }
 
 /* ---- エクスポートUI ---- */
-let _exportFmt='geojson';
 document.querySelectorAll('.exportFmtBtn').forEach(btn=>{
   btn.onclick=()=>{
     document.querySelectorAll('.exportFmtBtn').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
-    _exportFmt=btn.dataset.fmt;
   };
 });
 
@@ -1170,6 +1168,7 @@ document.getElementById('exportStart').onclick=async()=>{
   const barEl=document.getElementById('exportProgressBar');
   const txtEl=document.getElementById('exportProgressText');
   const btnEl=document.getElementById('exportStart');
+  const fmt=(document.querySelector('.exportFmtBtn.active')||{}).dataset?.fmt||'geojson';
 
   const onProg=(pct,msg)=>{
     barEl.style.width=(pct*100)+'%';
@@ -1181,9 +1180,9 @@ document.getElementById('exportStart').onclick=async()=>{
   try{
     const fc=await _extractFeatures(layerKey,onProg);
     txtEl.textContent='ファイル生成中...';
-    if(_exportFmt==='geojson') _exportGeoJSON(fc,fname);
-    else if(_exportFmt==='gpkg') await _exportGPKG(fc,fname,onProg);
-    else if(_exportFmt==='shp') await _exportSHP(fc,fname,onProg);
+    if(fmt==='geojson') _exportGeoJSON(fc,fname);
+    else if(fmt==='gpkg') await _exportGPKG(fc,fname,onProg);
+    else if(fmt==='shp') await _exportSHP(fc,fname,onProg);
     toast(`${cfg.label} をエクスポートしました（${fc.features.length}件）`);
     document.getElementById('exportModal').classList.remove('show');
   }catch(err){
