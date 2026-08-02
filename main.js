@@ -515,7 +515,7 @@ function _buildRinpanLayer(){
     labelRules:[
       {
         dataLayer:'rinpan',
-        filter:(zoom)=>zoom<=12,
+        filter:(zoom)=>zoom>=10&&zoom<=12,
         symbolizer:(()=>{
           const _inner=new protomapsL.CenteredTextSymbolizer({
             labelProps:['_R'],
@@ -584,18 +584,19 @@ function _buildShohanLayer(){
     labelRules:[
       {
         dataLayer:'shohan',
+        filter:(zoom)=>zoom>=13&&zoom<=13,
         symbolizer:(()=>{
           const _inner=new protomapsL.CenteredTextSymbolizer({
             labelProps:['_S'],
-            font:'bold 14px sans-serif',
-            fill:'red',
-            stroke:'rgba(255,255,255,0.9)',
-            width:3
+            font:'bold 11px sans-serif',
+            fill:'#0d47a1',
+            stroke:'rgba(255,255,255,0.8)',
+            width:2
           });
           return {
             place(layout,geom,feature){
               const orig=feature.props;
-              feature.props=Object.assign({},orig,{_S:orig['SHO']||'?'});
+              feature.props=Object.assign({},orig,{_S:_shoToIroha(orig['SHO'])});
               const r=_inner.place(layout,geom,feature);
               feature.props=orig;
               return r;
