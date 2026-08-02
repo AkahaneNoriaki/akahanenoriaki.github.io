@@ -586,24 +586,13 @@ function _buildShohanLayer(){
         dataLayer:'shohan',
         minzoom:13,
         maxzoom:13,
-        symbolizer:(()=>{
-          const _inner=new protomapsL.CenteredTextSymbolizer({
-            labelProps:['_I'],
-            font:'bold 11px sans-serif',
-            fill:'#0d47a1',
-            stroke:'rgba(255,255,255,0.8)',
-            width:2
-          });
-          return {
-            place(layout,geom,feature){
-              const orig=feature.props;
-              feature.props=Object.assign({},orig,{_I:_shoToIroha(orig['SHO'])});
-              const r=_inner.place(layout,geom,feature);
-              feature.props=orig;
-              return r;
-            }
-          };
-        })()
+        symbolizer: new protomapsL.CenteredTextSymbolizer({
+          labelProps:['SHO'],
+          font:'bold 11px sans-serif',
+          fill:'#0d47a1',
+          stroke:'rgba(255,255,255,0.8)',
+          width:2
+        })
       }
     ]
   });
