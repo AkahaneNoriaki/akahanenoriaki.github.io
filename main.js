@@ -596,7 +596,10 @@ function _buildShohanLayer(){
           return {
             place(layout,geom,feature){
               const orig=feature.props;
-              feature.props=Object.assign({},orig,{_S:_shoToIroha(orig['SHO'])});
+              const _sho=orig['SHO']||'';
+              const _idx=_sho.charCodeAt(0)-65;
+              const _lbl=(_idx>=0&&_idx<_IROHA.length)?_IROHA[_idx]:_sho;
+              feature.props=Object.assign({},orig,{_S:_lbl});
               const r=_inner.place(layout,geom,feature);
               feature.props=orig;
               return r;
