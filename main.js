@@ -512,17 +512,6 @@ function _buildRinpanLayer(){
       })
     }
   ];
-  if(_xlsxJoinMap&&_xlsxTargetLayer==='rinpan'){
-    paintRules.unshift({
-      dataLayer:'rinpan',
-      filter:(zoom,feat)=>_xlsxJoinMap.has(String(feat.props[_xlsxKeyPmtField]??'').trim()),
-      symbolizer: new protomapsL.PolygonSymbolizer({
-        fill:'rgba(46,125,50,0.18)',
-        stroke:'#2e7d32',
-        width:2
-      })
-    });
-  }
   return protomapsL.leafletLayer({
     url: 'data/tatsuno_rinpan.pmtiles',
     pane:'rinpanPane',
@@ -598,17 +587,6 @@ function _buildShohanLayer(){
       })
     }
   ];
-  if(_xlsxJoinMap&&_xlsxTargetLayer==='shohan'){
-    paintRules.unshift({
-      dataLayer:'shohan',
-      filter:(zoom,feat)=>_xlsxJoinMap.has(String(feat.props[_xlsxKeyPmtField]??'').trim()),
-      symbolizer: new protomapsL.PolygonSymbolizer({
-        fill:'rgba(21,101,192,0.18)',
-        stroke:'#1565c0',
-        width:1.6
-      })
-    });
-  }
   return protomapsL.leafletLayer({
     url:'data/tatsuno_shohan.pmtiles',
     pane:'shohanPane',
@@ -681,17 +659,6 @@ function _buildSegyohanLayer(){
       })
     }
   ];
-  if(_xlsxJoinMap&&_xlsxTargetLayer==='segyohan'){
-    paintRules.unshift({
-      dataLayer:'segyohan',
-      filter:(zoom,feat)=>_xlsxJoinMap.has(String(feat.props[_xlsxKeyPmtField]??'').trim()),
-      symbolizer: new protomapsL.PolygonSymbolizer({
-        fill:'rgba(230,81,0,0.18)',
-        stroke:'#e65100',
-        width:1.4
-      })
-    });
-  }
   return protomapsL.leafletLayer({
     url: 'data/tatsuno_segyohan.pmtiles',
     pane:'segyohanPane',
@@ -1255,13 +1222,17 @@ function _queryLayer(layer, layerName, latlng){
 }
 
 map.on('click',(e)=>{
-  const hasPmt=(_rinpanOn&&_rinpanLayer)||(_segyohanOn&&_segyohanLayer);
+  const hasPmt=(_rinpanOn&&_rinpanLayer)||(_shohanOn&&_shohanLayer)||(_segyohanOn&&_segyohanLayer);
   if(!hasPmt) return;
 
   let props=null, layerLabel='', layerColor='';
   if(_segyohanOn&&_segyohanLayer){
     props=_queryLayer(_segyohanLayer,'segyohan',e.latlng);
     layerLabel='施業班'; layerColor='#e65100';
+  }
+  if(!props&&_shohanOn&&_shohanLayer){
+    props=_queryLayer(_shohanLayer,'shohan',e.latlng);
+    layerLabel='小班'; layerColor='#1565c0';
   }
   if(!props&&_rinpanOn&&_rinpanLayer){
     props=_queryLayer(_rinpanLayer,'rinpan',e.latlng);
@@ -1272,12 +1243,11 @@ map.on('click',(e)=>{
   let title='';
   if(layerLabel==='施業班'){
     title=`林班${props.RIN||'-'} ${props.SHO||''}-${props.SEGYO||''}${props.EDA&&props.EDA!=='-'?props.EDA:''}`;
+  } else if(layerLabel==='小班'){
+    title=`林班${props.RIN||'-'} ${props.SHO||'-'}`;
   } else {
     title=`林班 ${props.RIN||'-'}`;
   }
-
-  const _row=(label,val)=> val!=null&&val!==''&&val!==0
-    ? `<span class="xlKey">${label}:</span> ${val}<br>` : '';
 
   let html=`<div class="rinpanPopup">`;
   html+=`<b style="color:${layerColor}">[${layerLabel}] ${title}</b>`;
@@ -1292,16 +1262,17 @@ map.on('click',(e)=>{
     const key=String(props[_xlsxKeyPmtField]??'').trim();
     const row=_xlsxJoinMap.get(key);
     if(row){
-      html+='<hr>';
+      html+='<hr><b style="font-size:11px;color:#555">Excel連携データ</b><br>';
       for(const [col,val] of Object.entries(row)){
         if(col===_xlsxKeyXlsCol) continue;
+        if(val===''||val==null) continue;
         html+=`<span class="xlKey">${col}:</span> ${val}<br>`;
       }
     }
   }
   html+='</div>';
 
-  L.popup({maxWidth:280}).setLatLng(e.latlng).setContent(html).openOn(map);
+  L.popup({maxWidth:300}).setLatLng(e.latlng).setContent(html).openOn(map);
 });
 
 /* --- GeoJSON --- */
