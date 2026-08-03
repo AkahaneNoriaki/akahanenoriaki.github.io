@@ -512,6 +512,13 @@ function _buildRinpanLayer(){
       })
     }
   ];
+  if(_xlsxJoinMap&&_xlsxTargetLayer==='rinpan'){
+    paintRules.unshift({
+      dataLayer:'rinpan',
+      filter:(zoom,feat)=>_xlsxJoinMap.has(String(feat.props[_xlsxKeyPmtField]??'').trim()),
+      symbolizer: new protomapsL.PolygonSymbolizer({fill:'rgba(46,125,50,0.25)',stroke:'#2e7d32',width:2})
+    });
+  }
   return protomapsL.leafletLayer({
     url: 'data/tatsuno_rinpan.pmtiles',
     pane:'rinpanPane',
@@ -587,6 +594,13 @@ function _buildShohanLayer(){
       })
     }
   ];
+  if(_xlsxJoinMap&&_xlsxTargetLayer==='shohan'){
+    paintRules.unshift({
+      dataLayer:'shohan',
+      filter:(zoom,feat)=>_xlsxJoinMap.has(String(feat.props[_xlsxKeyPmtField]??'').trim()),
+      symbolizer: new protomapsL.PolygonSymbolizer({fill:'rgba(21,101,192,0.25)',stroke:'#1565c0',width:1.6})
+    });
+  }
   return protomapsL.leafletLayer({
     url:'data/tatsuno_shohan.pmtiles',
     pane:'shohanPane',
@@ -659,6 +673,13 @@ function _buildSegyohanLayer(){
       })
     }
   ];
+  if(_xlsxJoinMap&&_xlsxTargetLayer==='segyohan'){
+    paintRules.unshift({
+      dataLayer:'segyohan',
+      filter:(zoom,feat)=>_xlsxJoinMap.has(String(feat.props[_xlsxKeyPmtField]??'').trim()),
+      symbolizer: new protomapsL.PolygonSymbolizer({fill:'rgba(230,81,0,0.25)',stroke:'#e65100',width:1.2})
+    });
+  }
   return protomapsL.leafletLayer({
     url: 'data/tatsuno_segyohan.pmtiles',
     pane:'segyohanPane',
