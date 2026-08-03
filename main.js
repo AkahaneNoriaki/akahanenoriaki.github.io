@@ -780,6 +780,7 @@ let _xlsxJoinMap=null;
 let _xlsxTargetLayer='rinpan';
 let _xlsxKeyPmtField='RIN';
 let _xlsxKeyXlsCol='';
+let _xlsxIsCsv=false; // CSV=氏名非表示 / Excel=氏名表示
 
 const xlsxInput      = document.getElementById('xlsxInput');
 const xlsxModal      = document.getElementById('xlsxModal');
