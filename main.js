@@ -496,6 +496,38 @@ function _polygonCentroid(ring){
   return{x:cx/(6*area),y:cy/(6*area)};
 }
 
+/* --- 市町村選択 --- */
+let _currentMuni='tatsuno';
+const _muniSel=document.getElementById('muniSel');
+
+fetch('data/municipalities.json')
+  .then(r=>r.json())
+  .then(list=>{
+    _muniSel.innerHTML=list.map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+    _muniSel.value=_currentMuni;
+  })
+  .catch(()=>{ _muniSel.innerHTML=`<option value="tatsuno">辰野町</option>`; });
+
+_muniSel.onchange=()=>{
+  _currentMuni=_muniSel.value;
+  // 全レイヤをリセット
+  [
+    [_rinpanOn,  ()=>{ map.removeLayer(_rinpanLayer);   _rinpanLayer=null;   _rinpanOn=false;   _rinpanBtn.classList.remove('active'); }],
+    [_shohanOn,  ()=>{ map.removeLayer(_shohanLayer);   _shohanLayer=null;   _shohanOn=false;   _shohanBtn.classList.remove('active'); }],
+    [_segyohanOn,()=>{ map.removeLayer(_segyohanLayer); _segyohanLayer=null; _segyohanOn=false; _segyohanBtn.classList.remove('active'); }],
+  ].forEach(([on,fn])=>{ if(on) fn(); });
+  // Excel連携もリセット
+  if(_xlsxJoinMap){
+    _xlsxRows=[]; _xlsxJoinMap=null;
+    btnExcelLink.classList.remove('active');
+    btnExcelClear.style.display='none';
+    document.getElementById('xlsxStatCard').style.display='none';
+  }
+  toast(`${_muniSel.options[_muniSel.selectedIndex].text}に切り替えました`);
+};
+
+function _muniUrl(layer){ return `data/${_currentMuni}_${layer}.pmtiles`; }
+
 /* --- 連携可能レイヤ: 林班 PMTiles --- */
 let _rinpanLayer=null;
 let _rinpanOn=false;
@@ -520,7 +552,7 @@ function _buildRinpanLayer(){
     });
   }
   return protomapsL.leafletLayer({
-    url: 'data/tatsuno_rinpan.pmtiles',
+    url: _muniUrl('rinpan'),
     pane:'rinpanPane',
     paintRules,
     labelRules:[
@@ -608,7 +640,7 @@ function _buildShohanLayer(){
     });
   }
   return protomapsL.leafletLayer({
-    url:'data/tatsuno_shohan.pmtiles',
+    url:_muniUrl('shohan'),
     pane:'shohanPane',
     paintRules,
     labelRules:[
@@ -687,7 +719,7 @@ function _buildSegyohanLayer(){
     });
   }
   return protomapsL.leafletLayer({
-    url: 'data/tatsuno_segyohan.pmtiles',
+    url: _muniUrl('segyohan'),
     pane:'segyohanPane',
     paintRules,
     labelRules:[
@@ -799,10 +831,11 @@ document.getElementById('btnExportLayer').onclick=()=>{ _openExportModal(); clos
 /* ===== PMTiles → GeoJSON/GPKG/SHP エクスポートエンジン ===== */
 
 const _EXPORT_CFG = {
-  rinpan:   { url:'data/tatsuno_rinpan.pmtiles',   layer:'rinpan',   idField:'RIN',        label:'林班' },
-  shohan:   { url:'data/tatsuno_shohan.pmtiles',   layer:'shohan',   idField:'SHO',        label:'小班' },
-  segyohan: { url:'data/tatsuno_segyohan.pmtiles', layer:'segyohan', idField:'SEGYOHANID', label:'施業班' }
+  rinpan:   { layer:'rinpan',   idField:'RIN',        label:'林班' },
+  shohan:   { layer:'shohan',   idField:'SHO',        label:'小班' },
+  segyohan: { layer:'segyohan', idField:'SEGYOHANID', label:'施業班' }
 };
+function _exportUrl(key){ return _muniUrl(_EXPORT_CFG[key].layer); }
 
 /* ---- MVT / PBF デコード ---- */
 const _zz = n => (n>>1)^-(n&1);
@@ -895,7 +928,7 @@ function _ringsToParts(rings){
 /* ---- 全フィーチャー取得 ---- */
 async function _extractFeatures(cfgKey, onProg){
   const cfg = _EXPORT_CFG[cfgKey];
-  const pm = new pmtiles.PMTiles(cfg.url);
+  const pm = new pmtiles.PMTiles(_exportUrl(cfgKey));
   const hdr = await pm.getHeader();
   const z = hdr.maxZoom;
   const N = 1<<z;
