@@ -803,10 +803,20 @@ xlsxInput.onchange=()=>{
   const f=xlsxInput.files[0]; if(!f) return;
   _xlsxRows=[];
   xlsxKeyXlsSel.innerHTML='';
+  const isCsv=f.name.toLowerCase().endsWith('.csv');
   const rd=new FileReader();
   rd.onload=(e)=>{
     try{
-      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      let wb;
+      if(isCsv){
+        // Shift-JIS / UTF-8 両対応
+        const bytes=new Uint8Array(e.target.result);
+        let text;
+        try{ text=new TextDecoder('shift-jis').decode(bytes); } catch(_){ text=new TextDecoder('utf-8').decode(bytes); }
+        wb=XLSX.read(text,{type:'string'});
+      } else {
+        wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      }
       const ws=wb.Sheets[wb.SheetNames[0]];
       _xlsxRows=XLSX.utils.sheet_to_json(ws,{defval:''});
       if(!_xlsxRows.length){ toast('データが空です'); return; }
@@ -816,7 +826,7 @@ xlsxInput.onchange=()=>{
       _updateXlsxKeyOptions();
       xlsxModal.classList.add('show');
     } catch(err){
-      toast('Excelの読み込みに失敗しました');
+      toast('ファイルの読み込みに失敗しました');
     }
   };
   rd.readAsArrayBuffer(f);
