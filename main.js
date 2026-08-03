@@ -1351,25 +1351,24 @@ map.on('click',(e)=>{
     title=`林班 ${props.RIN||'-'}`;
   }
 
+  // PMTiles内部フィールド（表示しない）
+  const _PMT_SKIP=new Set(['KEY_02','KEY_02ORG','RIN','SHO','SEGYO','EDA','SEGYOHANID',
+    'CITY','SHONIN','AREA_','GIS_SEGYOH','SHAPE_AREA','SHAPE_LEN','_S','SHOKEY']);
+
   let html=`<div class="rinpanPopup">`;
   html+=`<b style="color:${layerColor}">[${layerLabel}] ${title}</b>`;
 
   if(layerLabel==='施業班'){
     if(props.KEY_02) html+=`<br><span class="xlKey">施業キー:</span> ${props.KEY_02}`;
-    if(props.市町村名||props.林種){
+    // 森林簿データ（PMTilesに結合済みのフィールドを動的表示）
+    const forestEntries=Object.entries(props).filter(([k,v])=>
+      !_PMT_SKIP.has(k) && v!==''&&v!=null
+    );
+    if(forestEntries.length){
       html+='<hr>';
-      html+=_row('市町村',  props.市町村名);
-      html+=_row('林種',    props.林種);
-      html+=_row('施業区分',props.施業区分);
-      html+=_row('樹種',    props.樹種);
-      html+=_row('面積',    props.面積ha!=null?`${props.面積ha} ha`:'');
-      html+=_row('林齢',    props.林齢!=null?`${props.林齢} 年`:'');
-      html+=_row('齢級',    props.齢級!=null?`${props.齢級} 級`:'');
-      html+=_row('標高',    props.標高m!=null?`${props.標高m} m`:'');
-      html+=_row('傾斜',    props.傾斜deg!=null?`${props.傾斜deg}°`:'');
-      html+=_row('地利級',  props.地利級);
-      html+=_row('保安林',  props.保安林);
-      html+=_row('推進方向',props.推進方向);
+      for(const [k,v] of forestEntries){
+        html+=`<span class="xlKey">${k}:</span> ${v}<br>`;
+      }
     } else {
       if(props.CITY) html+=`<br><span class="xlKey">市町村コード:</span> ${props.CITY}`;
     }
@@ -1377,14 +1376,14 @@ map.on('click',(e)=>{
     if(props.CITY) html+=`<br><span class="xlKey">市町村コード:</span> ${props.CITY}`;
   }
 
+  // Excel連携（氏名Excelを接続した場合に表示）
   if(_xlsxJoinMap){
     const key=String(props[_xlsxKeyPmtField]??'').trim();
     const row=_xlsxJoinMap.get(key);
     if(row){
-      html+='<hr><b style="font-size:11px;color:#555">CSV連携データ</b><br>';
+      html+='<hr><b style="font-size:11px;color:#e65100">施業者情報</b><br>';
       for(const [col,val] of Object.entries(row)){
         if(col===_xlsxKeyXlsCol) continue;
-        if(col.includes('氏名')||col.includes('名前')||col.includes('姓名')) continue;
         if(val===''||val==null) continue;
         html+=`<span class="xlKey">${col}:</span> ${val}<br>`;
       }
