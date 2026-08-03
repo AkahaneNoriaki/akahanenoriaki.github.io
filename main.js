@@ -573,6 +573,12 @@ _rinpanBtn.onclick=()=>{
 
 /* --- 連携可能レイヤ: 小班 PMTiles --- */
 const _IROHA=['い','ろ','は','に','ほ','へ','と','ち','り','ぬ','る','を','わ','か','よ','た','れ','そ','つ','ね','な','ら','む','う','ゐ','の','お','く','や','ま','け','ふ','こ','え','て','あ','さ','き','ゆ','め','み','し','ゑ','ひ','も','せ','す'];
+const _KATA_IROHA=['イ','ロ','ハ','ニ','ホ','ヘ','ト','チ','リ','ヌ','ル','ヲ','ワ','カ','ヨ','タ','レ','ソ','ツ','ネ','ナ','ラ','ム','ウ','ヰ','ノ','オ','ク','ヤ','マ','ケ','フ','コ','エ','テ','ア','サ','キ','ユ','メ','ミ','シ','ヱ','ヒ','モ','セ','ス'];
+function _edaToKana(eda){
+  if(!eda||eda==='-') return '';
+  const idx=String(eda).toUpperCase().charCodeAt(0)-65;
+  return (idx>=0&&idx<_KATA_IROHA.length)?_KATA_IROHA[idx]:String(eda);
+}
 function _shoToIroha(sho){
   if(!sho) return '';
   const idx=sho.toUpperCase().charCodeAt(0)-65;
@@ -702,8 +708,7 @@ function _buildSegyohanLayer(){
               if(!ring||ring.length===0) return;
               const{x:cx,y:cy}=_polygonCentroid(ring);
               const orig=feature.props;
-              const _eda=orig['EDA']&&orig['EDA']!=='-'?String(orig['EDA']):'';
-              feature.props=Object.assign({},orig,{_S:String(parseInt(orig['SEGYO']||'0',10))+_eda});
+              feature.props=Object.assign({},orig,{_S:String(parseInt(orig['SEGYO']||'0',10))+_edaToKana(orig['EDA'])});
               const r=_inner.place(layout,[[{x:cx,y:cy}]],feature);
               feature.props=orig;
               return r;
@@ -1264,7 +1269,7 @@ map.on('click',(e)=>{
 
   let title='';
   if(layerLabel==='施業班'){
-    title=`林班${props.RIN||'-'} ${props.SHO||''}-${props.SEGYO||''}${props.EDA&&props.EDA!=='-'?props.EDA:''}`;
+    title=`林班${props.RIN||'-'} ${props.SHO||''}-${props.SEGYO||''}${_edaToKana(props.EDA)}`;
   } else if(layerLabel==='小班'){
     title=`林班${props.RIN||'-'} ${props.SHO||'-'}`;
   } else {
