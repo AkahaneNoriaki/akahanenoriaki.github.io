@@ -1275,6 +1275,23 @@ map.on('click',(e)=>{
 
   if(layerLabel==='施業班'){
     if(props.KEY_02) html+=`<br><span class="xlKey">施業キー:</span> ${props.KEY_02}`;
+    if(props.市町村名||props.林種){
+      html+='<hr>';
+      html+=_row('市町村',  props.市町村名);
+      html+=_row('林種',    props.林種);
+      html+=_row('施業区分',props.施業区分);
+      html+=_row('樹種',    props.樹種);
+      html+=_row('面積',    props.面積ha!=null?`${props.面積ha} ha`:'');
+      html+=_row('林齢',    props.林齢!=null?`${props.林齢} 年`:'');
+      html+=_row('齢級',    props.齢級!=null?`${props.齢級} 級`:'');
+      html+=_row('標高',    props.標高m!=null?`${props.標高m} m`:'');
+      html+=_row('傾斜',    props.傾斜deg!=null?`${props.傾斜deg}°`:'');
+      html+=_row('地利級',  props.地利級);
+      html+=_row('保安林',  props.保安林);
+      html+=_row('推進方向',props.推進方向);
+    } else {
+      if(props.CITY) html+=`<br><span class="xlKey">市町村コード:</span> ${props.CITY}`;
+    }
   } else {
     if(props.CITY) html+=`<br><span class="xlKey">市町村コード:</span> ${props.CITY}`;
   }
