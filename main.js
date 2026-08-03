@@ -832,8 +832,17 @@ xlsxInput.onchange=()=>{
       if(isCsv){
         const bytes=new Uint8Array(e.target.result);
         let text='';
-        for(const enc of ['shift_jis','utf-8']){
-          try{ text=new TextDecoder(enc).decode(bytes); break; }catch(_){}
+        if(bytes[0]===0xEF&&bytes[1]===0xBB&&bytes[2]===0xBF){
+          // UTF-8 BOM → BOMを除いてデコード
+          text=new TextDecoder('utf-8').decode(bytes.slice(3));
+        } else if(bytes[0]===0xFF&&bytes[1]===0xFE){
+          // UTF-16 LE BOM
+          text=new TextDecoder('utf-16le').decode(bytes.slice(2));
+        } else {
+          // Shift-JIS → UTF-8 の順で試みる
+          for(const enc of ['shift_jis','utf-8']){
+            try{ text=new TextDecoder(enc).decode(bytes); break; }catch(_){}
+          }
         }
         _xlsxRows=_parseCsv(text);
       } else {
