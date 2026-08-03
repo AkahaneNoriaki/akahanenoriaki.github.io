@@ -1381,7 +1381,7 @@ map.on('click',(e)=>{
     const key=String(props[_xlsxKeyPmtField]??'').trim();
     const row=_xlsxJoinMap.get(key);
     if(row){
-      html+='<hr><b style="font-size:11px;color:#e65100">施業者情報</b><br>';
+      html+='<hr><b style="font-size:11px;color:#e65100">森林所有者名</b><br>';
       for(const [col,val] of Object.entries(row)){
         if(col===_xlsxKeyXlsCol) continue;
         if(val===''||val==null) continue;
