@@ -702,7 +702,8 @@ function _buildSegyohanLayer(){
               if(!ring||ring.length===0) return;
               const{x:cx,y:cy}=_polygonCentroid(ring);
               const orig=feature.props;
-              feature.props=Object.assign({},orig,{_S:String(parseInt(orig['SEGYO']||'0',10))});
+              const _eda=orig['EDA']&&orig['EDA']!=='-'?String(orig['EDA']):'';
+              feature.props=Object.assign({},orig,{_S:String(parseInt(orig['SEGYO']||'0',10))+_eda});
               const r=_inner.place(layout,[[{x:cx,y:cy}]],feature);
               feature.props=orig;
               return r;
