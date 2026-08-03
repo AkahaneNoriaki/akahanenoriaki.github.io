@@ -799,6 +799,28 @@ _updateXlsxKeyOptions();
 
 btnExcelLink.onclick=()=>{ xlsxInput.value=''; xlsxInput.click(); closeSheet(); };
 
+function _parseCsvLine(line){
+  const result=[]; let inQ=false, field='';
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(inQ){ if(ch==='"'&&line[i+1]==='"'){field+='"';i++;} else if(ch==='"'){inQ=false;} else field+=ch; }
+    else { if(ch==='"'){inQ=true;} else if(ch===','){result.push(field);field='';} else field+=ch; }
+  }
+  result.push(field); return result;
+}
+function _parseCsv(text){
+  const lines=text.split(/\r?\n/);
+  const headers=_parseCsvLine(lines[0]);
+  const rows=[];
+  for(let i=1;i<lines.length;i++){
+    if(!lines[i].trim()) continue;
+    const vals=_parseCsvLine(lines[i]);
+    const obj={}; headers.forEach((h,j)=>{obj[h]=vals[j]??'';});
+    rows.push(obj);
+  }
+  return rows;
+}
+
 xlsxInput.onchange=()=>{
   const f=xlsxInput.files[0]; if(!f) return;
   _xlsxRows=[];
@@ -807,18 +829,18 @@ xlsxInput.onchange=()=>{
   const rd=new FileReader();
   rd.onload=(e)=>{
     try{
-      let wb;
       if(isCsv){
-        // Shift-JIS / UTF-8 両対応
         const bytes=new Uint8Array(e.target.result);
-        let text;
-        try{ text=new TextDecoder('shift-jis').decode(bytes); } catch(_){ text=new TextDecoder('utf-8').decode(bytes); }
-        wb=XLSX.read(text,{type:'string'});
+        let text='';
+        for(const enc of ['shift_jis','utf-8']){
+          try{ text=new TextDecoder(enc).decode(bytes); break; }catch(_){}
+        }
+        _xlsxRows=_parseCsv(text);
       } else {
-        wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+        const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        _xlsxRows=XLSX.utils.sheet_to_json(ws,{defval:''});
       }
-      const ws=wb.Sheets[wb.SheetNames[0]];
-      _xlsxRows=XLSX.utils.sheet_to_json(ws,{defval:''});
       if(!_xlsxRows.length){ toast('データが空です'); return; }
       const headers=Object.keys(_xlsxRows[0]);
       xlsxKeyXlsSel.innerHTML=headers.map(h=>`<option value="${h}">${h}</option>`).join('');
@@ -826,7 +848,7 @@ xlsxInput.onchange=()=>{
       _updateXlsxKeyOptions();
       xlsxModal.classList.add('show');
     } catch(err){
-      toast('ファイルの読み込みに失敗しました');
+      toast('ファイルの読み込みに失敗しました: '+err.message);
     }
   };
   rd.readAsArrayBuffer(f);
