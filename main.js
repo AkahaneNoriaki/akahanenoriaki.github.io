@@ -1349,9 +1349,10 @@ map.on('click',(e)=>{
     const key=String(props[_xlsxKeyPmtField]??'').trim();
     const row=_xlsxJoinMap.get(key);
     if(row){
-      html+='<hr><b style="font-size:11px;color:#555">Excel連携データ</b><br>';
+      html+='<hr><b style="font-size:11px;color:#555">CSV連携データ</b><br>';
       for(const [col,val] of Object.entries(row)){
         if(col===_xlsxKeyXlsCol) continue;
+        if(col.includes('氏名')||col.includes('名前')||col.includes('姓名')) continue;
         if(val===''||val==null) continue;
         html+=`<span class="xlKey">${col}:</span> ${val}<br>`;
       }
