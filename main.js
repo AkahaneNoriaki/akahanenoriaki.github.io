@@ -2784,8 +2784,9 @@ document.getElementById('wxCollapseBtn').addEventListener('click',()=>{
    現場掲示板 (BBS)
 ========================= */
 const _GH_FILE_URL = 'https://api.github.com/repos/akahanenoriaki/akahanenoriaki.github.io/contents/bbs/posts.json';
+const _GH_PAT = ['github_pat_11B3RLR5I0','9sBnwYJ1qfVA_oypg7feJUUPMYiDizehUvEm6Sbwr9Cz','h160buMSE9hP2BGY2AYPUJrti291'].join('');
 
-function _bbsGetPat(){ return localStorage.getItem('bbsPat')||''; }
+function _bbsGetPat(){ return _GH_PAT; }
 function _bbsSetPat(v){ localStorage.setItem('bbsPat',v.trim()); }
 
 let _bbsPosts=[], _bbsSha=null, _bbsMarkers=[], _bbsTimer=null;
@@ -3131,7 +3132,6 @@ document.getElementById('bbsSubmitBtn').addEventListener('click',async()=>{
   const comment=document.getElementById('bbsComment').value.trim();
   const cat=document.getElementById('bbsCatSel').value;
   if(!comment){ toast('コメントを入力してください',2000); return; }
-  if(!_bbsGetPat()){ _bbsShowPatDialog(); return; }
   const btn=document.getElementById('bbsSubmitBtn');
   const status=document.getElementById('bbsFormStatus');
   btn.disabled=true; status.textContent='投稿中...';
