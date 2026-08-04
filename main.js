@@ -2783,8 +2783,10 @@ document.getElementById('wxCollapseBtn').addEventListener('click',()=>{
 /* =========================
    現場掲示板 (BBS)
 ========================= */
-const _GH_PAT  = ['github_pat_11B3RLR5I0','E1Fw0DjlOOuC_TCT2Ph','zGnHu76WmqKnoF2AgFo8mwBuXkkKTAQJDik62VBVT7J3XUS1fEzBA'].join('');
 const _GH_FILE_URL = 'https://api.github.com/repos/akahanenoriaki/akahanenoriaki.github.io/contents/bbs/posts.json';
+
+function _bbsGetPat(){ return localStorage.getItem('bbsPat')||''; }
+function _bbsSetPat(v){ localStorage.setItem('bbsPat',v.trim()); }
 
 let _bbsPosts=[], _bbsSha=null, _bbsMarkers=[], _bbsTimer=null;
 let _bbsPhotoB64=null, _bbsLat=null, _bbsLng=null;
@@ -2794,12 +2796,24 @@ function _bbsGetUserName(){ return localStorage.getItem('bbsUserName')||''; }
 function _bbsUpdateAuthorBar(){
   const name=_bbsGetUserName();
   document.getElementById('bbsAuthorBarName').textContent=name||'未登録';
+  const patOk=!!_bbsGetPat();
+  const ind=document.getElementById('bbsPatIndicator');
+  if(ind){ ind.textContent=patOk?'🔑✓':'🔑未設定'; ind.style.color=patOk?'#2e7d32':'#c62828'; }
+}
+
+function _bbsShowPatDialog(){
+  const cur=_bbsGetPat();
+  const val=prompt('GitHub Personal Access Token を入力してください\n（Contents: Read and write 権限が必要）\n\n設定済みの場合は変更またはそのままOK:',cur);
+  if(val===null) return;
+  _bbsSetPat(val);
+  _bbsUpdateAuthorBar();
+  if(val) toast('トークンを保存しました',2000);
 }
 
 async function _bbsFetchPosts(){
   try{
     const res=await fetch(_GH_FILE_URL,{
-      headers:{'Authorization':'Bearer '+_GH_PAT,'Accept':'application/vnd.github+json'}
+      headers:{'Authorization':'Bearer '+_bbsGetPat(),'Accept':'application/vnd.github+json'}
     });
     if(res.status===404){ _bbsPosts=[]; _bbsSha=null; _bbsCheckNew(); return true; }
     if(!res.ok) throw new Error('GitHub API '+res.status);
@@ -2819,11 +2833,11 @@ async function _bbsSavePosts(posts, _depth=0){
   if(_bbsSha) body.sha=_bbsSha;
   const res=await fetch(_GH_FILE_URL,{
     method:'PUT',
-    headers:{'Authorization':'Bearer '+_GH_PAT,'Content-Type':'application/json','Accept':'application/vnd.github+json'},
+    headers:{'Authorization':'Bearer '+_bbsGetPat(),'Content-Type':'application/json','Accept':'application/vnd.github+json'},
     body:JSON.stringify(body)
   });
   if(res.status===409&&_depth<2){
-    const r=await fetch(_GH_FILE_URL,{headers:{'Authorization':'Bearer '+_GH_PAT,'Accept':'application/vnd.github+json'}});
+    const r=await fetch(_GH_FILE_URL,{headers:{'Authorization':'Bearer '+_bbsGetPat(),'Accept':'application/vnd.github+json'}});
     const d=await r.json();
     _bbsSha=d.sha;
     const raw=await fetch(d.download_url+'?_='+Date.now());
@@ -3117,6 +3131,7 @@ document.getElementById('bbsSubmitBtn').addEventListener('click',async()=>{
   const comment=document.getElementById('bbsComment').value.trim();
   const cat=document.getElementById('bbsCatSel').value;
   if(!comment){ toast('コメントを入力してください',2000); return; }
+  if(!_bbsGetPat()){ _bbsShowPatDialog(); return; }
   const btn=document.getElementById('bbsSubmitBtn');
   const status=document.getElementById('bbsFormStatus');
   btn.disabled=true; status.textContent='投稿中...';
