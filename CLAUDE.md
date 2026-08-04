@@ -110,5 +110,41 @@ tippecanoe -o data/{id}_segyohan.pmtiles -l segyohan \
 - Shift-JIS → `TextDecoder('shift_jis')`
 - UTF-16 LE BOM → `TextDecoder('utf-16le')`
 
+## ローカル版の起動方法（Caddy）
+
+`http://map.local` でポートなしアクセスできる。フォルダをコピーすれば別PCでも同じ手順で動く。
+
+### 初回セットアップ
+
+#### 1. /etc/hosts にドメイン追加
+```bash
+sudo sh -c 'echo "127.0.0.1 map.local" >> /etc/hosts'
+```
+
+#### 2. Caddy インストール（Mac）
+```bash
+brew install caddy
+```
+Windows: 公式サイト（caddyserver.com）から `caddy.exe` をダウンロード
+
+#### 3. Caddyfile 作成（ローカルフォルダ直下）
+```
+http://map.local {
+  root * /Volumes/data/ina_farm_local
+  file_server
+  header Access-Control-Allow-Origin *
+}
+```
+`header Access-Control-Allow-Origin *` はPMTiles読み込みに必要。
+
+### 起動
+```bash
+cd /Volumes/data/ina_farm_local
+caddy run
+```
+ブラウザで `http://map.local` を開く。終了は `Ctrl+C`。
+
+---
+
 ## 上伊那地区 8市町村（予定）
 辰野町・伊那市 完了。残り6市町村はGeoJSONができ次第追加。
