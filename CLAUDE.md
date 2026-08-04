@@ -113,36 +113,47 @@ tippecanoe -o data/{id}_segyohan.pmtiles -l segyohan \
 ## ローカル版の起動方法（Caddy）
 
 `http://map.local` でポートなしアクセスできる。フォルダをコピーすれば別PCでも同じ手順で動く。
+`Caddyfile`（相対パス `root * .`）と `start_map.bat` はリポジトリに含まれているので、コピー後の編集は不要。
 
-### 初回セットアップ
+### 初回セットアップ（PCごとに1回だけ）
 
-#### 1. /etc/hosts にドメイン追加
+#### 1. hosts にドメイン追加
+
+**Mac/Linux:**
 ```bash
 sudo sh -c 'echo "127.0.0.1 map.local" >> /etc/hosts'
 ```
 
-#### 2. Caddy インストール（Mac）
+**Windows（管理者権限で実行）:**
+```
+C:\Windows\System32\drivers\etc\hosts
+```
+を メモ帳（管理者として実行）で開き、末尾に追記：
+```
+127.0.0.1 map.local
+```
+
+#### 2. Caddy インストール
+
+**Mac:**
 ```bash
 brew install caddy
 ```
-Windows: 公式サイト（caddyserver.com）から `caddy.exe` をダウンロード
 
-#### 3. Caddyfile 作成（ローカルフォルダ直下）
-```
-http://map.local {
-  root * /Volumes/data/ina_farm_local
-  file_server
-  header Access-Control-Allow-Origin *
-}
-```
-`header Access-Control-Allow-Origin *` はPMTiles読み込みに必要。
+**Windows:** caddyserver.com から `caddy.exe` をダウンロードして、マップフォルダに置く
 
 ### 起動
+
+**Mac:**
 ```bash
 cd /Volumes/data/ina_farm_local
 caddy run
 ```
-ブラウザで `http://map.local` を開く。終了は `Ctrl+C`。
+
+**Windows:**
+`start_map.bat` をダブルクリック
+
+ブラウザで `http://map.local` を開く。終了は `Ctrl+C`（またはウィンドウを閉じる）。
 
 ---
 

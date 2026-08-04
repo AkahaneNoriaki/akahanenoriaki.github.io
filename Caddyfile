@@ -1,0 +1,5 @@
+http://map.local {
+  root * .
+  file_server
+  header Access-Control-Allow-Origin *
+}
