@@ -384,11 +384,15 @@ document.getElementById('btnClearPhotos').onclick=()=>{
 /* =========================
    軌跡記録
 ========================= */
-let recording=false, trackPoints=[], trackLine=null;
+// trackSegments: セグメントの配列。各セグメントは点の配列。
+// 記録開始→停止のたびに新セグメントを追加し、停止中は繋がない。
+let recording=false, trackSegments=[], trackLines=[];
 const recBadge=document.getElementById('recBadge');
 
+function _trackHasPoints(){ return trackSegments.some(s=>s.length>0); }
+
 function updateTrackUI(){
-  const has=trackPoints.length>0;
+  const has=_trackHasPoints();
   const btn=document.getElementById('btnRecord');
   if(recording){
     btn.innerHTML='<span class="ico">⏹️</span>記録停止';
@@ -401,25 +405,38 @@ function updateTrackUI(){
   document.getElementById('btnClearTrack').style.display=has?'':'none';
 }
 function addTrackPoint(lat,lng){
-  trackPoints.push({lat,lng,time:new Date().toISOString()});
-  const ll=trackPoints.map(p=>[p.lat,p.lng]);
-  if(!trackLine){ trackLine=L.polyline(ll,{color:'#ff6600',weight:4,opacity:0.85}).addTo(map); }
-  else { trackLine.setLatLngs(ll); }
+  if(!trackSegments.length) return;
+  const seg=trackSegments[trackSegments.length-1];
+  seg.push({lat,lng,time:new Date().toISOString()});
+  // 最後のセグメントのpolylineを更新
+  const ll=seg.map(p=>[p.lat,p.lng]);
+  const line=trackLines[trackLines.length-1];
+  if(ll.length===1){ line.setLatLngs(ll); }
+  else { line.setLatLngs(ll); }
 }
 document.getElementById('btnRecord').onclick=()=>{
   recording=!recording;
-  if(recording && me) addTrackPoint(me.getLatLng().lat,me.getLatLng().lng);
+  if(recording){
+    // 新セグメント開始
+    trackSegments.push([]);
+    const line=L.polyline([],{color:'#ff6600',weight:4,opacity:0.85}).addTo(map);
+    trackLines.push(line);
+    if(me) addTrackPoint(me.getLatLng().lat,me.getLatLng().lng);
+  }
   toast(recording?'軌跡記録を開始しました':'軌跡記録を停止しました',2000);
   updateTrackUI(); closeSheet();
 };
 document.getElementById('btnExportTrack').onclick=()=>{
-  if(!trackPoints.length){ toast('軌跡データがありません'); return; }
-  const pts=trackPoints.map(p=>`    <trkpt lat="${p.lat}" lon="${p.lng}"><time>${p.time}</time></trkpt>`).join('\n');
+  if(!_trackHasPoints()){ toast('軌跡データがありません'); return; }
+  const segs=trackSegments.filter(s=>s.length>0).map(s=>{
+    const pts=s.map(p=>`      <trkpt lat="${p.lat}" lon="${p.lng}"><time>${p.time}</time></trkpt>`).join('\n');
+    return `    <trkseg>\n${pts}\n    </trkseg>`;
+  }).join('\n');
   const gpx=`<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="CS立体図マップ" xmlns="http://www.topografix.com/GPX/1/1">
-  <trk><name>Track ${new Date().toLocaleString('ja-JP')}</name><trkseg>
-${pts}
-  </trkseg></trk>
+  <trk><name>Track ${new Date().toLocaleString('ja-JP')}</name>
+${segs}
+  </trk>
 </gpx>`;
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([gpx],{type:'application/gpx+xml'}));
@@ -428,8 +445,7 @@ ${pts}
   toast('GPXをダウンロードしました',2000); closeSheet();
 };
 document.getElementById('btnClearTrack').onclick=()=>{
-  trackPoints=[];
-  if(trackLine){ map.removeLayer(trackLine); trackLine=null; }
+  trackSegments=[]; trackLines.forEach(l=>map.removeLayer(l)); trackLines=[];
   updateTrackUI(); toast('軌跡をクリアしました'); closeSheet();
 };
 updateTrackUI();
