@@ -1,0 +1,45 @@
+name: Rebuild and Deploy Pages (extended timeout)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Build (if package.json exists)
+        run: |
+          if [ -f package.json ]; then
+            npm ci && npm run build || true
+          fi
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v2
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: '.'
+          artifact_name: github-pages
+
+      - name: Deploy with extended timeout
+        uses: actions/deploy-pages@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          timeout: 1800000
+          artifact_name: github-pages
