@@ -29,7 +29,7 @@
 
 <body>
 <div id="map"></div>
-<button id="bbsFloatBtn">📋 掲示板<span id="bbsBadge"></span></button>
+<button id="bbsFloatBtn" style="display:none">📋 掲示板<span id="bbsBadge"></span></button>
 <div id="rainAnimBar" style="display:none;position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:8000;background:rgba(0,0,0,0.65);color:#fff;font-size:13px;font-weight:bold;padding:5px 16px;border-radius:20px;pointer-events:none;white-space:nowrap"></div>
 <div id="toast"></div>
 <div id="cacheBar"></div>
@@ -376,8 +376,8 @@
   </div>
 </div>
 
-<!-- 現場掲示板パネル -->
-<div id="bbsPanel">
+<!-- 現場掲示板パネル（一時無効化） -->
+<div id="bbsPanel" style="display:none">
   <div id="bbsHandle">
     <div id="bbsHandleGrip"><span></span><span></span><span></span></div>
     <span id="bbsPanelTitle">📋 掲示板</span>
@@ -503,6 +503,6 @@
 <!-- 印刷時の縮尺表示（地図左下） -->
 <div id="printMapScale"></div>
 
-<script src="./main.js?v=20260804c"></script>
+<script src="./main.js?v=20260804d"></script>
 </body>
 </html>

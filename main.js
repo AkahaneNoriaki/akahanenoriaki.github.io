@@ -3065,13 +3065,13 @@ function _bbsSaveAuthor(){
 document.getElementById('bbsAuthorSaveBtn').addEventListener('click',_bbsSaveAuthor);
 document.getElementById('bbsAuthorInput').addEventListener('keydown',e=>{ if(e.key==='Enter') _bbsSaveAuthor(); });
 
-// パネルが閉じていてもバックグラウンドで新着チェック
-(async()=>{
-  await _bbsFetchPosts();
-  setInterval(async()=>{
-    if(bbsPanel.style.display!=='flex') await _bbsFetchPosts();
-  },60000);
-})();
+// 掲示板一時無効化中
+// (async()=>{
+//   await _bbsFetchPosts();
+//   setInterval(async()=>{
+//     if(bbsPanel.style.display!=='flex') await _bbsFetchPosts();
+//   },60000);
+// })();
 document.getElementById('bbsClose').addEventListener('click',closeBbsPanel);
 document.getElementById('bbsCollapseBtn').addEventListener('click',()=>{ bbsPanel.classList.toggle('collapsed'); });
 document.getElementById('bbsRefreshBtn').addEventListener('click',async()=>{
