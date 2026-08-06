@@ -1,0 +1,6 @@
+Rebuild trigger file.
+
+This file was created to trigger GitHub Pages rebuild by GitHub Copilot Chat Assistant.
+Timestamp: 2026-08-06T20:41:45Z
+
+If you want me to remove this file after the rebuild, tell me and I will delete it.
