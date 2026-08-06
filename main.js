@@ -2800,9 +2800,7 @@ document.getElementById('wxCollapseBtn').addEventListener('click',()=>{
    現場掲示板 (BBS)
 ========================= */
 const _GH_FILE_URL = 'https://api.github.com/repos/akahanenoriaki/akahanenoriaki.github.io/contents/bbs/posts.json';
-const _GH_PAT = ['github_pat_11B3RLR5I0','9sBnwYJ1qfVA_oypg7feJUUPMYiDizehUvEm6Sbwr9Cz','h160buMSE9hP2BGY2AYPUJrti291'].join('');
-
-function _bbsGetPat(){ return _GH_PAT; }
+function _bbsGetPat(){ return localStorage.getItem('bbsPat')||''; }
 function _bbsSetPat(v){ localStorage.setItem('bbsPat',v.trim()); }
 
 let _bbsPosts=[], _bbsSha=null, _bbsMarkers=[], _bbsTimer=null;
