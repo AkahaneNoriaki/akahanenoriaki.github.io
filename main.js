@@ -1614,36 +1614,117 @@ function toTile(lat,lng,z){ const n=1<<z; return {x:Math.floor((lng+180)/360*n),
 function tileCount(b){ let n=0; for(let z=CACHE_MIN_Z;z<=CACHE_MAX_Z;z++){ const sw=toTile(b.getSouth(),b.getWest(),z),ne=toTile(b.getNorth(),b.getEast(),z); n+=(ne.x-sw.x+1)*(sw.y-ne.y+1); } return n*TILE_TPLS.length; }
 function* tileUrls(b){ for(let z=CACHE_MIN_Z;z<=CACHE_MAX_Z;z++){ const sw=toTile(b.getSouth(),b.getWest(),z),ne=toTile(b.getNorth(),b.getEast(),z); for(let x=sw.x;x<=ne.x;x++) for(let y=ne.y;y<=sw.y;y++) for(const t of TILE_TPLS) yield t.replace('{z}',z).replace('{x}',x).replace('{y}',y); } }
 
-// キャッシュボタンを常時表示
 document.getElementById('btnCacheArea').style.display='';
 
+// ---- 範囲選択（ドラッグで矩形描画）----
+let _cacheSelectMode=false, _cacheSelectCleanup=null;
+let _cacheRect=null, _cacheBounds=null;
+
+function _getMapPt(e){
+  const r=map.getContainer().getBoundingClientRect();
+  const s=(e.touches&&e.touches[0])||(e.changedTouches&&e.changedTouches[0])||e;
+  return L.point(s.clientX-r.left,s.clientY-r.top);
+}
+function _clearCacheRect(){
+  if(_cacheRect){map.removeLayer(_cacheRect);_cacheRect=null;}
+  _cacheBounds=null;
+  document.getElementById('btnSelectCacheArea').classList.remove('on');
+}
+
+document.getElementById('btnSelectCacheArea').onclick=()=>{
+  // 描画モード中 → キャンセル
+  if(_cacheSelectMode){
+    _cacheSelectMode=false;
+    if(_cacheSelectCleanup){_cacheSelectCleanup();_cacheSelectCleanup=null;}
+    map.dragging.enable();map.getContainer().style.cursor='';
+    document.getElementById('btnSelectCacheArea').classList.remove('on');
+    return;
+  }
+  // 矩形あり → クリア
+  if(_cacheBounds){_clearCacheRect();return;}
+
+  _cacheSelectMode=true;
+  document.getElementById('btnSelectCacheArea').classList.add('on');
+  toast('ドラッグで保存範囲を選択',3000);
+  map.dragging.disable();
+  map.getContainer().style.cursor='crosshair';
+
+  let startPt=null;
+  const c=map.getContainer();
+
+  function onDown(e){
+    e.preventDefault();
+    startPt=_getMapPt(e);
+    if(_cacheRect){map.removeLayer(_cacheRect);_cacheRect=null;}
+  }
+  function onMove(e){
+    if(!startPt)return;
+    const ep=_getMapPt(e);
+    const sw=map.containerPointToLatLng(L.point(Math.min(startPt.x,ep.x),Math.max(startPt.y,ep.y)));
+    const ne=map.containerPointToLatLng(L.point(Math.max(startPt.x,ep.x),Math.min(startPt.y,ep.y)));
+    if(_cacheRect)map.removeLayer(_cacheRect);
+    _cacheRect=L.rectangle([sw,ne],{color:'#0066ff',weight:2,dashArray:'6 4',fillColor:'#0066ff',fillOpacity:0.12}).addTo(map);
+  }
+  function onUp(){
+    if(!startPt)return;
+    startPt=null;
+    if(_cacheRect){
+      _cacheBounds=_cacheRect.getBounds();
+      const cnt=tileCount(_cacheBounds);
+      toast(`範囲選択完了（タイル約${cnt}枚）\n「タイル保存」で保存`,3000);
+    }
+    cleanup();
+  }
+  function cleanup(){
+    _cacheSelectMode=false;
+    document.getElementById('btnSelectCacheArea').classList.remove('on');
+    map.dragging.enable();map.getContainer().style.cursor='';
+    c.removeEventListener('mousedown',onDown);
+    c.removeEventListener('mousemove',onMove);
+    c.removeEventListener('mouseup',onUp);
+    c.removeEventListener('touchstart',onDown);
+    c.removeEventListener('touchmove',onMove);
+    c.removeEventListener('touchend',onUp);
+    _cacheSelectCleanup=null;
+  }
+  _cacheSelectCleanup=cleanup;
+  c.addEventListener('mousedown',onDown);
+  c.addEventListener('mousemove',onMove);
+  c.addEventListener('mouseup',onUp);
+  c.addEventListener('touchstart',onDown,{passive:false});
+  c.addEventListener('touchmove',onMove,{passive:false});
+  c.addEventListener('touchend',onUp);
+};
+
 document.getElementById('btnCacheArea').onclick=async()=>{
-  if(!('caches' in window)){ toast('このブラウザはキャッシュAPIに非対応'); return; }
-  // 現在の地図表示範囲を使用
-  const bounds = geotiffBounds || map.getBounds();
+  if(!('caches' in window)){toast('このブラウザはキャッシュAPIに非対応');return;}
+  const bounds=_cacheBounds||geotiffBounds||map.getBounds();
+  const label=_cacheBounds?'選択範囲':geotiffBounds?'GeoTIFF範囲':'現在表示中のエリア';
   const total=tileCount(bounds);
-  if(!await showConfirm(`現在表示中のエリアをオフライン化します\n地図タイル約${total}枚\n（約${Math.round(total*35/1024)}MB想定）\n続行しますか？`)) return;
+  if(!await showConfirm(`${label}をオフライン化します\n地図タイル約${total}枚\n（約${Math.round(total*35/1024)}MB想定）\n続行しますか？`))return;
   closeSheet();
   const urls=[...tileUrls(bounds)];
   const cache=await caches.open(TILE_CACHE_NAME);
   const bar=document.getElementById('cacheBar');
-  bar.style.display='block'; bar.style.width='0%';
+  bar.style.display='block';bar.style.width='0%';
   let done=0;
   for(let i=0;i<urls.length;i+=10){
     await Promise.all(urls.slice(i,i+10).map(u=>fetch(u,{mode:'cors'}).then(r=>{if(r.ok)cache.put(u,r);}).catch(()=>{})));
     done=Math.min(i+10,urls.length);
     bar.style.width=`${Math.round(done/urls.length*100)}%`;
-    if(done%200===0||done===urls.length) toast(`キャッシュ中 ${done}/${urls.length}`,1500);
+    if(done%200===0||done===urls.length)toast(`キャッシュ中 ${done}/${urls.length}`,1500);
   }
   bar.style.display='none';
   toast(`オフライン化完了（タイル${total}枚）`,4000);
 };
+
 document.getElementById('btnClearCache').onclick=async()=>{
-  if(!('caches' in window)) return;
-  if(!await showConfirm('オフラインキャッシュをすべて削除しますか？')) return;
-  const keys = await caches.keys();
-  await Promise.all(keys.map(k => caches.delete(k)));
-  toast('キャッシュをすべて削除しました'); closeSheet();
+  if(!('caches' in window))return;
+  if(!await showConfirm('オフラインキャッシュをすべて削除しますか？'))return;
+  const keys=await caches.keys();
+  await Promise.all(keys.map(k=>caches.delete(k)));
+  _clearCacheRect();
+  toast('キャッシュをすべて削除しました');closeSheet();
 };
 
 /* =========================
