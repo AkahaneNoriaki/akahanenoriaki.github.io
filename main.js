@@ -1601,9 +1601,9 @@ function updateGeotiffUI(){
 updateGeotiffUI();
 
 /* =========================
-   タイルキャッシュ
+   タイルキャッシュ（オフライン化）
 ========================= */
-const TILE_CACHE='map-tiles-v1';
+const TILE_CACHE_NAME='map-20260807a-tiles';
 const CACHE_MIN_Z=10, CACHE_MAX_Z=17;
 const TILE_TPLS=[
   'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
@@ -1614,31 +1614,36 @@ function toTile(lat,lng,z){ const n=1<<z; return {x:Math.floor((lng+180)/360*n),
 function tileCount(b){ let n=0; for(let z=CACHE_MIN_Z;z<=CACHE_MAX_Z;z++){ const sw=toTile(b.getSouth(),b.getWest(),z),ne=toTile(b.getNorth(),b.getEast(),z); n+=(ne.x-sw.x+1)*(sw.y-ne.y+1); } return n*TILE_TPLS.length; }
 function* tileUrls(b){ for(let z=CACHE_MIN_Z;z<=CACHE_MAX_Z;z++){ const sw=toTile(b.getSouth(),b.getWest(),z),ne=toTile(b.getNorth(),b.getEast(),z); for(let x=sw.x;x<=ne.x;x++) for(let y=ne.y;y<=sw.y;y++) for(const t of TILE_TPLS) yield t.replace('{z}',z).replace('{x}',x).replace('{y}',y); } }
 
+// キャッシュボタンを常時表示
+document.getElementById('btnCacheArea').style.display='';
+
 document.getElementById('btnCacheArea').onclick=async()=>{
-  if(!geotiffBounds){ toast('まずGeoTIFFを読み込んでください'); return; }
   if(!('caches' in window)){ toast('このブラウザはキャッシュAPIに非対応'); return; }
-  const total=tileCount(geotiffBounds);
-  if(!await showConfirm(`約${total}枚のタイルをキャッシュします\n（約${Math.round(total*35/1024)}MB想定）\n続行しますか？`)) return;
+  // 現在の地図表示範囲を使用
+  const bounds = geotiffBounds || map.getBounds();
+  const total=tileCount(bounds);
+  if(!await showConfirm(`現在表示中のエリアをオフライン化します\n地図タイル約${total}枚\n（約${Math.round(total*35/1024)}MB想定）\n続行しますか？`)) return;
   closeSheet();
-  const urls=[...tileUrls(geotiffBounds)];
-  const cache=await caches.open(TILE_CACHE);
+  const urls=[...tileUrls(bounds)];
+  const cache=await caches.open(TILE_CACHE_NAME);
   const bar=document.getElementById('cacheBar');
   bar.style.display='block'; bar.style.width='0%';
   let done=0;
-  for(let i=0;i<urls.length;i+=8){
-    await Promise.all(urls.slice(i,i+8).map(u=>fetch(u,{mode:'cors'}).then(r=>{if(r.ok)cache.put(u,r);}).catch(()=>{})));
-    done=Math.min(i+8,urls.length);
+  for(let i=0;i<urls.length;i+=10){
+    await Promise.all(urls.slice(i,i+10).map(u=>fetch(u,{mode:'cors'}).then(r=>{if(r.ok)cache.put(u,r);}).catch(()=>{})));
+    done=Math.min(i+10,urls.length);
     bar.style.width=`${Math.round(done/urls.length*100)}%`;
-    if(done%100===0||done===urls.length) toast(`キャッシュ中 ${done}/${urls.length}`,2000);
+    if(done%200===0||done===urls.length) toast(`キャッシュ中 ${done}/${urls.length}`,1500);
   }
   bar.style.display='none';
-  toast(`キャッシュ完了（${total}枚）オフラインで使用できます`,4000);
+  toast(`オフライン化完了（タイル${total}枚）`,4000);
 };
 document.getElementById('btnClearCache').onclick=async()=>{
   if(!('caches' in window)) return;
-  if(!await showConfirm('タイルキャッシュをすべて削除しますか？')) return;
-  await caches.delete(TILE_CACHE);
-  toast('タイルキャッシュをクリアしました'); closeSheet();
+  if(!await showConfirm('オフラインキャッシュをすべて削除しますか？')) return;
+  const keys = await caches.keys();
+  await Promise.all(keys.map(k => caches.delete(k)));
+  toast('キャッシュをすべて削除しました'); closeSheet();
 };
 
 /* =========================
