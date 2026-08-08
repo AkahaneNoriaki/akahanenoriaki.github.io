@@ -34,22 +34,6 @@
 <div id="toast"></div>
 <div id="cacheBar"></div>
 
-<!-- PWAインストールバナー -->
-<div id="pwaBanner">
-  <span id="pwaBannerMsg">オフライン化完了！ホーム画面に追加すると次回から快適に使えます</span>
-  <button id="pwaBannerBtn">📲 ホーム画面に追加</button>
-  <button id="pwaBannerClose">✕</button>
-</div>
-
-<!-- iOS用ガイドバルーン -->
-<div id="pwaIosGuide">
-  <div id="pwaIosGuideInner">
-    <div class="pwa-ios-step">① 画面下部の <strong>共有ボタン</strong>（↑）をタップ</div>
-    <div class="pwa-ios-step">② 「<strong>ホーム画面に追加</strong>」を選択</div>
-    <button id="pwaIosGuideClose">閉じる</button>
-  </div>
-  <div id="pwaIosArrow"></div>
-</div>
 <div id="confirmOverlay">
   <div id="confirmBox">
     <div id="confirmMsg"></div>
@@ -302,6 +286,9 @@
         <button class="s-btn" id="btnClearCache">
           <span class="ico">🧹</span>Cache削除
         </button>
+        <button class="s-btn hi" id="btnInstallPwa" style="display:none">
+          <span class="ico">📲</span>ホーム画面に追加
+        </button>
       </div>
     </div>
 
@@ -523,6 +510,6 @@
 <!-- 印刷時の縮尺表示（地図左下） -->
 <div id="printMapScale"></div>
 
-<script src="./main.js?v=20260808b"></script>
+<script src="./main.js?v=20260808c"></script>
 </body>
 </html>

@@ -1626,33 +1626,22 @@ window.addEventListener('beforeinstallprompt',e=>{
   _deferredInstall=e;
 });
 
-function _showPwaBanner(){
-  if(_isStandalone()) return; // インストール済み
-  const banner=document.getElementById('pwaBanner');
-  banner.classList.add('visible');
+function _showInstallBtn(){
+  if(_isStandalone()) return;
+  document.getElementById('btnInstallPwa').style.display='';
 }
 
-document.getElementById('pwaBannerBtn').onclick=async()=>{
+document.getElementById('btnInstallPwa').onclick=async()=>{
   if(_deferredInstall){
-    // Android: ネイティブダイアログ
     _deferredInstall.prompt();
     await _deferredInstall.userChoice;
     _deferredInstall=null;
-    document.getElementById('pwaBanner').classList.remove('visible');
+    document.getElementById('btnInstallPwa').style.display='none';
   } else if(_isIOS){
-    // iOS: 手順ガイドを表示
-    document.getElementById('pwaBanner').classList.remove('visible');
-    document.getElementById('pwaIosGuide').classList.add('visible');
+    toast('Safariの共有ボタン（↑）→「ホーム画面に追加」を選択してください',6000);
   } else {
-    toast('ブラウザのメニューから「ホーム画面に追加」を選択してください',4000);
-    document.getElementById('pwaBanner').classList.remove('visible');
+    toast('ブラウザのメニューから「ホーム画面に追加」を選択してください',5000);
   }
-};
-document.getElementById('pwaBannerClose').onclick=()=>{
-  document.getElementById('pwaBanner').classList.remove('visible');
-};
-document.getElementById('pwaIosGuideClose').onclick=()=>{
-  document.getElementById('pwaIosGuide').classList.remove('visible');
 };
 
 // ---- 範囲選択（ドラッグで矩形描画）----
@@ -1755,7 +1744,7 @@ document.getElementById('btnCacheArea').onclick=async()=>{
   }
   bar.style.display='none';
   toast(`オフライン化完了（タイル${total}枚）`,4000);
-  _showPwaBanner();
+  _showInstallBtn();
 };
 
 document.getElementById('btnClearCache').onclick=async()=>{
