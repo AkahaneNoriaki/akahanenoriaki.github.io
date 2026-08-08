@@ -170,12 +170,14 @@ html, body { height:100%; margin:0; }
 
 /* PWAインストールバナー */
 #pwaBanner {
-  display:none; position:fixed; bottom:0; left:0; right:0;
+  display:none; position:fixed;
+  bottom:calc(44px + env(safe-area-inset-bottom, 0px));
+  left:0; right:0;
   background:#0055dd; color:#fff;
-  padding:12px 14px; z-index:19000;
+  padding:12px 14px; z-index:20000;
   align-items:center; gap:10px;
   font-size:13px; font-family:sans-serif;
-  box-shadow:0 -2px 12px rgba(0,0,0,0.2);
+  box-shadow:0 -2px 12px rgba(0,0,0,0.25);
 }
 #pwaBanner.visible { display:flex; }
 #pwaBannerMsg { flex:1; line-height:1.4; }
@@ -191,9 +193,10 @@ html, body { height:100%; margin:0; }
 
 /* iOS用ガイドバルーン */
 #pwaIosGuide {
-  display:none; position:fixed; bottom:70px; left:50%;
-  transform:translateX(-50%); z-index:19000;
-  text-align:center;
+  display:none; position:fixed;
+  bottom:calc(44px + env(safe-area-inset-bottom, 0px));
+  left:50%; transform:translateX(-50%);
+  z-index:20000; text-align:center;
 }
 #pwaIosGuide.visible { display:block; }
 #pwaIosGuideInner {
@@ -215,6 +218,17 @@ html, body { height:100%; margin:0; }
   border-left:12px solid transparent;
   border-right:12px solid transparent;
   border-top:14px solid #222;
+}
+
+/* PC（サイドバー）時はシートが左右になるので底面に配置 */
+@media (min-width:600px) {
+  #pwaBanner {
+    bottom:env(safe-area-inset-bottom, 0px);
+    left:200px;
+  }
+  #pwaIosGuide {
+    bottom:calc(60px + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 /* ─── PC レイアウト (768px 以上) ─────────────── */
