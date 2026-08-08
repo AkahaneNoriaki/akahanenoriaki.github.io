@@ -1616,6 +1616,45 @@ function* tileUrls(b){ for(let z=CACHE_MIN_Z;z<=CACHE_MAX_Z;z++){ const sw=toTil
 
 document.getElementById('btnCacheArea').style.display='';
 
+// ---- PWAインストール ----
+let _deferredInstall=null;
+const _isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+const _isStandalone=()=>navigator.standalone||window.matchMedia('(display-mode:standalone)').matches;
+
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();
+  _deferredInstall=e;
+});
+
+function _showPwaBanner(){
+  if(_isStandalone()) return; // インストール済み
+  const banner=document.getElementById('pwaBanner');
+  banner.classList.add('visible');
+}
+
+document.getElementById('pwaBannerBtn').onclick=async()=>{
+  if(_deferredInstall){
+    // Android: ネイティブダイアログ
+    _deferredInstall.prompt();
+    await _deferredInstall.userChoice;
+    _deferredInstall=null;
+    document.getElementById('pwaBanner').classList.remove('visible');
+  } else if(_isIOS){
+    // iOS: 手順ガイドを表示
+    document.getElementById('pwaBanner').classList.remove('visible');
+    document.getElementById('pwaIosGuide').classList.add('visible');
+  } else {
+    toast('ブラウザのメニューから「ホーム画面に追加」を選択してください',4000);
+    document.getElementById('pwaBanner').classList.remove('visible');
+  }
+};
+document.getElementById('pwaBannerClose').onclick=()=>{
+  document.getElementById('pwaBanner').classList.remove('visible');
+};
+document.getElementById('pwaIosGuideClose').onclick=()=>{
+  document.getElementById('pwaIosGuide').classList.remove('visible');
+};
+
 // ---- 範囲選択（ドラッグで矩形描画）----
 let _cacheSelectMode=false, _cacheSelectCleanup=null;
 let _cacheRect=null, _cacheBounds=null;
@@ -1716,6 +1755,7 @@ document.getElementById('btnCacheArea').onclick=async()=>{
   }
   bar.style.display='none';
   toast(`オフライン化完了（タイル${total}枚）`,4000);
+  _showPwaBanner();
 };
 
 document.getElementById('btnClearCache').onclick=async()=>{

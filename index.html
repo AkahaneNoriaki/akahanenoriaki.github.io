@@ -33,6 +33,23 @@
 <div id="rainAnimBar" style="display:none;position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:8000;background:rgba(0,0,0,0.65);color:#fff;font-size:13px;font-weight:bold;padding:5px 16px;border-radius:20px;pointer-events:none;white-space:nowrap"></div>
 <div id="toast"></div>
 <div id="cacheBar"></div>
+
+<!-- PWAインストールバナー -->
+<div id="pwaBanner">
+  <span id="pwaBannerMsg">オフライン化完了！ホーム画面に追加すると次回から快適に使えます</span>
+  <button id="pwaBannerBtn">📲 ホーム画面に追加</button>
+  <button id="pwaBannerClose">✕</button>
+</div>
+
+<!-- iOS用ガイドバルーン -->
+<div id="pwaIosGuide">
+  <div id="pwaIosGuideInner">
+    <div class="pwa-ios-step">① 画面下部の <strong>共有ボタン</strong>（↑）をタップ</div>
+    <div class="pwa-ios-step">② 「<strong>ホーム画面に追加</strong>」を選択</div>
+    <button id="pwaIosGuideClose">閉じる</button>
+  </div>
+  <div id="pwaIosArrow"></div>
+</div>
 <div id="confirmOverlay">
   <div id="confirmBox">
     <div id="confirmMsg"></div>
@@ -506,6 +523,6 @@
 <!-- 印刷時の縮尺表示（地図左下） -->
 <div id="printMapScale"></div>
 
-<script src="./main.js?v=20260807f"></script>
+<script src="./main.js?v=20260808a"></script>
 </body>
 </html>
