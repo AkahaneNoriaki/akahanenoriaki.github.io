@@ -150,7 +150,7 @@ if(navigator.geolocation){
         _gpsInitDone=true;
         map.setView(ll,16,{animate:false});
       } else if(follow){
-        map.panTo(ll,{animate:false});
+        _panToFollow(ll);
       }
       if(recording) addTrackPoint(pos.coords.latitude,pos.coords.longitude);
     },
@@ -161,8 +161,16 @@ if(navigator.geolocation){
 
 const btnFollow=document.getElementById('btnFollow');
 
-// ドラッグ操作で追従を自動解除
+// プログラム的なpanTo後の誤dragstart検知を防ぐタイムスタンプ
+let _lastProgrammaticPan=0;
+function _panToFollow(ll){
+  _lastProgrammaticPan=Date.now();
+  map.panTo(ll,{animate:false});
+}
+
+// ユーザーのドラッグ操作で追従を自動解除（プログラム移動直後は無視）
 map.on('dragstart',()=>{
+  if(Date.now()-_lastProgrammaticPan<300) return;
   if(follow){
     follow=false;
     btnFollow.innerHTML='<span class="ico">🚶</span>追従 OFF';
@@ -172,7 +180,7 @@ map.on('dragstart',()=>{
 
 btnFollow.onclick=()=>{
   follow=!follow;
-  if(follow&&me) map.panTo(me.getLatLng(),{animate:true});
+  if(follow&&me) _panToFollow(me.getLatLng());
   btnFollow.innerHTML=`<span class="ico">${follow?'🧍':'🚶'}</span>追従 ${follow?'ON':'OFF'}`;
   btnFollow.classList.toggle('on',!follow);
   toast(follow?'自分を中央 ON':'自分を中央 OFF');
@@ -426,7 +434,7 @@ document.getElementById('btnRecord').onclick=()=>{
     follow=true;
     btnFollow.innerHTML='<span class="ico">🧍</span>追従 ON';
     btnFollow.classList.remove('on');
-    if(me) map.panTo(me.getLatLng(),{animate:false});
+    if(me) _panToFollow(me.getLatLng());
   }
   toast(recording?'軌跡記録を開始しました（追従ON）':'軌跡記録を停止しました',2000);
   updateTrackUI(); closeSheet();
