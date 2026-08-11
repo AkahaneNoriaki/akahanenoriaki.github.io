@@ -150,12 +150,12 @@ if(navigator.geolocation){
         _gpsInitDone=true;
         map.setView(ll,16,{animate:false});
       } else if(follow){
-        map.panTo(ll,{animate:true});
+        map.panTo(ll,{animate:false});
       }
       if(recording) addTrackPoint(pos.coords.latitude,pos.coords.longitude);
     },
     err=>toast('現在地エラー: '+err.message,2500),
-    {enableHighAccuracy:true,maximumAge:1000,timeout:15000}
+    {enableHighAccuracy:true,maximumAge:0,timeout:15000}
   );
 } else { toast('位置情報に対応していません'); }
 
@@ -426,7 +426,7 @@ document.getElementById('btnRecord').onclick=()=>{
     follow=true;
     btnFollow.innerHTML='<span class="ico">🧍</span>追従 ON';
     btnFollow.classList.remove('on');
-    if(me) map.panTo(me.getLatLng(),{animate:true});
+    if(me) map.panTo(me.getLatLng(),{animate:false});
   }
   toast(recording?'軌跡記録を開始しました（追従ON）':'軌跡記録を停止しました',2000);
   updateTrackUI(); closeSheet();
