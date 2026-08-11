@@ -422,8 +422,13 @@ document.getElementById('btnRecord').onclick=()=>{
     const line=L.polyline([],{color:'#ff6600',weight:4,opacity:0.85}).addTo(map);
     trackLines.push(line);
     if(me) addTrackPoint(me.getLatLng().lat,me.getLatLng().lng);
+    // 記録開始時に自動で追従ON
+    follow=true;
+    btnFollow.innerHTML='<span class="ico">🧍</span>追従 ON';
+    btnFollow.classList.remove('on');
+    if(me) map.panTo(me.getLatLng(),{animate:true});
   }
-  toast(recording?'軌跡記録を開始しました':'軌跡記録を停止しました',2000);
+  toast(recording?'軌跡記録を開始しました（追従ON）':'軌跡記録を停止しました',2000);
   updateTrackUI(); closeSheet();
 };
 document.getElementById('btnExportTrack').onclick=()=>{
