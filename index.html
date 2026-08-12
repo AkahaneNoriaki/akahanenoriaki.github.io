@@ -96,29 +96,19 @@
 <div id="filterModal">
   <div id="filterModalBox">
     <div id="filterModalTitle">🔍 施業班フィルタ</div>
-    <div class="filter-row">
-      <select class="filter-field" data-idx="0"><option value="">-- 属性 --</option></select>
-      <select class="filter-op" data-idx="0">
-        <option value="=">=</option><option value="≠">≠</option>
-        <option value="含む">含む</option><option value="≧">≧</option><option value="≦">≦</option>
-      </select>
-      <input class="filter-val" data-idx="0" type="text" placeholder="値">
-    </div>
-    <div class="filter-row">
-      <select class="filter-field" data-idx="1"><option value="">-- 属性 --</option></select>
-      <select class="filter-op" data-idx="1">
-        <option value="=">=</option><option value="≠">≠</option>
-        <option value="含む">含む</option><option value="≧">≧</option><option value="≦">≦</option>
-      </select>
-      <input class="filter-val" data-idx="1" type="text" placeholder="値">
-    </div>
-    <div class="filter-row">
-      <select class="filter-field" data-idx="2"><option value="">-- 属性 --</option></select>
-      <select class="filter-op" data-idx="2">
-        <option value="=">=</option><option value="≠">≠</option>
-        <option value="含む">含む</option><option value="≧">≧</option><option value="≦">≦</option>
-      </select>
-      <input class="filter-val" data-idx="2" type="text" placeholder="値">
+    <div id="filterRows">
+      <div class="filter-row" data-idx="0">
+        <select class="filter-field"><option value="">-- 属性を選択 --</option></select>
+        <div class="filter-values"></div>
+      </div>
+      <div class="filter-row" data-idx="1">
+        <select class="filter-field"><option value="">-- 属性を選択 --</option></select>
+        <div class="filter-values"></div>
+      </div>
+      <div class="filter-row" data-idx="2">
+        <select class="filter-field"><option value="">-- 属性を選択 --</option></select>
+        <div class="filter-values"></div>
+      </div>
     </div>
     <div id="filterStatus"></div>
     <div class="xlsxBtns">
@@ -550,6 +540,6 @@
 <!-- 印刷時の縮尺表示（地図左下） -->
 <div id="printMapScale"></div>
 
-<script src="./main.js?v=20260812f"></script>
+<script src="./main.js?v=20260812g"></script>
 </body>
 </html>

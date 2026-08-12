@@ -543,7 +543,7 @@ _muniSel.onchange=()=>{
   [
     [_rinpanOn,  ()=>{ map.removeLayer(_rinpanLayer);   _rinpanLayer=null;   _rinpanOn=false;   _rinpanBtn.classList.remove('active'); }],
     [_shohanOn,  ()=>{ map.removeLayer(_shohanLayer);   _shohanLayer=null;   _shohanOn=false;   _shohanBtn.classList.remove('active'); }],
-    [_segyohanOn,()=>{ map.removeLayer(_segyohanLayer); _segyohanLayer=null; _segyohanOn=false; _segyohanBtn.classList.remove('active'); _btnToggleFilter.classList.remove('hi'); document.getElementById('segyohanFilterSection').style.display='none'; }],
+    [_segyohanOn,()=>{ map.removeLayer(_segyohanLayer); _segyohanLayer=null; _segyohanOn=false; _segyohanBtn.classList.remove('active'); _btnToggleFilter.classList.remove('hi'); }],
   ].forEach(([on,fn])=>{ if(on) fn(); });
   // Excel連携もリセット
   if(_xlsxJoinMap){
@@ -761,6 +761,7 @@ function _buildSegyohanLayer(){
       symbolizer: new protomapsL.PolygonSymbolizer({fill:'rgba(255,220,0,0.55)',stroke:'#f9a825',width:1.2})
     });
   }
+  paintRules.push({dataLayer:'segyohan',symbolizer:_valueCollector});
   return protomapsL.leafletLayer({
     url: _muniUrl('segyohan'),
     pane:'segyohanPane',
@@ -803,7 +804,6 @@ _segyohanBtn.onclick=()=>{
     _segyohanOn=false;
     _segyohanBtn.classList.remove('active');
     _btnToggleFilter.classList.remove('hi');
-    document.getElementById('segyohanFilterSection').style.display='none';
     toast('施業班レイヤを非表示');
   } else {
     if(!_segyohanLayer){ _segyohanLayer=_buildSegyohanLayer(); }
@@ -835,28 +835,74 @@ const _FILTER_FIELDS=[
   '林齢','面積','樹高','材積','標高','傾斜',
 ];
 
-let _filterRules=[]; // [{field,op,value},...]
+const _NUMERIC_FIELDS=new Set(['林齢','面積','混交率','混交面積','疎密度','地位','樹高','材積','HA材積','成長量','標高','傾斜','齢級']);
 
 // フィールドのselectを初期化
-document.querySelectorAll('.filter-field').forEach(sel=>{
+document.querySelectorAll('#filterRows .filter-field').forEach(sel=>{
   _FILTER_FIELDS.forEach(f=>{
     const o=document.createElement('option'); o.value=f; o.textContent=f; sel.appendChild(o);
   });
+  sel.addEventListener('change',()=>_populateFilterValues(sel.closest('.filter-row')));
 });
+
+// PMTilesレンダリング時に値を収集するコレクタ
+const _collectedValues=new Map();
+const _valueCollector={
+  draw(ctx,geom,z,feat){
+    _FILTER_FIELDS.forEach(f=>{
+      const v=feat.props[f];
+      if(v==null||String(v).trim()==='') return;
+      if(!_collectedValues.has(f)) _collectedValues.set(f,new Set());
+      _collectedValues.get(f).add(String(v).trim());
+    });
+  }
+};
+
+function _populateFilterValues(row){
+  const field=row.querySelector('.filter-field').value;
+  const container=row.querySelector('.filter-values');
+  container.innerHTML='';
+  if(!field) return;
+  if(_NUMERIC_FIELDS.has(field)){
+    const nums=[...(_collectedValues.get(field)||[])].map(Number).filter(v=>!isNaN(v));
+    const hint=nums.length?`データ範囲: ${Math.min(...nums)}〜${Math.max(...nums)}`:'';
+    container.innerHTML=`<div class="filter-range">
+      <input type="number" class="filter-min" placeholder="最小">
+      <span>〜</span>
+      <input type="number" class="filter-max" placeholder="最大">
+    </div><div class="filter-range-hint">${hint}</div>`;
+  } else {
+    const vals=[...(_collectedValues.get(field)||[])].sort();
+    if(!vals.length){
+      container.innerHTML='<div class="filter-no-vals">（地図を表示後に再度開くと選択肢が出ます）</div>';
+      return;
+    }
+    const list=document.createElement('div');
+    list.className='filter-checkboxes';
+    vals.forEach(v=>{
+      const lbl=document.createElement('label');
+      lbl.className='filter-chk-item';
+      lbl.innerHTML=`<input type="checkbox" value="${v}"><span>${v}</span>`;
+      list.appendChild(lbl);
+    });
+    container.appendChild(list);
+  }
+}
+
+let _filterRules=[]; // [{field,type,values:[]} | {field,type,min,max}]
 
 function _evalFilter(props){
   return _filterRules.every(r=>{
-    if(!r.field||r.value==='') return true;
+    if(!r.field) return true;
     const val=String(props[r.field]??'').trim();
-    const cmp=r.value.trim();
-    switch(r.op){
-      case '=':   return val===cmp;
-      case '≠':   return val!==cmp;
-      case '含む': return val.includes(cmp);
-      case '≧':   return Number(val)>=Number(cmp);
-      case '≦':   return Number(val)<=Number(cmp);
-      default:    return true;
+    if(r.type==='categorical'){
+      return r.values.length===0||r.values.includes(val);
     }
+    const num=Number(val);
+    if(isNaN(num)) return false;
+    if(r.min!==''&&!isNaN(r.min)&&num<r.min) return false;
+    if(r.max!==''&&!isNaN(r.max)&&num>r.max) return false;
+    return true;
   });
 }
 
@@ -871,21 +917,30 @@ document.getElementById('btnFilterApply').onclick=()=>{
   _filterRules=[];
   document.querySelectorAll('#filterModal .filter-row').forEach(row=>{
     const field=row.querySelector('.filter-field').value;
-    const op   =row.querySelector('.filter-op').value;
-    const value=row.querySelector('.filter-val').value;
-    if(field&&value!=='') _filterRules.push({field,op,value});
+    if(!field) return;
+    if(_NUMERIC_FIELDS.has(field)){
+      const minEl=row.querySelector('.filter-min');
+      const maxEl=row.querySelector('.filter-max');
+      const min=minEl?minEl.value:'';
+      const max=maxEl?maxEl.value:'';
+      if(min!==''||max!=='') _filterRules.push({field,type:'numeric',min:min!==''?Number(min):'',max:max!==''?Number(max):''});
+    } else {
+      const checked=[...row.querySelectorAll('.filter-checkboxes input:checked')].map(c=>c.value);
+      if(checked.length) _filterRules.push({field,type:'categorical',values:checked});
+    }
   });
   _rebuildSegyohanLayer();
   const n=_filterRules.length;
-  document.getElementById('filterStatus').textContent=
-    n?`${n}件の条件を適用中`:'条件なし（全件表示）';
+  document.getElementById('filterStatus').textContent=n?`${n}件の条件を適用中`:'条件なし（全件表示）';
   if(n) _closeFilterModal();
 };
 
 document.getElementById('btnFilterClear').onclick=()=>{
   _filterRules=[];
-  document.querySelectorAll('#filterModal .filter-field').forEach(s=>s.value='');
-  document.querySelectorAll('#filterModal .filter-val').forEach(i=>i.value='');
+  document.querySelectorAll('#filterModal .filter-row').forEach(row=>{
+    row.querySelector('.filter-field').value='';
+    row.querySelector('.filter-values').innerHTML='';
+  });
   _rebuildSegyohanLayer();
   document.getElementById('filterStatus').textContent='';
 };
