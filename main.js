@@ -795,11 +795,14 @@ function _buildSegyohanLayer(){
   });
 }
 
+const _btnToggleFilter=document.getElementById('btnToggleFilter');
+
 _segyohanBtn.onclick=()=>{
   if(_segyohanOn){
     if(_segyohanLayer){ map.removeLayer(_segyohanLayer); }
     _segyohanOn=false;
     _segyohanBtn.classList.remove('active');
+    _btnToggleFilter.style.display='none';
     document.getElementById('segyohanFilterSection').style.display='none';
     toast('施業班レイヤを非表示');
   } else {
@@ -807,10 +810,17 @@ _segyohanBtn.onclick=()=>{
     _segyohanLayer.addTo(map);
     _segyohanOn=true;
     _segyohanBtn.classList.add('active');
-    document.getElementById('segyohanFilterSection').style.display='';
+    _btnToggleFilter.style.display='';
     toast('施業班レイヤを表示');
   }
   closeSheet();
+};
+
+_btnToggleFilter.onclick=()=>{
+  const sec=document.getElementById('segyohanFilterSection');
+  const open=sec.style.display==='none'||sec.style.display==='';
+  sec.style.display=open?'block':'none';
+  _btnToggleFilter.classList.toggle('on',open);
 };
 
 /* --- 施業班フィルタ --- */
