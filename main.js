@@ -816,13 +816,15 @@ _segyohanBtn.onclick=()=>{
   closeSheet();
 };
 
+const _filterModal=document.getElementById('filterModal');
+function _openFilterModal(){ _filterModal.style.display='flex'; }
+function _closeFilterModal(){ _filterModal.style.display='none'; }
+
 _btnToggleFilter.onclick=()=>{
   if(!_segyohanOn){ toast('先に施業班を表示してください'); return; }
-  document.getElementById('filterModal').classList.add('show');
+  _openFilterModal();
 };
-document.getElementById('btnFilterClose').onclick=()=>{
-  document.getElementById('filterModal').classList.remove('show');
-};
+document.getElementById('btnFilterClose').onclick=()=>_closeFilterModal();
 
 /* --- 施業班フィルタ --- */
 const _FILTER_FIELDS=[
@@ -877,7 +879,7 @@ document.getElementById('btnFilterApply').onclick=()=>{
   const n=_filterRules.length;
   document.getElementById('filterStatus').textContent=
     n?`${n}件の条件を適用中`:'条件なし（全件表示）';
-  if(n) document.getElementById('filterModal').classList.remove('show');
+  if(n) _closeFilterModal();
 };
 
 document.getElementById('btnFilterClear').onclick=()=>{
