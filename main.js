@@ -543,7 +543,7 @@ _muniSel.onchange=()=>{
   [
     [_rinpanOn,  ()=>{ map.removeLayer(_rinpanLayer);   _rinpanLayer=null;   _rinpanOn=false;   _rinpanBtn.classList.remove('active'); }],
     [_shohanOn,  ()=>{ map.removeLayer(_shohanLayer);   _shohanLayer=null;   _shohanOn=false;   _shohanBtn.classList.remove('active'); }],
-    [_segyohanOn,()=>{ map.removeLayer(_segyohanLayer); _segyohanLayer=null; _segyohanOn=false; _segyohanBtn.classList.remove('active'); _btnToggleFilter.style.display='none'; document.getElementById('segyohanFilterSection').style.display='none'; }],
+    [_segyohanOn,()=>{ map.removeLayer(_segyohanLayer); _segyohanLayer=null; _segyohanOn=false; _segyohanBtn.classList.remove('active'); _btnToggleFilter.classList.remove('hi'); document.getElementById('segyohanFilterSection').style.display='none'; }],
   ].forEach(([on,fn])=>{ if(on) fn(); });
   // Excel連携もリセット
   if(_xlsxJoinMap){
@@ -802,7 +802,7 @@ _segyohanBtn.onclick=()=>{
     if(_segyohanLayer){ map.removeLayer(_segyohanLayer); }
     _segyohanOn=false;
     _segyohanBtn.classList.remove('active');
-    _btnToggleFilter.style.display='none';
+    _btnToggleFilter.classList.remove('hi');
     document.getElementById('segyohanFilterSection').style.display='none';
     toast('施業班レイヤを非表示');
   } else {
@@ -810,15 +810,16 @@ _segyohanBtn.onclick=()=>{
     _segyohanLayer.addTo(map);
     _segyohanOn=true;
     _segyohanBtn.classList.add('active');
-    _btnToggleFilter.style.display='block';
+    _btnToggleFilter.classList.add('hi');
     toast('施業班レイヤを表示');
   }
   closeSheet();
 };
 
 _btnToggleFilter.onclick=()=>{
+  if(!_segyohanOn){ toast('先に施業班を表示してください'); return; }
   const sec=document.getElementById('segyohanFilterSection');
-  const open=sec.style.display==='none'||sec.style.display==='';
+  const open=sec.style.display!=='block';
   sec.style.display=open?'block':'none';
   _btnToggleFilter.classList.toggle('on',open);
 };
