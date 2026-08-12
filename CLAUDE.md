@@ -3,6 +3,23 @@
 ## ブランチ
 `claude/enhance-map-features-XGw7H`
 
+## デプロイルール（必須）
+
+### ファイルを変更したときのバージョン更新ルール
+
+| 変更ファイル | 更新が必要なもの |
+|---|---|
+| `main.js` | `index.html` の `main.js?v=YYYYMMDD{letter}` を上げる |
+| `index.html` / `style.css` | `sw.js` の `CACHE_VER` を上げる |
+| `main.js` + `index.html` / `style.css` | 両方更新 |
+
+**`CACHE_VER` の書式：** `map-YYYYMMDD{letter}`（例: `map-20260812b`）
+
+> SW キャッシュが古い `index.html` / `style.css` を返し続けるため、
+> これらを変更した場合は **必ず** `CACHE_VER` を更新してコミットすること。
+
+---
+
 ## 技術構成
 - **protomaps-leaflet v4.0.1** (CDN: unpkg.com)
 - **PMTiles** フォーマットでベクタタイル配信
