@@ -66,6 +66,28 @@ html, body { height:100%; margin:0; }
 .s-slider-row { margin-top:10px; display:none; }
 .s-slider-row input { width:100%; }
 
+/* 施業班フィルタ */
+.filter-row {
+  display:grid; grid-template-columns:2fr 1fr 2fr; gap:4px; margin-bottom:6px;
+}
+.filter-field, .filter-op, .filter-val {
+  font-size:12px; padding:5px 4px; border:1px solid #ddd;
+  border-radius:8px; background:#fafafa; width:100%; box-sizing:border-box;
+}
+.filter-val { min-width:0; }
+.filter-btns { display:flex; gap:8px; margin-top:8px; }
+.filter-apply {
+  flex:1; padding:8px; background:#0055dd; color:#fff;
+  border:none; border-radius:10px; font-size:13px; cursor:pointer;
+}
+.filter-clear {
+  flex:1; padding:8px; background:#f0f0f0; color:#333;
+  border:none; border-radius:10px; font-size:13px; cursor:pointer;
+}
+#filterStatus {
+  margin-top:6px; font-size:11px; color:#0055dd; min-height:16px;
+}
+
 /* ─── CRS コントロール ─────────────────────────── */
 .leaflet-control-crs {
   background: rgba(255,255,255,0.88);

@@ -730,16 +730,30 @@ let _segyohanOn=false;
 const _segyohanBtn=document.getElementById('btnToggleSegyohan');
 
 function _buildSegyohanLayer(){
+  const hasFilter=_filterRules.length>0;
   const paintRules=[
     {
+      // ベース: フィルタ中は非一致をグレーアウト、フィルタなしは通常表示
       dataLayer:'segyohan',
       symbolizer: new protomapsL.PolygonSymbolizer({
         fill: 'rgba(0,0,0,0)',
-        stroke: '#e65100',
-        width: 0.6
+        stroke: hasFilter ? 'rgba(180,180,180,0.35)' : '#e65100',
+        width: hasFilter ? 0.4 : 0.6
       })
     }
   ];
+  if(hasFilter){
+    // 一致する施業班をハイライト
+    paintRules.unshift({
+      dataLayer:'segyohan',
+      filter:(zoom,feat)=>_evalFilter(feat.props),
+      symbolizer: new protomapsL.PolygonSymbolizer({
+        fill:'rgba(0,100,255,0.18)',
+        stroke:'#0044cc',
+        width:1.4
+      })
+    });
+  }
   if(_xlsxJoinMap&&_xlsxTargetLayer==='segyohan'){
     paintRules.unshift({
       dataLayer:'segyohan',
@@ -786,15 +800,80 @@ _segyohanBtn.onclick=()=>{
     if(_segyohanLayer){ map.removeLayer(_segyohanLayer); }
     _segyohanOn=false;
     _segyohanBtn.classList.remove('active');
+    document.getElementById('segyohanFilterSection').style.display='none';
     toast('施業班レイヤを非表示');
   } else {
     if(!_segyohanLayer){ _segyohanLayer=_buildSegyohanLayer(); }
     _segyohanLayer.addTo(map);
     _segyohanOn=true;
     _segyohanBtn.classList.add('active');
+    document.getElementById('segyohanFilterSection').style.display='';
     toast('施業班レイヤを表示');
   }
   closeSheet();
+};
+
+/* --- 施業班フィルタ --- */
+const _FILTER_FIELDS=[
+  '林種','育成区分','施業区分','層区分','樹種',
+  '推進方向','地利級','疎密度','地位','齢級',
+  '木材生産機能','施業種','効率的施業区域',
+  '保安林1','特定施業森林','市町村名','大字名',
+  '林齢','面積','樹高','材積','標高','傾斜',
+];
+
+let _filterRules=[]; // [{field,op,value},...]
+
+// フィールドのselectを初期化
+document.querySelectorAll('.filter-field').forEach(sel=>{
+  _FILTER_FIELDS.forEach(f=>{
+    const o=document.createElement('option'); o.value=f; o.textContent=f; sel.appendChild(o);
+  });
+});
+
+function _evalFilter(props){
+  return _filterRules.every(r=>{
+    if(!r.field||r.value==='') return true;
+    const val=String(props[r.field]??'').trim();
+    const cmp=r.value.trim();
+    switch(r.op){
+      case '=':   return val===cmp;
+      case '≠':   return val!==cmp;
+      case '含む': return val.includes(cmp);
+      case '≧':   return Number(val)>=Number(cmp);
+      case '≦':   return Number(val)<=Number(cmp);
+      default:    return true;
+    }
+  });
+}
+
+function _rebuildSegyohanLayer(){
+  if(!_segyohanOn) return;
+  if(_segyohanLayer){ map.removeLayer(_segyohanLayer); }
+  _segyohanLayer=_buildSegyohanLayer();
+  _segyohanLayer.addTo(map);
+}
+
+document.getElementById('btnFilterApply').onclick=()=>{
+  _filterRules=[];
+  document.querySelectorAll('.filter-row').forEach(row=>{
+    const field=row.querySelector('.filter-field').value;
+    const op   =row.querySelector('.filter-op').value;
+    const value=row.querySelector('.filter-val').value;
+    if(field&&value!=='') _filterRules.push({field,op,value});
+  });
+  _rebuildSegyohanLayer();
+  const n=_filterRules.length;
+  document.getElementById('filterStatus').textContent=
+    n?`${n}件の条件を適用中`:'条件なし（全件表示）';
+};
+
+document.getElementById('btnFilterClear').onclick=()=>{
+  _filterRules=[];
+  document.querySelectorAll('.filter-field').forEach(s=>s.value='');
+  document.querySelectorAll('.filter-val').forEach(i=>i.value='');
+  _rebuildSegyohanLayer();
+  document.getElementById('filterStatus').textContent='';
 };
 
 /* --- Excel連携 --- */
