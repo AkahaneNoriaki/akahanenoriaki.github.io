@@ -818,10 +818,10 @@ _segyohanBtn.onclick=()=>{
 
 _btnToggleFilter.onclick=()=>{
   if(!_segyohanOn){ toast('先に施業班を表示してください'); return; }
-  const sec=document.getElementById('segyohanFilterSection');
-  const open=sec.style.display!=='block';
-  sec.style.display=open?'block':'none';
-  _btnToggleFilter.classList.toggle('on',open);
+  document.getElementById('filterModal').classList.add('show');
+};
+document.getElementById('btnFilterClose').onclick=()=>{
+  document.getElementById('filterModal').classList.remove('show');
 };
 
 /* --- 施業班フィルタ --- */
@@ -867,7 +867,7 @@ function _rebuildSegyohanLayer(){
 
 document.getElementById('btnFilterApply').onclick=()=>{
   _filterRules=[];
-  document.querySelectorAll('.filter-row').forEach(row=>{
+  document.querySelectorAll('#filterModal .filter-row').forEach(row=>{
     const field=row.querySelector('.filter-field').value;
     const op   =row.querySelector('.filter-op').value;
     const value=row.querySelector('.filter-val').value;
@@ -877,12 +877,13 @@ document.getElementById('btnFilterApply').onclick=()=>{
   const n=_filterRules.length;
   document.getElementById('filterStatus').textContent=
     n?`${n}件の条件を適用中`:'条件なし（全件表示）';
+  if(n) document.getElementById('filterModal').classList.remove('show');
 };
 
 document.getElementById('btnFilterClear').onclick=()=>{
   _filterRules=[];
-  document.querySelectorAll('.filter-field').forEach(s=>s.value='');
-  document.querySelectorAll('.filter-val').forEach(i=>i.value='');
+  document.querySelectorAll('#filterModal .filter-field').forEach(s=>s.value='');
+  document.querySelectorAll('#filterModal .filter-val').forEach(i=>i.value='');
   _rebuildSegyohanLayer();
   document.getElementById('filterStatus').textContent='';
 };

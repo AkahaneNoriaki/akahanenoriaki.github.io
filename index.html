@@ -92,6 +92,43 @@
     </div>
   </div>
 </div>
+<!-- 施業班フィルタモーダル -->
+<div id="filterModal">
+  <div id="filterModalBox">
+    <div id="filterModalTitle">🔍 施業班フィルタ</div>
+    <div class="filter-row">
+      <select class="filter-field" data-idx="0"><option value="">-- 属性 --</option></select>
+      <select class="filter-op" data-idx="0">
+        <option value="=">=</option><option value="≠">≠</option>
+        <option value="含む">含む</option><option value="≧">≧</option><option value="≦">≦</option>
+      </select>
+      <input class="filter-val" data-idx="0" type="text" placeholder="値">
+    </div>
+    <div class="filter-row">
+      <select class="filter-field" data-idx="1"><option value="">-- 属性 --</option></select>
+      <select class="filter-op" data-idx="1">
+        <option value="=">=</option><option value="≠">≠</option>
+        <option value="含む">含む</option><option value="≧">≧</option><option value="≦">≦</option>
+      </select>
+      <input class="filter-val" data-idx="1" type="text" placeholder="値">
+    </div>
+    <div class="filter-row">
+      <select class="filter-field" data-idx="2"><option value="">-- 属性 --</option></select>
+      <select class="filter-op" data-idx="2">
+        <option value="=">=</option><option value="≠">≠</option>
+        <option value="含む">含む</option><option value="≧">≧</option><option value="≦">≦</option>
+      </select>
+      <input class="filter-val" data-idx="2" type="text" placeholder="値">
+    </div>
+    <div id="filterStatus"></div>
+    <div class="xlsxBtns">
+      <button id="btnFilterClear">クリア</button>
+      <button id="btnFilterApply" class="xlsxOk">適用</button>
+      <button id="btnFilterClose">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <!-- エクスポートモーダル -->
 <div id="exportModal">
   <div id="exportModalBox">
@@ -249,51 +286,6 @@
           <span class="ico">🔍</span>フィルタ
         </button>
       </div>
-    </div>
-
-    <!-- 施業班フィルタ -->
-    <div class="s-section" id="segyohanFilterSection" style="display:none">
-      <div class="s-title">施業班フィルタ</div>
-      <div id="filterRows">
-        <div class="filter-row">
-          <select class="filter-field" data-idx="0"><option value="">-- 属性 --</option></select>
-          <select class="filter-op" data-idx="0">
-            <option value="=">=</option>
-            <option value="≠">≠</option>
-            <option value="含む">含む</option>
-            <option value="≧">≧</option>
-            <option value="≦">≦</option>
-          </select>
-          <input class="filter-val" data-idx="0" type="text" placeholder="値">
-        </div>
-        <div class="filter-row">
-          <select class="filter-field" data-idx="1"><option value="">-- 属性 --</option></select>
-          <select class="filter-op" data-idx="1">
-            <option value="=">=</option>
-            <option value="≠">≠</option>
-            <option value="含む">含む</option>
-            <option value="≧">≧</option>
-            <option value="≦">≦</option>
-          </select>
-          <input class="filter-val" data-idx="1" type="text" placeholder="値">
-        </div>
-        <div class="filter-row">
-          <select class="filter-field" data-idx="2"><option value="">-- 属性 --</option></select>
-          <select class="filter-op" data-idx="2">
-            <option value="=">=</option>
-            <option value="≠">≠</option>
-            <option value="含む">含む</option>
-            <option value="≧">≧</option>
-            <option value="≦">≦</option>
-          </select>
-          <input class="filter-val" data-idx="2" type="text" placeholder="値">
-        </div>
-      </div>
-      <div class="filter-btns">
-        <button id="btnFilterApply" class="filter-apply">適用</button>
-        <button id="btnFilterClear" class="filter-clear">クリア</button>
-      </div>
-      <div id="filterStatus"></div>
     </div>
 
     <!-- 計測 -->
@@ -558,6 +550,6 @@
 <!-- 印刷時の縮尺表示（地図左下） -->
 <div id="printMapScale"></div>
 
-<script src="./main.js?v=20260812d"></script>
+<script src="./main.js?v=20260812e"></script>
 </body>
 </html>
