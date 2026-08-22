@@ -58,6 +58,12 @@
 <input id="geojsonInput" type="file" accept=".geojson,.json" style="display:none">
 <input id="xlsxInput"   type="file" accept=".xlsx,.xls,.csv" style="display:none">
 
+<!-- 施業班 複数選択パネル -->
+<div id="segyohanSelectPanel" style="display:none">
+  <span id="segyohanSelectInfo"></span>
+  <button id="btnSegyohanSelectClear">✕ クリア</button>
+</div>
+
 <!-- Excel連携 統計カード -->
 <div id="xlsxStatCard">
   <span id="xlsxStatText"></span>
@@ -540,6 +546,6 @@
 <!-- 印刷時の縮尺表示（地図左下） -->
 <div id="printMapScale"></div>
 
-<script src="./main.js?v=20260812g"></script>
+<script src="./main.js?v=20260812h"></script>
 </body>
 </html>

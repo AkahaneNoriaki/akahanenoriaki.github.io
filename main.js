@@ -729,8 +729,35 @@ let _segyohanLayer=null;
 let _segyohanOn=false;
 const _segyohanBtn=document.getElementById('btnToggleSegyohan');
 
+/* --- 施業班 複数選択 --- */
+const _selectedSegyohan=new Map(); // key=SEGYOHANID|KEY_02, value=props
+
+function _segyohanKey(props){
+  return String(props.SEGYOHANID||props.KEY_02||`${props.RIN}-${props.SHO}-${props.SEGYO}-${props.EDA}`);
+}
+
+const _selectPanel=document.getElementById('segyohanSelectPanel');
+const _selectInfo=document.getElementById('segyohanSelectInfo');
+
+function _updateSelectPanel(){
+  const n=_selectedSegyohan.size;
+  if(!n){ _selectPanel.style.display='none'; return; }
+  const totalArea=[..._selectedSegyohan.values()]
+    .map(p=>Number(p['面積']||0)).reduce((a,b)=>a+b,0);
+  const areaStr=totalArea>0?` / 面積計 ${totalArea.toFixed(2)} ha`:'';
+  _selectInfo.textContent=`${n}件選択中${areaStr}`;
+  _selectPanel.style.display='flex';
+}
+
+document.getElementById('btnSegyohanSelectClear').onclick=()=>{
+  _selectedSegyohan.clear();
+  _updateSelectPanel();
+  if(_segyohanOn) _rebuildSegyohanLayer();
+};
+
 function _buildSegyohanLayer(){
   const hasFilter=_filterRules.length>0;
+  const hasSelect=_selectedSegyohan.size>0;
   const paintRules=[
     {
       // ベース: フィルタ中は非一致をグレーアウト、フィルタなしは通常表示
@@ -742,6 +769,13 @@ function _buildSegyohanLayer(){
       })
     }
   ];
+  if(hasSelect){
+    paintRules.unshift({
+      dataLayer:'segyohan',
+      filter:(zoom,feat)=>_selectedSegyohan.has(_segyohanKey(feat.props)),
+      symbolizer: new protomapsL.PolygonSymbolizer({fill:'rgba(0,200,80,0.45)',stroke:'#00aa44',width:2})
+    });
+  }
   if(hasFilter){
     // 一致する施業班をハイライト
     paintRules.unshift({
@@ -1519,10 +1553,21 @@ map.on('click',(e)=>{
   }
   if(!props) return;
 
-  let title='';
+  // 施業班: トグル選択
   if(layerLabel==='施業班'){
-    title=`林班${props.RIN||'-'} ${props.SHO||''}-${props.SEGYO||''}${_edaToKana(props.EDA)}`;
-  } else if(layerLabel==='小班'){
+    const key=_segyohanKey(props);
+    if(_selectedSegyohan.has(key)){
+      _selectedSegyohan.delete(key);
+    } else {
+      _selectedSegyohan.set(key,props);
+    }
+    _updateSelectPanel();
+    _rebuildSegyohanLayer();
+    return;
+  }
+
+  let title='';
+  if(layerLabel==='小班'){
     title=`林班${props.RIN||'-'} ${props.SHO||'-'}`;
   } else {
     title=`林班 ${props.RIN||'-'}`;

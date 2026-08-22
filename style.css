@@ -616,6 +616,21 @@ html, body { height:100%; margin:0; }
 #bbsFormStatus { font-size:11px; color:#888; text-align:center; margin-top:6px; min-height:16px; }
 #bbsLoadingMsg, #bbsEmptyMsg { text-align:center; color:#999; font-size:12px; padding:24px 0; }
 
+/* ─── 施業班 複数選択パネル ─────────────────── */
+#segyohanSelectPanel {
+  position:fixed; bottom:56px; left:50%; transform:translateX(-50%);
+  z-index:8100; background:rgba(0,100,40,0.92); color:#fff;
+  border-radius:20px; padding:6px 8px 6px 14px;
+  font-size:12px; font-family:sans-serif; font-weight:bold;
+  box-shadow:0 2px 10px rgba(0,0,0,0.2);
+  display:none; align-items:center; gap:8px; white-space:nowrap;
+  max-width:calc(100vw - 32px);
+}
+#btnSegyohanSelectClear {
+  background:rgba(255,255,255,0.2); border:none; color:#fff;
+  font-size:11px; cursor:pointer; padding:3px 8px; border-radius:10px;
+}
+
 /* ─── Excel連携 統計カード ───────────────────── */
 #xlsxStatCard {
   display:none; position:fixed; bottom:56px; left:50%; transform:translateX(-50%);
