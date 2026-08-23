@@ -1553,21 +1553,10 @@ map.on('click',(e)=>{
   }
   if(!props) return;
 
-  // 施業班: トグル選択
-  if(layerLabel==='施業班'){
-    const key=_segyohanKey(props);
-    if(_selectedSegyohan.has(key)){
-      _selectedSegyohan.delete(key);
-    } else {
-      _selectedSegyohan.set(key,props);
-    }
-    _updateSelectPanel();
-    _rebuildSegyohanLayer();
-    return;
-  }
-
   let title='';
-  if(layerLabel==='小班'){
+  if(layerLabel==='施業班'){
+    title=`林班${props.RIN||'-'} ${props.SHO||''}-${props.SEGYO||''}${_edaToKana(props.EDA)}`;
+  } else if(layerLabel==='小班'){
     title=`林班${props.RIN||'-'} ${props.SHO||'-'}`;
   } else {
     title=`林班 ${props.RIN||'-'}`;
@@ -1611,10 +1600,33 @@ map.on('click',(e)=>{
       }
     }
   }
+  // 施業班: 選択ボタンを追加
+  if(layerLabel==='施業班'){
+    const key=_segyohanKey(props);
+    const isSelected=_selectedSegyohan.has(key);
+    const btnLabel=isSelected?'✓ 選択解除':'＋ 選択に追加';
+    const btnStyle=isSelected
+      ?'background:#00aa44;color:#fff;'
+      :'background:#eee;color:#333;';
+    html+=`<hr><button style="width:100%;padding:6px;border:none;border-radius:8px;font-size:12px;cursor:pointer;${btnStyle}"
+      onclick="window._segyohanToggleFromPopup(${JSON.stringify(key)},${JSON.stringify(props)})"
+      >${btnLabel}</button>`;
+  }
   html+='</div>';
 
   L.popup({maxWidth:300}).setLatLng(e.latlng).setContent(html).openOn(map);
 });
+
+window._segyohanToggleFromPopup=function(key, props){
+  if(_selectedSegyohan.has(key)){
+    _selectedSegyohan.delete(key);
+  } else {
+    _selectedSegyohan.set(key, props);
+  }
+  _updateSelectPanel();
+  _rebuildSegyohanLayer();
+  map.closePopup();
+};
 
 /* --- GeoJSON --- */
 const geojsonInput=document.getElementById('geojsonInput');
