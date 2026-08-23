@@ -1600,16 +1600,18 @@ map.on('click',(e)=>{
       }
     }
   }
-  // 施業班: 選択ボタンを追加
+  // 施業班: 選択ボタンを追加（propsはモジュール変数経由で渡す）
   if(layerLabel==='施業班'){
     const key=_segyohanKey(props);
+    window._popupSegyohanKey=key;
+    window._popupSegyohanProps=props;
     const isSelected=_selectedSegyohan.has(key);
     const btnLabel=isSelected?'✓ 選択解除':'＋ 選択に追加';
     const btnStyle=isSelected
       ?'background:#00aa44;color:#fff;'
       :'background:#eee;color:#333;';
     html+=`<hr><button style="width:100%;padding:6px;border:none;border-radius:8px;font-size:12px;cursor:pointer;${btnStyle}"
-      onclick="window._segyohanToggleFromPopup(${JSON.stringify(key)},${JSON.stringify(props)})"
+      onclick="window._segyohanToggleFromPopup()"
       >${btnLabel}</button>`;
   }
   html+='</div>';
@@ -1617,7 +1619,10 @@ map.on('click',(e)=>{
   L.popup({maxWidth:300}).setLatLng(e.latlng).setContent(html).openOn(map);
 });
 
-window._segyohanToggleFromPopup=function(key, props){
+window._segyohanToggleFromPopup=function(){
+  const key=window._popupSegyohanKey;
+  const props=window._popupSegyohanProps;
+  if(!key) return;
   if(_selectedSegyohan.has(key)){
     _selectedSegyohan.delete(key);
   } else {
