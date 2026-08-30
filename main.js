@@ -3931,7 +3931,15 @@ document.addEventListener('drop', e=>{
       }
     }
 
-    const wPacific = events.filter(f => {
+    // eventtype=TC のイベントだけに絞る（APIが全種類を返す場合がある）
+    const tcOnly = events.filter(f => {
+      const et = (f.properties?.eventtype ?? f.properties?.EventType ?? '').toString().toUpperCase();
+      return et === 'TC';
+    });
+    const tcEvents = tcOnly.length > 0 ? tcOnly : events; // フィールドがない場合は全件
+
+    // 西太平洋域（lng 100〜180, lat 0〜50）
+    const wPacific = tcEvents.filter(f => {
       const coords = f.geometry?.coordinates;
       if (!coords) return true;
       const [lng, lat] = coords;
@@ -3940,10 +3948,10 @@ document.addEventListener('drop', e=>{
 
     showTyphoonStatus(
       `✅ GDACS接続: ${dataSource}\n` +
-      `全TC: ${events.length}件 / 日本近海: ${wPacific.length}件`
+      `全イベント: ${events.length}件 / TC: ${tcEvents.length}件 / 日本近海: ${wPacific.length}件`
     );
 
-    if (wPacific.length === 0 && events.length === 0) {
+    if (tcEvents.length === 0) {
       showTyphoonStatus('✅ 現在、発生中の台風はありません。', true);
       document.getElementById('btnTyphoon').classList.remove('hi');
       typhoonOn = false;
@@ -3951,7 +3959,7 @@ document.addEventListener('drop', e=>{
       return;
     }
 
-    const targets = wPacific.length > 0 ? wPacific : events;
+    const targets = wPacific.length > 0 ? wPacific : tcEvents;
     const statusLines = [
       `✅ ${dataSource} / 対象: ${targets.length}件`,
     ];
@@ -3999,11 +4007,18 @@ document.addEventListener('drop', e=>{
         statusLines.push(`  進路取得中...`);
         showTyphoonStatus(statusLines.join('\n'));
 
-        let res = await fetch(trackUrl, {cache: 'no-store'}).catch(() => null);
-        if (!res || !res.ok) {
-          res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(trackUrl)}`, {cache:'no-store'}).catch(() => null);
+        // 直接 → allorigins → corsproxy の順で試行
+        const proxies = [
+          trackUrl,
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(trackUrl)}`,
+          `https://corsproxy.io/?${encodeURIComponent(trackUrl)}`,
+        ];
+        let res = null;
+        for (const url of proxies) {
+          res = await fetch(url, {cache: 'no-store'}).catch(() => null);
+          if (res?.ok) break;
         }
-        if (!res || !res.ok) {
+        if (!res?.ok) {
           statusLines[statusLines.length-1] = `  ❌ 進路: HTTP ${res?.status ?? 'エラー'}`;
           showTyphoonStatus(statusLines.join('\n'));
           return;
