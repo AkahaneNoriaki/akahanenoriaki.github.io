@@ -3879,13 +3879,31 @@ document.addEventListener('drop', e=>{
 
   // 気象庁 BOSAI 台風予想進路を取得して地図に描画
   async function fetchJmaTracks() {
-    // 発見したエンドポイントを確認
+    // TC2625 のトラックデータパスを探す
     const BASE = 'https://www.jma.go.jp/bosai/typhoon/';
-    const r1 = await fetch(BASE + 'data/targetTc.json', {cache:'no-store'}).catch(()=>null);
-    const tc = r1?.ok ? JSON.stringify(await r1.json(), null, 2).slice(0,600) : `失敗 ${r1?.status}`;
-    const r2 = await fetch(BASE + 'data/prob50kt/targetTimes.json', {cache:'no-store'}).catch(()=>null);
-    const tt = r2?.ok ? JSON.stringify(await r2.json(), null, 2).slice(0,400) : `失敗 ${r2?.status}`;
-    alert('targetTc.json:\n' + tc + '\n\ntargetTimes.json:\n' + tt);
+    const tcId = 'TC2625';
+    const bt = '20260830120000';
+    const candidates = [
+      `data/${tcId}/track.json`,
+      `data/${tcId}/forecast.json`,
+      `data/${tcId}/info.json`,
+      `data/${tcId}/${bt}.json`,
+      `data/prob50kt/${tcId}.json`,
+      `data/prob50kt/${tcId}/${bt}.json`,
+      `data/prob50kt/${tcId}/timeseries.json`,
+      `data/prob50kt/${tcId}/through.json`,
+    ];
+    const results = [];
+    for (const path of candidates) {
+      const r = await fetch(BASE + path, {cache:'no-store'}).catch(()=>null);
+      if (r?.ok) {
+        const txt = await r.text();
+        results.push(`✅ ${path}\n   先頭: ${txt.slice(0,120)}`);
+      } else {
+        results.push(`❌ ${r?.status??'err'} ${path}`);
+      }
+    }
+    alert(results.join('\n'));
     return;
 
     let ids = [];
