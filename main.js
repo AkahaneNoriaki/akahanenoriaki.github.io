@@ -3896,6 +3896,8 @@ document.addEventListener('drop', e=>{
       } catch { continue; }
 
       const points = track.track ?? track.forecasts ?? [];
+      // デバッグ：最初の台風のデータ構造を確認
+      if (ids.indexOf(id) === 0) alert('JMA構造:\n' + JSON.stringify(track, null, 2).slice(0, 800));
       if (!points.length) continue;
 
       const pastCoords = [], foreCoords = [];
