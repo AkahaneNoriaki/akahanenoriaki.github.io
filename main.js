@@ -3879,13 +3879,13 @@ document.addEventListener('drop', e=>{
 
   // 気象庁 BOSAI 台風予想進路を取得して地図に描画
   async function fetchJmaTracks() {
-    // typhoon.jsの中身を確認
-    const r = await fetch('https://www.jma.go.jp/bosai/typhoon/js/typhoon.js', {cache:'no-store'}).catch(()=>null);
-    if (!r?.ok) { alert('typhoon.js取得失敗'); return; }
-    const js = await r.text();
-    // "data" や "bosai" や "typhoon" を含む行を抽出
-    const lines = js.split('\n').filter(l => /data|bosai|typhoon|fetch|xhr|url|path|json/i.test(l)).slice(0,30);
-    alert('typhoon.js 関連行:\n' + lines.join('\n').slice(0,1200));
+    // 発見したエンドポイントを確認
+    const BASE = 'https://www.jma.go.jp/bosai/typhoon/';
+    const r1 = await fetch(BASE + 'data/targetTc.json', {cache:'no-store'}).catch(()=>null);
+    const tc = r1?.ok ? JSON.stringify(await r1.json(), null, 2).slice(0,600) : `失敗 ${r1?.status}`;
+    const r2 = await fetch(BASE + 'data/prob50kt/targetTimes.json', {cache:'no-store'}).catch(()=>null);
+    const tt = r2?.ok ? JSON.stringify(await r2.json(), null, 2).slice(0,400) : `失敗 ${r2?.status}`;
+    alert('targetTc.json:\n' + tc + '\n\ntargetTimes.json:\n' + tt);
     return;
 
     let ids = [];
