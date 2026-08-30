@@ -3865,8 +3865,28 @@ document.addEventListener('drop', e=>{
   });
 
   /* ─── 台風情報（GDACS: EU/UN 災害情報API） ─── */
-  // 現在位置マーカーを表示。予想進路はポップアップのリンクから確認。
   const GDACS_TC_URL = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventtype=TC';
+
+  // documentmaps ページから使われているデータURLを探す（1回だけ実行）
+  async function probeGdacsMapPage(eventid, episodeid) {
+    const pageUrl = `https://www.gdacs.org/documentmaps_IP.aspx?eventid=${eventid}&eventtype=TC`;
+    let html = null;
+    try {
+      let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(pageUrl)}`, {cache:'no-store'}).catch(()=>null);
+      if (!r?.ok) r = await fetch(`https://corsproxy.io/?${encodeURIComponent(pageUrl)}`, {cache:'no-store'}).catch(()=>null);
+      if (r?.ok) html = await r.text();
+    } catch {}
+    if (!html) return null;
+
+    // URLっぽい文字列を抽出（gdacs.org ドメインのもの）
+    const matches = [...html.matchAll(/["'`](https?:\/\/(?:www\.gdacs\.org|geoserver\.gdacs\.org)[^"'`\s]{5,}["'`])/g)]
+      .map(m => m[1]);
+    // あわせて相対パスで .json/.geojson/.aspx を含むもの
+    const rel = [...html.matchAll(/["'`](\/[^"'`\s]*(?:geojson|track|polygon|\.json|GeoJSON)[^"'`\s]*)["'`]/gi)]
+      .map(m => 'https://www.gdacs.org' + m[1]);
+
+    return [...new Set([...matches, ...rel])].slice(0, 20);
+  }
   let typhoonLayers = [];
   let typhoonOn = false;
   let typhoonTimer = null;
@@ -3953,6 +3973,26 @@ document.addEventListener('drop', e=>{
     const allLatLngs = targets.map(f => f.geometry?.coordinates).filter(Boolean).map(([x, y]) => [y, x]);
     if (allLatLngs.length === 1) map.setView(allLatLngs[0], 5);
     else if (allLatLngs.length > 1) map.fitBounds(L.latLngBounds(allLatLngs), {padding: [60, 60], maxZoom: 6});
+
+    // 最初の TC の documentmaps ページからデータ URL を探す（デバッグ用・1回のみ）
+    const firstP = targets[0]?.properties ?? {};
+    const firstId = firstP.eventid ?? firstP.EventID ?? '';
+    const firstEp = firstP.episodeid ?? firstP.EpisodeID ?? '';
+    if (firstId) {
+      probeGdacsMapPage(firstId, firstEp).then(urls => {
+        if (!urls?.length) return;
+        // 結果を最初のマーカーのポップアップに追加
+        const firstMarker = typhoonLayers[0];
+        if (firstMarker?.getPopup) {
+          const cur = firstMarker.getPopup().getContent();
+          firstMarker.getPopup().setContent(
+            cur + `<hr><small><b>probe URLs (${urls.length}):</b><br>` +
+            urls.map(u => `<a href="${u}" target="_blank">${u.replace('https://','').slice(0,60)}</a>`).join('<br>') +
+            '</small>'
+          );
+        }
+      });
+    }
   }
 
   document.getElementById('btnTyphoon').onclick = async () => {
