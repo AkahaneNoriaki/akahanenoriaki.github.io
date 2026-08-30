@@ -3879,68 +3879,57 @@ document.addEventListener('drop', e=>{
 
   // 気象庁 BOSAI 台風予想進路を取得して地図に描画
   async function fetchJmaTracks() {
-    // forecast.json の予報部分を確認（2000文字以降）
     const BASE = 'https://www.jma.go.jp/bosai/typhoon/';
-    const r = await fetch(BASE + 'data/TC2625/forecast.json', {cache:'no-store'}).catch(()=>null);
-    if (!r?.ok) { alert('取得失敗'); return; }
-    const data = await r.json();
-    const full = JSON.stringify(data, null, 2);
-    alert(full.slice(2000, 4500));
-    return;
+    let tcList = [];
+    try {
+      const r = await fetch(BASE + 'data/targetTc.json', {cache:'no-store'});
+      if (!r.ok) return;
+      tcList = await r.json();
+    } catch { return; }
 
-    let ids = [];
-
-    for (const id of ids) {
-      let track;
+    for (const tc of tcList) {
+      let data;
       try {
-        const r = await fetch(`https://www.jma.go.jp/bosai/typhoon/data/${id}.json`, {cache:'no-store'});
+        const r = await fetch(BASE + `data/${tc.tropicalCyclone}/forecast.json`, {cache:'no-store'});
         if (!r.ok) continue;
-        track = await r.json();
+        data = await r.json();
       } catch { continue; }
 
-      const points = track.track ?? track.forecasts ?? [];
-      // デバッグ：最初の台風のデータ構造を確認
-      if (ids.indexOf(id) === 0) alert('JMA構造:\n' + JSON.stringify(track, null, 2).slice(0, 800));
-      if (!points.length) continue;
+      const analysis = data.find(d => d.part?.en === 'Analysis');
+      const forecasts = data.filter(d => typeof d.advancedHours === 'number' && d.advancedHours > 0);
+      if (!analysis) continue;
 
-      const pastCoords = [], foreCoords = [];
-      points.forEach(pt => {
-        const c = pt.coordinate ?? pt.coord;
-        if (!c) return;
-        const ll = [c[1], c[0]];
-        if (pt.forecast) foreCoords.push(ll);
-        else pastCoords.push(ll);
-      });
-
-      // 過去進路（灰色実線）
-      if (pastCoords.length >= 2) {
-        const past = L.polyline(pastCoords, {color:'#888', weight:2, dashArray:null, opacity:0.8});
-        past.addTo(map);
-        typhoonLayers.push(past);
+      // 台風になる前の進路（灰色点線）
+      if (analysis.track?.preTyphoon?.length >= 2) {
+        const line = L.polyline(analysis.track.preTyphoon, {color:'#999', weight:1.5, dashArray:'3 4', opacity:0.7});
+        line.addTo(map); typhoonLayers.push(line);
       }
-      // 予想進路（青破線）
-      if (foreCoords.length >= 2) {
-        const fore = L.polyline(foreCoords, {color:'#0066cc', weight:2.5, dashArray:'6 4', opacity:0.9});
-        fore.addTo(map);
-        typhoonLayers.push(fore);
+      // 台風期間の進路（灰色実線）
+      if (analysis.track?.typhoon?.length >= 2) {
+        const line = L.polyline(analysis.track.typhoon, {color:'#555', weight:2.5, opacity:0.85});
+        line.addTo(map); typhoonLayers.push(line);
       }
-
-      // 予報円（最大風速圏・暴風域）
-      points.filter(pt => pt.forecast).forEach(pt => {
-        const c = pt.coordinate ?? pt.coord;
-        if (!c) return;
-        const ll = [c[1], c[0]];
-        const storm = pt.storm ?? pt.stormRadius ?? 0;   // 暴風域半径(km)
-        const gale  = pt.gale  ?? pt.galeRadius  ?? 0;  // 強風域半径(km)
-        if (gale > 0) {
-          const gc = L.circle(ll, {radius: gale*1000, color:'#0066cc', weight:1, fillColor:'#0066cc', fillOpacity:0.06});
-          gc.addTo(map); typhoonLayers.push(gc);
+      // 現在の暴風警戒域
+      if (analysis.galeWarningArea?.radius) {
+        const [lat, lng] = analysis.galeWarningArea.center;
+        const c = L.circle([lat, lng], {radius: analysis.galeWarningArea.radius, color:'#cc3300', weight:1.5, fillColor:'#cc3300', fillOpacity:0.12});
+        c.addTo(map); typhoonLayers.push(c);
+      }
+      // 予想進路（現在位置→各予報点、青破線）
+      if (forecasts.length > 0 && analysis.center) {
+        const foreCoords = [analysis.center, ...forecasts.map(f => f.center).filter(Boolean)];
+        if (foreCoords.length >= 2) {
+          const line = L.polyline(foreCoords, {color:'#0055cc', weight:2.5, dashArray:'8 5', opacity:0.9});
+          line.addTo(map); typhoonLayers.push(line);
         }
-        if (storm > 0) {
-          const sc = L.circle(ll, {radius: storm*1000, color:'#cc3300', weight:1, fillColor:'#cc3300', fillOpacity:0.12});
-          sc.addTo(map); typhoonLayers.push(sc);
+        // 予報円（確率70%）
+        for (const fc of forecasts) {
+          if (!fc.probabilityCircle?.radius || !fc.center) continue;
+          const [lat, lng] = fc.center;
+          const circle = L.circle([lat, lng], {radius: fc.probabilityCircle.radius, color:'#0055cc', weight:1, fillColor:'#0055cc', fillOpacity:0.07});
+          circle.addTo(map); typhoonLayers.push(circle);
         }
-      });
+      }
     }
   }
 
