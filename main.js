@@ -3867,35 +3867,26 @@ document.addEventListener('drop', e=>{
   /* ─── 台風情報（GDACS: EU/UN 災害情報API） ─── */
   const GDACS_TC_URL = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventtype=TC';
 
-  // GDACS からアクセスできるデータ URL を探す（デバッグ用）
-  async function probeGdacsUrls(eventid, episodeid) {
-    const candidates = [
-      // RSS フィード（トラックデータが含まれる可能性）
-      `https://www.gdacs.org/gdacsapi/api/events/geteventlist/RSS?eventtype=TC`,
-      // 各種トラック候補
-      `https://www.gdacs.org/Cyclones/TrackForMap.aspx?eventid=${eventid}&episodeid=${episodeid}`,
-      `https://www.gdacs.org/Cyclones/TC_GeoJSON.aspx?eventid=${eventid}&episodeid=${episodeid}`,
-      `https://www.gdacs.org/gdacsapi/api/events/gettrack?eventtype=TC&eventid=${eventid}&episodeid=${episodeid}`,
-      `https://www.gdacs.org/gdacsapi/api/events/getGeoJSON?eventtype=TC&eventid=${eventid}&episodeid=${episodeid}`,
-      `https://geoserver.gdacs.org/geoserver/GDACS/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=GDACS:tc_track&outputFormat=application/json&CQL_FILTER=eventid=${eventid}`,
-      `https://www.gdacs.org/gdacsapi/api/polygons/getpolygons?eventtype=TC&eventid=${eventid}`,
-    ];
-    const results = [];
-    for (const url of candidates) {
-      // まず直接、次に allorigins 経由で試す
-      let r = await fetch(url, {cache:'no-store'}).catch(()=>null);
-      if (!r?.ok) {
-        r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, {cache:'no-store'}).catch(()=>null);
-      }
-      const status = r ? r.status : 'err';
-      let preview = '';
-      if (r?.ok) {
-        const t = await r.text().catch(()=>'');
-        preview = t.slice(0,60).replace(/\s+/g,' ');
-      }
-      results.push(`${status} ${url.replace('https://','').slice(0,50)}\n  ${preview}`);
+  // GDACS RSS から台風進路データを抽出
+  async function fetchTyphoonTracks(targets) {
+    const rssUrl = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/RSS?eventtype=TC';
+    let xml = null;
+    try {
+      let r = await fetch(rssUrl, {cache:'no-store'}).catch(()=>null);
+      if (!r?.ok) r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`, {cache:'no-store'}).catch(()=>null);
+      if (r?.ok) xml = await r.text();
+    } catch {}
+    if (!xml) return;
+
+    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+    const items = [...doc.querySelectorAll('item')];
+
+    // デバッグ：最初のアイテムのタグ名一覧を alert で確認
+    if (items.length > 0) {
+      const tags = [...items[0].children].map(el => el.tagName).join(', ');
+      const sample = items[0].innerHTML.slice(0, 500);
+      alert(`RSS item[0] tags:\n${tags}\n\nsample:\n${sample}`);
     }
-    alert('GDACS URL probe:\n\n' + results.join('\n'));
   }
   let typhoonLayers = [];
   let typhoonOn = false;
@@ -3984,11 +3975,8 @@ document.addEventListener('drop', e=>{
     if (allLatLngs.length === 1) map.setView(allLatLngs[0], 5);
     else if (allLatLngs.length > 1) map.fitBounds(L.latLngBounds(allLatLngs), {padding: [60, 60], maxZoom: 6});
 
-    // デバッグ：最初の TC の各種 URL が通るか確認
-    const firstP = targets[0]?.properties ?? {};
-    const firstId = firstP.eventid ?? firstP.EventID ?? '';
-    const firstEp = firstP.episodeid ?? firstP.EpisodeID ?? '';
-    if (firstId) probeGdacsUrls(firstId, firstEp);
+    // RSS から進路データを取得試行
+    fetchTyphoonTracks(targets);
   }
 
   document.getElementById('btnTyphoon').onclick = async () => {
