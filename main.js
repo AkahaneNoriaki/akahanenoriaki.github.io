@@ -3960,14 +3960,27 @@ document.addEventListener('drop', e=>{
     }
 
     const targets = wPacific.length > 0 ? wPacific : tcEvents;
+
+    // 各台風に固定インデックスを割り当て（並列更新の競合を防ぐ）
     const statusLines = [
-      `✅ ${dataSource} / 対象: ${targets.length}件`,
+      `✅ ${dataSource} / TC: ${tcEvents.length}件 / 表示: ${targets.length}件`,
+      ...targets.map((f, i) => {
+        const p = f.properties ?? {};
+        const name = p.name ?? p.eventname ?? '台風';
+        return `[${i+1}] ${name} 読込中...`;
+      })
     ];
+    showTyphoonStatus(statusLines.join('\n'));
 
     await Promise.allSettled(targets.map(async (f, idx) => {
+      const lineIdx = idx + 1; // この台風専用の行
       const p = f.properties ?? {};
       const coords = f.geometry?.coordinates;
-      if (!coords) return;
+      if (!coords) {
+        statusLines[lineIdx] = `[${idx+1}] 座標なし`;
+        showTyphoonStatus(statusLines.join('\n'));
+        return;
+      }
       const [lng, lat] = coords;
 
       const name = p.name ?? p.eventname ?? p.Name ?? '台風';
@@ -3976,9 +3989,6 @@ document.addEventListener('drop', e=>{
       const color = alertLevel === 'Red' ? '#cc0000' : alertLevel === 'Orange' ? '#ff8800' : '#0066cc';
       const eventid = p.eventid ?? p.EventID ?? '';
       const episodeid = p.episodeid ?? p.EpisodeID ?? '';
-
-      statusLines.push(`[${idx+1}] ${name} id=${eventid} ep=${episodeid}`);
-      showTyphoonStatus(statusLines.join('\n'));
 
       const marker = L.circleMarker([lat, lng], {
         radius: 12, color, fillColor: color,
@@ -3994,7 +4004,7 @@ document.addEventListener('drop', e=>{
       typhoonLayers.push(marker);
 
       if (!eventid) {
-        statusLines.push(`  ⚠️ eventid なし → 進路スキップ`);
+        statusLines[lineIdx] = `[${idx+1}] ${name}: ⚠️ idなし`;
         showTyphoonStatus(statusLines.join('\n'));
         return;
       }
@@ -4004,34 +4014,27 @@ document.addEventListener('drop', e=>{
           ? `https://www.gdacs.org/gdacsapi/api/polygons/getpolygons?eventtype=TC&eventid=${eventid}&episodeid=${episodeid}`
           : `https://www.gdacs.org/gdacsapi/api/polygons/getpolygons?eventtype=TC&eventid=${eventid}`;
 
-        statusLines.push(`  進路取得中...`);
+        statusLines[lineIdx] = `[${idx+1}] ${name}: 進路取得中...`;
         showTyphoonStatus(statusLines.join('\n'));
 
         // 直接 → allorigins → corsproxy の順で試行
-        const proxies = [
-          trackUrl,
-          `https://api.allorigins.win/raw?url=${encodeURIComponent(trackUrl)}`,
-          `https://corsproxy.io/?${encodeURIComponent(trackUrl)}`,
-        ];
-        let res = null;
-        for (const url of proxies) {
-          res = await fetch(url, {cache: 'no-store'}).catch(() => null);
-          if (res?.ok) break;
-        }
+        let res = await fetch(trackUrl, {cache: 'no-store'}).catch(() => null);
+        if (!res?.ok) res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(trackUrl)}`, {cache:'no-store'}).catch(() => null);
+        if (!res?.ok) res = await fetch(`https://corsproxy.io/?${encodeURIComponent(trackUrl)}`, {cache:'no-store'}).catch(() => null);
+
         if (!res?.ok) {
-          statusLines[statusLines.length-1] = `  ❌ 進路: HTTP ${res?.status ?? 'エラー'}`;
+          statusLines[lineIdx] = `[${idx+1}] ${name}: ❌ HTTP ${res?.status ?? 'err'}`;
           showTyphoonStatus(statusLines.join('\n'));
           return;
         }
+
         const text = await res.text();
         let gj;
         try { gj = JSON.parse(text); } catch { gj = null; }
 
         if (!gj?.features?.length) {
-          // レスポンスの構造を表示してデバッグ
-          const keys = gj ? Object.keys(gj).join(',') : 'null';
-          const preview = text.slice(0, 120).replace(/\s+/g, ' ');
-          statusLines[statusLines.length-1] = `  ⚠️ features無 keys=[${keys}]\n    ${preview}`;
+          const keys = gj ? Object.keys(gj).join(',') : String(gj);
+          statusLines[lineIdx] = `[${idx+1}] ${name}: ⚠️ データなし[${keys}]`;
           showTyphoonStatus(statusLines.join('\n'));
           return;
         }
@@ -4086,10 +4089,10 @@ document.addEventListener('drop', e=>{
             typhoonLayers.push(cone);
           }
         });
-        statusLines[statusLines.length-1] = `  ✅ 進路: line=${lineCount} pt=${pointCount} poly=${polyCount}`;
+        statusLines[lineIdx] = `[${idx+1}] ${name}: ✅ line=${lineCount} pt=${pointCount} poly=${polyCount}`;
         showTyphoonStatus(statusLines.join('\n'));
       } catch(e) {
-        statusLines[statusLines.length-1] = `  ❌ 進路エラー: ${e.message}`;
+        statusLines[lineIdx] = `[${idx+1}] ${name}: ❌ ${e.message.slice(0,40)}`;
         showTyphoonStatus(statusLines.join('\n'));
       }
     }));
