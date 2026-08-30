@@ -3864,10 +3864,105 @@ document.addEventListener('drop', e=>{
     if(e.key==='Escape') document.getElementById('printCancel').click();
   });
 
-  /* ─── 台風情報（気象庁公式ページを新タブで開く） ─── */
-  // JMAの台風データAPIは非公開のため、公式ページへのリンクで対応
-  document.getElementById('btnTyphoon').onclick = () => {
-    window.open('https://www.jma.go.jp/jp/typh/', '_blank', 'noopener');
+  /* ─── 台風情報（GDACS: EU/UN 災害情報API） ─── */
+  // GDACS = Global Disaster Alert and Coordination System (EU/UN 運営、無料・CORS対応)
+  // TC = Tropical Cyclone
+  const GDACS_TC_URL = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventtype=TC';
+  let typhoonLayers = [];
+  let typhoonOn = false;
+  let typhoonTimer = null;
+
+  function clearTyphoonLayers() {
+    typhoonLayers.forEach(l => map.removeLayer(l));
+    typhoonLayers = [];
+  }
+
+  async function fetchTyphoon() {
+    clearTyphoonLayers();
+    let events;
+    try {
+      const res = await fetch(GDACS_TC_URL, {cache: 'no-store'});
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      // GDACSレスポンス: { features: [...] } (GeoJSON形式)
+      events = json.features ?? json.events ?? json ?? [];
+      if (!Array.isArray(events)) events = [];
+    } catch(e) {
+      // CORS失敗時はプロキシ経由で再試行
+      try {
+        const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(GDACS_TC_URL)}`;
+        const res2 = await fetch(proxy, {cache: 'no-store'});
+        const json2 = await res2.json();
+        events = json2.features ?? json2.events ?? json2 ?? [];
+        if (!Array.isArray(events)) events = [];
+      } catch(e2) {
+        alert('台風情報の取得に失敗しました。\n' + e.message);
+        document.getElementById('btnTyphoon').classList.remove('hi');
+        typhoonOn = false;
+        return;
+      }
+    }
+
+    // 西太平洋域（日本近海）のTCだけに絞る: lng 100〜180, lat 0〜50
+    const wPacific = events.filter(f => {
+      const coords = f.geometry?.coordinates;
+      if (!coords) return true; // 座標不明でも表示
+      const [lng, lat] = coords;
+      return lng >= 100 && lng <= 180 && lat >= 0 && lat <= 50;
+    });
+
+    if (wPacific.length === 0 && events.length === 0) {
+      alert('現在、発生中の台風はありません。');
+      document.getElementById('btnTyphoon').classList.remove('hi');
+      typhoonOn = false;
+      clearInterval(typhoonTimer); typhoonTimer = null;
+      return;
+    }
+
+    const targets = wPacific.length > 0 ? wPacific : events;
+    targets.forEach(f => {
+      const p = f.properties ?? {};
+      const coords = f.geometry?.coordinates;
+      if (!coords) return;
+      const [lng, lat] = coords;
+
+      const name = p.name ?? p.eventname ?? p.Name ?? '台風';
+      const alertLevel = p.alertlevel ?? p.alertLevel ?? '';
+      const wind = p.maxwind ?? p.MaxWind ?? p.wind ?? '不明';
+      const color = alertLevel === 'Red' ? '#cc0000' : alertLevel === 'Orange' ? '#ff8800' : '#0066cc';
+
+      const marker = L.circleMarker([lat, lng], {
+        radius: 12, color, fillColor: color,
+        fillOpacity: 0.85, weight: 2
+      }).bindPopup(
+        `<b>🌀 ${name}</b><br>` +
+        `警戒レベル: ${alertLevel || '不明'}<br>` +
+        `最大風速: ${wind} kt<br>` +
+        `位置: ${lat.toFixed(1)}°N ${lng.toFixed(1)}°E<br>` +
+        `<a href="https://www.gdacs.org/report.aspx?eventtype=TC&eventid=${p.eventid ?? ''}" target="_blank" rel="noopener">詳細情報 →</a>`
+      );
+      marker.addTo(map);
+      typhoonLayers.push(marker);
+      map.panTo([lat, lng]);
+    });
+
+    if (targets.length > 0 && typhoonLayers.length === 0) {
+      alert('台風データを取得しましたが表示できる座標がありませんでした。');
+    }
+  }
+
+  document.getElementById('btnTyphoon').onclick = async () => {
+    if (typhoonOn) {
+      typhoonOn = false;
+      clearTyphoonLayers();
+      clearInterval(typhoonTimer); typhoonTimer = null;
+      document.getElementById('btnTyphoon').classList.remove('hi');
+    } else {
+      typhoonOn = true;
+      document.getElementById('btnTyphoon').classList.add('hi');
+      await fetchTyphoon();
+      typhoonTimer = setInterval(fetchTyphoon, 15 * 60 * 1000);
+    }
   };
 
 })();
