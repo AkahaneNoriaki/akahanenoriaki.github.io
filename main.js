@@ -3879,27 +3879,28 @@ document.addEventListener('drop', e=>{
 
   // 気象庁 BOSAI 台風予想進路を取得して地図に描画
   async function fetchJmaTracks() {
-    // JMA BOSAIページのHTMLからJSファイルを抽出してAPIエンドポイントを探す
-    const pageUrl = 'https://www.jma.go.jp/bosai/typhoon/';
-    let html = '';
-    const rp = await fetch(pageUrl, {cache:'no-store'}).catch(()=>null);
-    if (rp?.ok) html = await rp.text();
-    if (!html) { alert('JMA page取得失敗'); return; }
-
-    const scripts = [...html.matchAll(/src=["']([^"']*\.js[^"']*)["']/g)].map(m=>m[1])
-      .map(s => s.startsWith('http') ? s : 'https://www.jma.go.jp' + (s.startsWith('/') ? '' : '/bosai/typhoon/') + s);
-    if (!scripts.length) { alert('JSファイル見つからず\nHTML先頭:\n' + html.slice(0,400)); return; }
-
-    // JSファイルを取得してfetch URL パターンを抽出
+    // JMA BOSAI台風アプリ本体JSを直接探す
+    const jmaBase = 'https://www.jma.go.jp/bosai/typhoon/js/';
+    const jsNames = ['typhoon.js','main.js','app.js','index.js','tc.js','typh.js'];
     const hits = new Set();
-    for (const src of scripts.slice(0,5)) {
-      const rj = await fetch(src, {cache:'no-store'}).catch(()=>null);
-      if (!rj?.ok) continue;
-      const js = await rj.text();
-      [...js.matchAll(/["'`](\/bosai\/[^"'`\s]{5,})["'`]/g)].forEach(m => hits.add(m[1]));
-      [...js.matchAll(/["'`](https?:\/\/[^"'`\s]{10,}\/data\/[^"'`\s]*)["'`]/g)].forEach(m => hits.add(m[1]));
+    const found = [];
+    for (const name of jsNames) {
+      const url = jmaBase + name;
+      const r = await fetch(url, {cache:'no-store'}).catch(()=>null);
+      if (r?.ok) {
+        found.push(url);
+        const js = await r.text();
+        [...js.matchAll(/["'`](\/bosai\/[^"'`\s]{5,})["'`]/g)].forEach(m => hits.add(m[1]));
+        [...js.matchAll(/["'`]([^"'`\s]*\/data\/[^"'`\s]{3,})["'`]/g)].forEach(m => hits.add(m[1]));
+      }
     }
-    alert('JMA API候補:\nスクリプト:\n' + scripts.join('\n') + '\n\nURL候補:\n' + [...hits].slice(0,20).join('\n'));
+    // HTMLのscriptタグ全体も再確認
+    const rp2 = await fetch('https://www.jma.go.jp/bosai/typhoon/', {cache:'no-store'}).catch(()=>null);
+    const html2 = rp2?.ok ? await rp2.text() : '';
+    const allScripts = [...html2.matchAll(/<script[^>]*>/g)].map(m=>m[0]).join('\n');
+    alert('見つかったJS:\n' + (found.join('\n')||'なし') +
+          '\n\nAPI候補:\n' + ([...hits].slice(0,15).join('\n')||'なし') +
+          '\n\nscriptタグ全部:\n' + allScripts.slice(0,600));
     return;
 
     let ids = [];
