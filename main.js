@@ -4003,96 +4003,84 @@ document.addEventListener('drop', e=>{
       marker.addTo(map);
       typhoonLayers.push(marker);
 
-      if (!eventid) {
-        statusLines[lineIdx] = `[${idx+1}] ${name}: ⚠️ idなし`;
-        showTyphoonStatus(statusLines.join('\n'));
-        return;
-      }
+      // 進路データ（geteventdata エンドポイント）
+      if (eventid) {
+        try {
+          const dataUrl = episodeid
+            ? `https://www.gdacs.org/gdacsapi/api/events/geteventdata?eventtype=TC&eventid=${eventid}&episodeid=${episodeid}`
+            : `https://www.gdacs.org/gdacsapi/api/events/geteventdata?eventtype=TC&eventid=${eventid}`;
 
-      try {
-        const trackUrl = episodeid
-          ? `https://www.gdacs.org/gdacsapi/api/polygons/getpolygons?eventtype=TC&eventid=${eventid}&episodeid=${episodeid}`
-          : `https://www.gdacs.org/gdacsapi/api/polygons/getpolygons?eventtype=TC&eventid=${eventid}`;
-
-        statusLines[lineIdx] = `[${idx+1}] ${name}: 進路取得中...`;
-        showTyphoonStatus(statusLines.join('\n'));
-
-        // 直接 → allorigins → corsproxy の順で試行
-        let res = await fetch(trackUrl, {cache: 'no-store'}).catch(() => null);
-        if (!res?.ok) res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(trackUrl)}`, {cache:'no-store'}).catch(() => null);
-        if (!res?.ok) res = await fetch(`https://corsproxy.io/?${encodeURIComponent(trackUrl)}`, {cache:'no-store'}).catch(() => null);
-
-        if (!res?.ok) {
-          statusLines[lineIdx] = `[${idx+1}] ${name}: ❌ HTTP ${res?.status ?? 'err'}`;
+          statusLines[lineIdx] = `[${idx+1}] ${name}: 進路取得中...`;
           showTyphoonStatus(statusLines.join('\n'));
-          return;
-        }
 
-        const text = await res.text();
-        let gj;
-        try { gj = JSON.parse(text); } catch { gj = null; }
+          let res = await fetch(dataUrl, {cache: 'no-store'}).catch(() => null);
+          if (!res?.ok) res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(dataUrl)}`, {cache:'no-store'}).catch(() => null);
 
-        if (!gj?.features?.length) {
-          const keys = gj ? Object.keys(gj).join(',') : String(gj);
-          statusLines[lineIdx] = `[${idx+1}] ${name}: ⚠️ データなし[${keys}]`;
-          showTyphoonStatus(statusLines.join('\n'));
-          return;
-        }
+          if (res?.ok) {
+            const text = await res.text();
+            let gj;
+            try { gj = JSON.parse(text); } catch { gj = null; }
 
-        let lineCount = 0, pointCount = 0, polyCount = 0;
-        gj.features.forEach(feat => {
-          const fp = feat.properties ?? {};
-          const geomType = feat.geometry?.type;
-          const trackType = fp.tracktype ?? fp.Type ?? fp.type ?? '';
+            // features 配列を持つ GeoJSON なら描画
+            const features = gj?.features ?? (Array.isArray(gj) ? gj : null);
+            if (features?.length) {
+              let lineCount = 0, pointCount = 0, polyCount = 0;
+              features.forEach(feat => {
+                if (!feat?.geometry) return;
+                const fp = feat.properties ?? {};
+                const geomType = feat.geometry.type;
+                const trackType = fp.tracktype ?? fp.Type ?? fp.type ?? '';
 
-          if (geomType === 'LineString' || geomType === 'MultiLineString') {
-            lineCount++;
-            const isForecast = /forecast|predicted|future/i.test(trackType) || fp.isForecast;
-            const coords2 = geomType === 'LineString'
-              ? feat.geometry.coordinates
-              : feat.geometry.coordinates.flat();
-            const lineCoords = coords2.map(([x,y]) => [y,x]);
-            const line = L.polyline(lineCoords, {
-              color: isForecast ? '#ff6600' : '#333333',
-              weight: isForecast ? 2 : 3,
-              dashArray: isForecast ? '8,5' : null,
-              opacity: 0.85
-            });
-            line.addTo(map);
-            typhoonLayers.push(line);
-          } else if (geomType === 'Point') {
-            pointCount++;
-            const [px, py] = feat.geometry.coordinates;
-            const isFc = /forecast|predicted|future/i.test(trackType) || fp.isForecast;
-            const dot = L.circleMarker([py, px], {
-              radius: isFc ? 5 : 4,
-              color: isFc ? '#ff6600' : '#555',
-              fillColor: isFc ? '#ffaa44' : '#888',
-              fillOpacity: 0.8, weight: 1.5
-            });
-            if (fp.class || fp.windspeed || fp.datetime) {
-              dot.bindTooltip([fp.datetime ?? '', fp.class ?? '', fp.windspeed ? `${fp.windspeed}kt` : ''].filter(Boolean).join(' '));
+                if (geomType === 'LineString' || geomType === 'MultiLineString') {
+                  lineCount++;
+                  const isForecast = /forecast|predicted|future/i.test(trackType) || fp.isForecast;
+                  const coords2 = geomType === 'LineString'
+                    ? feat.geometry.coordinates
+                    : feat.geometry.coordinates.flat();
+                  const line = L.polyline(coords2.map(([x,y]) => [y,x]), {
+                    color: isForecast ? '#ff6600' : '#333333',
+                    weight: isForecast ? 2 : 3,
+                    dashArray: isForecast ? '8,5' : null,
+                    opacity: 0.85
+                  });
+                  line.addTo(map); typhoonLayers.push(line);
+                } else if (geomType === 'Point') {
+                  pointCount++;
+                  const [px, py] = feat.geometry.coordinates;
+                  const isFc = /forecast|predicted|future/i.test(trackType) || fp.isForecast;
+                  const dot = L.circleMarker([py, px], {
+                    radius: isFc ? 5 : 4, color: isFc ? '#ff6600' : '#555',
+                    fillColor: isFc ? '#ffaa44' : '#888', fillOpacity: 0.8, weight: 1.5
+                  });
+                  if (fp.class || fp.windspeed || fp.datetime) {
+                    dot.bindTooltip([fp.datetime ?? '', fp.class ?? '', fp.windspeed ? `${fp.windspeed}kt` : ''].filter(Boolean).join(' '));
+                  }
+                  dot.addTo(map); typhoonLayers.push(dot);
+                } else if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
+                  polyCount++;
+                  const rawRings = geomType === 'Polygon'
+                    ? [feat.geometry.coordinates[0]]
+                    : feat.geometry.coordinates.map(poly => poly[0]);
+                  const cone = L.polygon(rawRings.map(ring => ring.map(([x,y]) => [y,x])), {
+                    color: '#ff6600', fillColor: '#ffaa00', fillOpacity: 0.10, weight: 1, dashArray: '5,4'
+                  }).bindTooltip('予報円');
+                  cone.addTo(map); typhoonLayers.push(cone);
+                }
+              });
+              statusLines[lineIdx] = `[${idx+1}] ${name}: ✅ L=${lineCount} P=${pointCount} poly=${polyCount}`;
+            } else {
+              const keys = gj ? Object.keys(gj).join(',') : String(gj);
+              statusLines[lineIdx] = `[${idx+1}] ${name}: ⚠️ 進路なし[${keys}]`;
             }
-            dot.addTo(map);
-            typhoonLayers.push(dot);
-          } else if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
-            polyCount++;
-            const rawRings = geomType === 'Polygon'
-              ? [feat.geometry.coordinates[0]]
-              : feat.geometry.coordinates.map(poly => poly[0]);
-            const polyCoords = rawRings.map(ring => ring.map(([x,y]) => [y,x]));
-            const cone = L.polygon(polyCoords, {
-              color: '#ff6600', fillColor: '#ffaa00',
-              fillOpacity: 0.10, weight: 1, dashArray: '5,4'
-            }).bindTooltip('予報円');
-            cone.addTo(map);
-            typhoonLayers.push(cone);
+          } else {
+            statusLines[lineIdx] = `[${idx+1}] ${name}: ❌ HTTP ${res?.status ?? 'err'}`;
           }
-        });
-        statusLines[lineIdx] = `[${idx+1}] ${name}: ✅ line=${lineCount} pt=${pointCount} poly=${polyCount}`;
+        } catch(e) {
+          statusLines[lineIdx] = `[${idx+1}] ${name}: ❌ ${e.message.slice(0,30)}`;
+        }
         showTyphoonStatus(statusLines.join('\n'));
-      } catch(e) {
-        statusLines[lineIdx] = `[${idx+1}] ${name}: ❌ ${e.message.slice(0,40)}`;
+      } else {
+        statusLines[lineIdx] = `[${idx+1}] ${name}: ✅ (位置のみ)`;
         showTyphoonStatus(statusLines.join('\n'));
       }
     }));
