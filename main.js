@@ -3863,4 +3863,149 @@ document.addEventListener('drop', e=>{
     if(e.key==='Enter')  document.getElementById('printOk').click();
     if(e.key==='Escape') document.getElementById('printCancel').click();
   });
+
+  /* ─── 台風情報（気象庁 BOSAI API） ─── */
+  const TYPHOON_URL = 'https://www.jma.go.jp/bosai/typhoon/data/nowcast.json';
+  let typhoonLayers = [];
+  let typhoonOn = false;
+  let typhoonTimer = null;
+
+  function clearTyphoonLayers() {
+    typhoonLayers.forEach(l => map.removeLayer(l));
+    typhoonLayers = [];
+  }
+
+  async function fetchTyphoon() {
+    clearTyphoonLayers();
+    let data;
+    try {
+      const res = await fetch(TYPHOON_URL);
+      data = await res.json();
+    } catch(e) {
+      alert('台風情報の取得に失敗しました: ' + e.message);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      alert('現在、発生中の台風はありません。');
+      document.getElementById('btnTyphoon').classList.remove('hi');
+      typhoonOn = false;
+      clearInterval(typhoonTimer); typhoonTimer = null;
+      return;
+    }
+
+    data.forEach(typhoon => {
+      const name = typhoon.name || typhoon.number || '台風';
+      const current = typhoon.current;
+      if (!current) return;
+
+      const lat = current.lat;
+      const lng = current.lng;
+      if (lat == null || lng == null) return;
+
+      // 現在位置マーカー
+      const marker = L.circleMarker([lat, lng], {
+        radius: 10, color: '#cc0000', fillColor: '#ff4444',
+        fillOpacity: 0.9, weight: 2
+      }).bindPopup(
+        `<b>🌀 ${name}</b><br>` +
+        `中心気圧: ${current.pressure ?? '不明'} hPa<br>` +
+        `最大風速: ${current.wind_speed ?? '不明'} m/s<br>` +
+        `位置: ${lat.toFixed(1)}°N ${lng.toFixed(1)}°E`
+      );
+      marker.addTo(map);
+      typhoonLayers.push(marker);
+
+      // 暴風域
+      if (current.storm_radius) {
+        const sr = current.storm_radius;
+        const r = (sr.all ?? sr.ne ?? 0) * 1000;
+        if (r > 0) {
+          const storm = L.circle([lat, lng], {
+            radius: r, color: '#cc0000', fillColor: '#ff0000',
+            fillOpacity: 0.12, weight: 1.5, dashArray: '4,4'
+          }).bindTooltip('暴風域');
+          storm.addTo(map);
+          typhoonLayers.push(storm);
+        }
+      }
+
+      // 強風域
+      if (current.gale_radius) {
+        const gr = current.gale_radius;
+        const r = (gr.all ?? gr.ne ?? 0) * 1000;
+        if (r > 0) {
+          const gale = L.circle([lat, lng], {
+            radius: r, color: '#ff8800', fillColor: '#ffaa00',
+            fillOpacity: 0.08, weight: 1, dashArray: '6,4'
+          }).bindTooltip('強風域');
+          gale.addTo(map);
+          typhoonLayers.push(gale);
+        }
+      }
+
+      // 予報円と進路線
+      const forecasts = typhoon.forecasts ?? [];
+      const pathCoords = [[lat, lng]];
+      forecasts.forEach(fc => {
+        if (!fc.lat || !fc.lng) return;
+        pathCoords.push([fc.lat, fc.lng]);
+
+        // 予報円
+        const fcRadius = (fc.error_radius ?? 0) * 1000;
+        if (fcRadius > 0) {
+          const fcCircle = L.circle([fc.lat, fc.lng], {
+            radius: fcRadius, color: '#0066cc', fillColor: '#3399ff',
+            fillOpacity: 0.07, weight: 1
+          }).bindTooltip(`${fc.time ?? ''}予報`);
+          fcCircle.addTo(map);
+          typhoonLayers.push(fcCircle);
+        }
+
+        // 予報点
+        const fcDot = L.circleMarker([fc.lat, fc.lng], {
+          radius: 5, color: '#0066cc', fillColor: '#66aaff',
+          fillOpacity: 0.8, weight: 1.5
+        }).bindPopup(
+          `<b>${fc.time ?? '予報'}</b><br>` +
+          `中心気圧: ${fc.pressure ?? '不明'} hPa<br>` +
+          `最大風速: ${fc.wind_speed ?? '不明'} m/s`
+        );
+        fcDot.addTo(map);
+        typhoonLayers.push(fcDot);
+      });
+
+      // 進路線
+      if (pathCoords.length > 1) {
+        const path = L.polyline(pathCoords, {
+          color: '#0044aa', weight: 2, dashArray: '6,4', opacity: 0.8
+        });
+        path.addTo(map);
+        typhoonLayers.push(path);
+      }
+
+      // 現在位置にフィット
+      if (data.length === 1) map.panTo([lat, lng]);
+    });
+
+    if (typhoonLayers.length === 0) {
+      alert('表示できる台風データがありませんでした。');
+    }
+  }
+
+  document.getElementById('btnTyphoon').onclick = async () => {
+    if (typhoonOn) {
+      typhoonOn = false;
+      clearTyphoonLayers();
+      clearInterval(typhoonTimer); typhoonTimer = null;
+      document.getElementById('btnTyphoon').classList.remove('hi');
+    } else {
+      typhoonOn = true;
+      document.getElementById('btnTyphoon').classList.add('hi');
+      await fetchTyphoon();
+      // 10分ごとに自動更新
+      typhoonTimer = setInterval(fetchTyphoon, 10 * 60 * 1000);
+    }
+  };
+
 })();
