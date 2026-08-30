@@ -1,4 +1,4 @@
-const CACHE_VER = 'map-20260830m';
+const CACHE_VER = 'map-20260830n';
 const APP_CACHE  = CACHE_VER + '-app';
 const CDN_CACHE  = CACHE_VER + '-cdn';
 const TILE_CACHE = CACHE_VER + '-tiles';

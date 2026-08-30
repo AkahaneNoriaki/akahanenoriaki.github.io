@@ -3871,22 +3871,28 @@ document.addEventListener('drop', e=>{
   async function fetchTyphoonTracks(targets) {
     const rssUrl = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/RSS?eventtype=TC';
     let xml = null;
+    let fetchStatus = '';
     try {
       let r = await fetch(rssUrl, {cache:'no-store'}).catch(()=>null);
-      if (!r?.ok) r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`, {cache:'no-store'}).catch(()=>null);
+      fetchStatus = `direct:${r?.status??'err'}`;
+      if (!r?.ok) {
+        r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`, {cache:'no-store'}).catch(()=>null);
+        fetchStatus += ` proxy:${r?.status??'err'}`;
+      }
       if (r?.ok) xml = await r.text();
-    } catch {}
-    if (!xml) return;
+    } catch(e) { fetchStatus += ' ex:' + e.message; }
+
+    if (!xml) { alert('RSS取得失敗: ' + fetchStatus); return; }
+
+    alert(`RSS取得OK (${xml.length}文字)\n先頭:\n${xml.slice(0,300)}`);
 
     const doc = new DOMParser().parseFromString(xml, 'text/xml');
-    const items = [...doc.querySelectorAll('item')];
+    const items = [...(doc.getElementsByTagName('item') ?? [])];
+    if (items.length === 0) { alert('item 0件'); return; }
 
-    // デバッグ：最初のアイテムのタグ名一覧を alert で確認
-    if (items.length > 0) {
-      const tags = [...items[0].children].map(el => el.tagName).join(', ');
-      const sample = items[0].innerHTML.slice(0, 500);
-      alert(`RSS item[0] tags:\n${tags}\n\nsample:\n${sample}`);
-    }
+    const tags = [...items[0].children].map(el => el.tagName).join(', ');
+    const sample = items[0].innerHTML?.slice(0, 500) ?? items[0].outerHTML?.slice(0,500);
+    alert(`item[0] tags: ${tags}\n\n${sample}`);
   }
   let typhoonLayers = [];
   let typhoonOn = false;
