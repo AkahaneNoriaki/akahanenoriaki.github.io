@@ -3864,9 +3864,8 @@ document.addEventListener('drop', e=>{
     if(e.key==='Escape') document.getElementById('printCancel').click();
   });
 
-  /* ─── 台風情報（GDACS: EU/UN 災害情報API） ─── */
-  const GDACS_TC_URL = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventtype=TC';
-
+  /* ─── 台風情報（気象庁 BOSAI） ─── */
+  const JMA_TYPHOON_BASE = 'https://www.jma.go.jp/bosai/typhoon/';
 
   let typhoonLayers = [];
   let typhoonOn = false;
@@ -3877,27 +3876,63 @@ document.addEventListener('drop', e=>{
     typhoonLayers = [];
   }
 
-  // 気象庁 BOSAI 台風予想進路を取得して地図に描画
-  async function fetchJmaTracks() {
-    const BASE = 'https://www.jma.go.jp/bosai/typhoon/';
+  async function fetchTyphoon() {
+    clearTyphoonLayers();
+
     let tcList = [];
     try {
-      const r = await fetch(BASE + 'data/targetTc.json', {cache:'no-store'});
-      if (!r.ok) return;
+      const r = await fetch(JMA_TYPHOON_BASE + 'data/targetTc.json', {cache:'no-store'});
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       tcList = await r.json();
-    } catch { return; }
+    } catch(e) {
+      alert('台風情報の取得に失敗しました。\n' + e.message);
+      document.getElementById('btnTyphoon').classList.remove('hi');
+      typhoonOn = false;
+      return;
+    }
+
+    if (!tcList.length) {
+      alert('現在、発生中の台風はありません。');
+      document.getElementById('btnTyphoon').classList.remove('hi');
+      typhoonOn = false;
+      clearInterval(typhoonTimer); typhoonTimer = null;
+      return;
+    }
+
+    const allCenters = [];
 
     for (const tc of tcList) {
       let data;
       try {
-        const r = await fetch(BASE + `data/${tc.tropicalCyclone}/forecast.json`, {cache:'no-store'});
+        const r = await fetch(JMA_TYPHOON_BASE + `data/${tc.tropicalCyclone}/forecast.json`, {cache:'no-store'});
         if (!r.ok) continue;
         data = await r.json();
       } catch { continue; }
 
-      const analysis = data.find(d => d.part?.en === 'Analysis');
-      const forecasts = data.filter(d => typeof d.advancedHours === 'number' && d.advancedHours > 0);
+      const titlePart   = data.find(d => d.part === 'title');
+      const analysis    = data.find(d => d.part?.en === 'Analysis');
+      const forecasts   = data.filter(d => typeof d.advancedHours === 'number' && d.advancedHours > 0);
       if (!analysis) continue;
+
+      const nameJp = titlePart?.name?.jp ?? tc.tropicalCyclone;
+      const nameEn = titlePart?.name?.en ?? '';
+      const tcNum  = tc.typhoonNumber ?? '';
+
+      // 現在位置マーカー
+      if (analysis.center) {
+        const [lat, lng] = analysis.center;
+        allCenters.push([lat, lng]);
+        const marker = L.circleMarker([lat, lng], {
+          radius: 12, color:'#cc3300', fillColor:'#cc3300', fillOpacity:0.85, weight:2
+        }).bindPopup(
+          `<b>🌀 台風${tcNum}号 ${nameJp}（${nameEn}）</b><br>` +
+          `種別: ${tc.category ?? ''}<br>` +
+          `位置: ${lat.toFixed(1)}°N ${lng.toFixed(1)}°E<br>` +
+          `発表: ${titlePart?.issue?.JST?.slice(0,16).replace('T',' ') ?? ''}<br>` +
+          `<a href="https://www.jma.go.jp/bosai/typhoon/" target="_blank" rel="noopener">🔗 気象庁 台風情報</a>`
+        );
+        marker.addTo(map); typhoonLayers.push(marker);
+      }
 
       // 台風になる前の進路（灰色点線）
       if (analysis.track?.preTyphoon?.length >= 2) {
@@ -3909,20 +3944,19 @@ document.addEventListener('drop', e=>{
         const line = L.polyline(analysis.track.typhoon, {color:'#555', weight:2.5, opacity:0.85});
         line.addTo(map); typhoonLayers.push(line);
       }
-      // 現在の暴風警戒域
+      // 現在の暴風警戒域（赤円）
       if (analysis.galeWarningArea?.radius) {
         const [lat, lng] = analysis.galeWarningArea.center;
         const c = L.circle([lat, lng], {radius: analysis.galeWarningArea.radius, color:'#cc3300', weight:1.5, fillColor:'#cc3300', fillOpacity:0.12});
         c.addTo(map); typhoonLayers.push(c);
       }
-      // 予想進路（現在位置→各予報点、青破線）
+      // 予想進路（青破線）＋予報円
       if (forecasts.length > 0 && analysis.center) {
         const foreCoords = [analysis.center, ...forecasts.map(f => f.center).filter(Boolean)];
         if (foreCoords.length >= 2) {
           const line = L.polyline(foreCoords, {color:'#0055cc', weight:2.5, dashArray:'8 5', opacity:0.9});
           line.addTo(map); typhoonLayers.push(line);
         }
-        // 予報円（確率70%）
         for (const fc of forecasts) {
           if (!fc.probabilityCircle?.radius || !fc.center) continue;
           const [lat, lng] = fc.center;
@@ -3931,89 +3965,9 @@ document.addEventListener('drop', e=>{
         }
       }
     }
-  }
 
-  async function fetchTyphoon() {
-    clearTyphoonLayers();
-
-    let events;
-    try {
-      const res = await fetch(GDACS_TC_URL, {cache: 'no-store'});
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      events = json.features ?? json.events ?? json ?? [];
-      if (!Array.isArray(events)) events = [];
-    } catch(e) {
-      try {
-        const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(GDACS_TC_URL)}`;
-        const res2 = await fetch(proxy, {cache: 'no-store'});
-        const json2 = await res2.json();
-        events = json2.features ?? json2.events ?? json2 ?? [];
-        if (!Array.isArray(events)) events = [];
-      } catch {
-        alert('台風情報の取得に失敗しました。\n' + e.message);
-        document.getElementById('btnTyphoon').classList.remove('hi');
-        typhoonOn = false;
-        return;
-      }
-    }
-
-    // eventtype=TC のみに絞る
-    const tcOnly = events.filter(f => {
-      const et = (f.properties?.eventtype ?? f.properties?.EventType ?? '').toString().toUpperCase();
-      return et === 'TC';
-    });
-    const tcEvents = tcOnly.length > 0 ? tcOnly : events;
-
-    if (tcEvents.length === 0) {
-      alert('現在、発生中の台風はありません。');
-      document.getElementById('btnTyphoon').classList.remove('hi');
-      typhoonOn = false;
-      clearInterval(typhoonTimer); typhoonTimer = null;
-      return;
-    }
-
-    // 西太平洋域（lng 100〜180, lat 0〜50）に絞る
-    const wPacific = tcEvents.filter(f => {
-      const c = f.geometry?.coordinates;
-      if (!c) return true;
-      return c[0] >= 100 && c[0] <= 180 && c[1] >= 0 && c[1] <= 50;
-    });
-    const targets = wPacific.length > 0 ? wPacific : tcEvents;
-
-    targets.forEach(f => {
-      const p = f.properties ?? {};
-      const coords = f.geometry?.coordinates;
-      if (!coords) return;
-      const [lng, lat] = coords;
-
-      const name = p.name ?? p.eventname ?? p.Name ?? '台風';
-      const alertLevel = p.alertlevel ?? p.alertLevel ?? '';
-      const wind = p.maxwind ?? p.MaxWind ?? p.wind ?? '不明';
-      const eventid = p.eventid ?? p.EventID ?? '';
-      const color = alertLevel === 'Red' ? '#cc0000' : alertLevel === 'Orange' ? '#ff8800' : '#0066cc';
-
-      const marker = L.circleMarker([lat, lng], {
-        radius: 13, color, fillColor: color, fillOpacity: 0.85, weight: 2
-      }).bindPopup(
-        `<b>🌀 ${name}</b><br>` +
-        `警戒レベル: ${alertLevel || '不明'}<br>` +
-        `最大風速: ${wind} kt<br>` +
-        `位置: ${lat.toFixed(1)}°N ${lng.toFixed(1)}°E<br>` +
-        `<a href="https://www.jma.go.jp/bosai/typhoon/" target="_blank" rel="noopener">🔗 気象庁 台風情報（予想進路）</a><br>` +
-        `<a href="https://www.gpvweather.com/typmodel_ecmwf_ens.php?z=3&ln=${lng.toFixed(0)}&la=${lat.toFixed(0)}" target="_blank" rel="noopener">🔗 アンサンブル進路（ECMWF）</a><br>` +
-        (eventid ? `<a href="https://www.gdacs.org/documentmaps_IP.aspx?eventid=${eventid}&eventtype=TC" target="_blank" rel="noopener">🔗 GDACS 進路地図</a>` : '')
-      );
-      marker.addTo(map);
-      typhoonLayers.push(marker);
-    });
-
-    const allLatLngs = targets.map(f => f.geometry?.coordinates).filter(Boolean).map(([x, y]) => [y, x]);
-    if (allLatLngs.length === 1) map.setView(allLatLngs[0], 5);
-    else if (allLatLngs.length > 1) map.fitBounds(L.latLngBounds(allLatLngs), {padding: [60, 60], maxZoom: 6});
-
-    // 気象庁 BOSAI から予想進路を重ねて描画
-    await fetchJmaTracks();
+    if (allCenters.length === 1) map.setView(allCenters[0], 5);
+    else if (allCenters.length > 1) map.fitBounds(L.latLngBounds(allCenters), {padding:[80,80], maxZoom:6});
   }
 
   document.getElementById('btnTyphoon').onclick = async () => {
