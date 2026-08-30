@@ -3948,7 +3948,6 @@ document.addEventListener('drop', e=>{
       );
       marker.addTo(map);
       typhoonLayers.push(marker);
-      map.panTo([lat, lng]);
 
       // 進路データ取得（GDACS polygons API）
       if (!eventid) return;
@@ -4018,6 +4017,18 @@ document.addEventListener('drop', e=>{
 
     if (targets.length > 0 && typhoonLayers.length === 0) {
       alert('台風データを取得しましたが表示できる座標がありませんでした。');
+      return;
+    }
+
+    // 全台風が見えるようにズームを合わせる
+    const allLatLngs = targets
+      .map(f => f.geometry?.coordinates)
+      .filter(Boolean)
+      .map(([x, y]) => [y, x]);
+    if (allLatLngs.length === 1) {
+      map.setView(allLatLngs[0], 5);
+    } else if (allLatLngs.length > 1) {
+      map.fitBounds(L.latLngBounds(allLatLngs), {padding: [60, 60], maxZoom: 6});
     }
   }
 
