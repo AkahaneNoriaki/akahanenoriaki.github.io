@@ -3879,27 +3879,32 @@ document.addEventListener('drop', e=>{
   async function fetchTyphoon() {
     clearTyphoonLayers();
     let data;
-    // 直接fetch → プロキシ複数 の順で試行
-    const typhoonProxies = [
-      u => u,
-      u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-      u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-      u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-      u => `https://thingproxy.freeboard.io/fetch/${u}`,
+    // JMA直接fetch（他のJMA APIと同様に直接アクセス）
+    // 複数URLを試行してデバッグ
+    const URLS_TO_TRY = [
+      'https://www.jma.go.jp/bosai/typhoon/data/nowcast.json',
+      'https://www.jma.go.jp/bosai/typhoon/data/',
     ];
-    let lastErr = '';
-    for (const px of typhoonProxies) {
+    let debugLog = [];
+    for (const url of URLS_TO_TRY) {
       try {
-        const res = await fetch(px(TYPHOON_URL));
-        if (!res.ok) { lastErr = `HTTP ${res.status}`; continue; }
+        const res = await fetch(url, {cache:'no-store'});
+        const status = res.status;
         const text = await res.text();
-        if (!text || text.trim()[0] !== '[' && text.trim()[0] !== '{') { lastErr = '不正なレスポンス'; continue; }
-        data = JSON.parse(text);
-        break;
-      } catch(e) { lastErr = e.message; }
+        const preview = text.slice(0, 120);
+        debugLog.push(`${url}\n→ HTTP ${status}, ${text.length}bytes, preview: ${preview}`);
+        if (res.ok && (text.trim()[0]==='[' || text.trim()[0]==='{')) {
+          data = JSON.parse(text);
+          break;
+        }
+      } catch(e) {
+        debugLog.push(`${url}\n→ Error: ${e.message}`);
+      }
     }
     if (!data) {
-      alert('台風情報の取得に失敗しました: ' + lastErr);
+      alert('台風情報デバッグ:\n' + debugLog.join('\n\n'));
+      document.getElementById('btnTyphoon').classList.remove('hi');
+      typhoonOn = false;
       return;
     }
 
