@@ -4071,6 +4071,16 @@ document.addEventListener('drop', e=>{
                   cone.addTo(map); typhoonLayers.push(cone);
                 }
               });
+              // idx===0 のときだけ geteventresources の中身を確認
+              if (idx === 0 && lineCount === 0) {
+                const resUrl = episodeid
+                  ? `https://www.gdacs.org/gdacsapi/api/events/geteventresources?eventtype=TC&eventid=${eventid}&episodeid=${episodeid}`
+                  : `https://www.gdacs.org/gdacsapi/api/events/geteventresources?eventtype=TC&eventid=${eventid}`;
+                let rr = await fetch(resUrl, {cache:'no-store'}).catch(()=>null);
+                if (!rr?.ok) rr = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(resUrl)}`,{cache:'no-store'}).catch(()=>null);
+                const rt = rr?.ok ? await rr.text() : '❌取得失敗';
+                statusLines[0] += `\nres: ${rt.slice(0,300).replace(/\s+/g,' ')}`;
+              }
               statusLines[lineIdx] = `[${idx+1}] ${name}: ✅ L=${lineCount} P=${pointCount} poly=${polyCount}`;
             } else {
               // geteventresources でトラックファイル一覧を試みる
