@@ -3879,13 +3879,27 @@ document.addEventListener('drop', e=>{
   async function fetchTyphoon() {
     clearTyphoonLayers();
     let data;
-    try {
-      // CORSプロキシ経由でフェッチ、テキストで取得してJSONパース
-      const res = await rpFetch(TYPHOON_URL);
-      const text = await res.text();
-      data = JSON.parse(text);
-    } catch(e) {
-      alert('台風情報の取得に失敗しました: ' + e.message);
+    // 直接fetch → プロキシ複数 の順で試行
+    const typhoonProxies = [
+      u => u,
+      u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+      u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+      u => `https://thingproxy.freeboard.io/fetch/${u}`,
+    ];
+    let lastErr = '';
+    for (const px of typhoonProxies) {
+      try {
+        const res = await fetch(px(TYPHOON_URL));
+        if (!res.ok) { lastErr = `HTTP ${res.status}`; continue; }
+        const text = await res.text();
+        if (!text || text.trim()[0] !== '[' && text.trim()[0] !== '{') { lastErr = '不正なレスポンス'; continue; }
+        data = JSON.parse(text);
+        break;
+      } catch(e) { lastErr = e.message; }
+    }
+    if (!data) {
+      alert('台風情報の取得に失敗しました: ' + lastErr);
       return;
     }
 
