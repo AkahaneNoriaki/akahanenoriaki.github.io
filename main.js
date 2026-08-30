@@ -3867,25 +3867,35 @@ document.addEventListener('drop', e=>{
   /* ─── 台風情報（GDACS: EU/UN 災害情報API） ─── */
   const GDACS_TC_URL = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventtype=TC';
 
-  // documentmaps ページから使われているデータURLを探す（1回だけ実行）
-  async function probeGdacsMapPage(eventid, episodeid) {
-    const pageUrl = `https://www.gdacs.org/documentmaps_IP.aspx?eventid=${eventid}&eventtype=TC`;
-    let html = null;
-    try {
-      let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(pageUrl)}`, {cache:'no-store'}).catch(()=>null);
-      if (!r?.ok) r = await fetch(`https://corsproxy.io/?${encodeURIComponent(pageUrl)}`, {cache:'no-store'}).catch(()=>null);
-      if (r?.ok) html = await r.text();
-    } catch {}
-    if (!html) return null;
-
-    // URLっぽい文字列を抽出（gdacs.org ドメインのもの）
-    const matches = [...html.matchAll(/["'`](https?:\/\/(?:www\.gdacs\.org|geoserver\.gdacs\.org)[^"'`\s]{5,}["'`])/g)]
-      .map(m => m[1]);
-    // あわせて相対パスで .json/.geojson/.aspx を含むもの
-    const rel = [...html.matchAll(/["'`](\/[^"'`\s]*(?:geojson|track|polygon|\.json|GeoJSON)[^"'`\s]*)["'`]/gi)]
-      .map(m => 'https://www.gdacs.org' + m[1]);
-
-    return [...new Set([...matches, ...rel])].slice(0, 20);
+  // GDACS からアクセスできるデータ URL を探す（デバッグ用）
+  async function probeGdacsUrls(eventid, episodeid) {
+    const candidates = [
+      // RSS フィード（トラックデータが含まれる可能性）
+      `https://www.gdacs.org/gdacsapi/api/events/geteventlist/RSS?eventtype=TC`,
+      // 各種トラック候補
+      `https://www.gdacs.org/Cyclones/TrackForMap.aspx?eventid=${eventid}&episodeid=${episodeid}`,
+      `https://www.gdacs.org/Cyclones/TC_GeoJSON.aspx?eventid=${eventid}&episodeid=${episodeid}`,
+      `https://www.gdacs.org/gdacsapi/api/events/gettrack?eventtype=TC&eventid=${eventid}&episodeid=${episodeid}`,
+      `https://www.gdacs.org/gdacsapi/api/events/getGeoJSON?eventtype=TC&eventid=${eventid}&episodeid=${episodeid}`,
+      `https://geoserver.gdacs.org/geoserver/GDACS/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=GDACS:tc_track&outputFormat=application/json&CQL_FILTER=eventid=${eventid}`,
+      `https://www.gdacs.org/gdacsapi/api/polygons/getpolygons?eventtype=TC&eventid=${eventid}`,
+    ];
+    const results = [];
+    for (const url of candidates) {
+      // まず直接、次に allorigins 経由で試す
+      let r = await fetch(url, {cache:'no-store'}).catch(()=>null);
+      if (!r?.ok) {
+        r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, {cache:'no-store'}).catch(()=>null);
+      }
+      const status = r ? r.status : 'err';
+      let preview = '';
+      if (r?.ok) {
+        const t = await r.text().catch(()=>'');
+        preview = t.slice(0,60).replace(/\s+/g,' ');
+      }
+      results.push(`${status} ${url.replace('https://','').slice(0,50)}\n  ${preview}`);
+    }
+    alert('GDACS URL probe:\n\n' + results.join('\n'));
   }
   let typhoonLayers = [];
   let typhoonOn = false;
@@ -3974,25 +3984,11 @@ document.addEventListener('drop', e=>{
     if (allLatLngs.length === 1) map.setView(allLatLngs[0], 5);
     else if (allLatLngs.length > 1) map.fitBounds(L.latLngBounds(allLatLngs), {padding: [60, 60], maxZoom: 6});
 
-    // 最初の TC の documentmaps ページからデータ URL を探す（デバッグ用・1回のみ）
+    // デバッグ：最初の TC の各種 URL が通るか確認
     const firstP = targets[0]?.properties ?? {};
     const firstId = firstP.eventid ?? firstP.EventID ?? '';
     const firstEp = firstP.episodeid ?? firstP.EpisodeID ?? '';
-    if (firstId) {
-      probeGdacsMapPage(firstId, firstEp).then(urls => {
-        if (!urls?.length) return;
-        // 結果を最初のマーカーのポップアップに追加
-        const firstMarker = typhoonLayers[0];
-        if (firstMarker?.getPopup) {
-          const cur = firstMarker.getPopup().getContent();
-          firstMarker.getPopup().setContent(
-            cur + `<hr><small><b>probe URLs (${urls.length}):</b><br>` +
-            urls.map(u => `<a href="${u}" target="_blank">${u.replace('https://','').slice(0,60)}</a>`).join('<br>') +
-            '</small>'
-          );
-        }
-      });
-    }
+    if (firstId) probeGdacsUrls(firstId, firstEp);
   }
 
   document.getElementById('btnTyphoon').onclick = async () => {
