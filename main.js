@@ -3950,13 +3950,25 @@ document.addEventListener('drop', e=>{
       typhoonLayers.push(marker);
 
       // 進路データ取得（GDACS polygons API）
-      if (!eventid) return;
+      console.log('[Typhoon] eventid:', eventid, 'episodeid:', episodeid, 'props:', JSON.stringify(p).slice(0,300));
+      if (!eventid) { console.warn('[Typhoon] eventid missing'); return; }
       try {
-        const trackUrl = `https://www.gdacs.org/gdacsapi/api/polygons/getpolygons?eventtype=TC&eventid=${eventid}&episodeid=${episodeid}`;
-        const res = await fetch(trackUrl, {cache: 'no-store'});
-        if (!res.ok) return;
-        const gj = await res.json();
-        if (!gj?.features) return;
+        // episodeidがない場合はパラメータを省略して試行
+        const trackUrl = episodeid
+          ? `https://www.gdacs.org/gdacsapi/api/polygons/getpolygons?eventtype=TC&eventid=${eventid}&episodeid=${episodeid}`
+          : `https://www.gdacs.org/gdacsapi/api/polygons/getpolygons?eventtype=TC&eventid=${eventid}`;
+        console.log('[Typhoon] fetching track:', trackUrl);
+        let res = await fetch(trackUrl, {cache: 'no-store'}).catch(() => null);
+        // 直接fetchがCORS失敗した場合はプロキシ経由
+        if (!res || !res.ok) {
+          console.warn('[Typhoon] direct track fetch failed, trying proxy. status:', res?.status);
+          res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(trackUrl)}`, {cache:'no-store'});
+        }
+        if (!res.ok) { console.warn('[Typhoon] track fetch failed:', res.status); return; }
+        const text = await res.text();
+        console.log('[Typhoon] track response preview:', text.slice(0, 200));
+        const gj = JSON.parse(text);
+        if (!gj?.features) { console.warn('[Typhoon] no features in track response'); return; }
 
         gj.features.forEach(feat => {
           const fp = feat.properties ?? {};
