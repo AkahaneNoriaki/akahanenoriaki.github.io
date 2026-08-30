@@ -4028,7 +4028,10 @@ document.addEventListener('drop', e=>{
         try { gj = JSON.parse(text); } catch { gj = null; }
 
         if (!gj?.features?.length) {
-          statusLines[statusLines.length-1] = `  ⚠️ 進路: featuresなし (${text.slice(0,80).replace(/\n/g,' ')})`;
+          // レスポンスの構造を表示してデバッグ
+          const keys = gj ? Object.keys(gj).join(',') : 'null';
+          const preview = text.slice(0, 120).replace(/\s+/g, ' ');
+          statusLines[statusLines.length-1] = `  ⚠️ features無 keys=[${keys}]\n    ${preview}`;
           showTyphoonStatus(statusLines.join('\n'));
           return;
         }
