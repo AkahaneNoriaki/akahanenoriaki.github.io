@@ -3879,17 +3879,24 @@ document.addEventListener('drop', e=>{
 
   // 気象庁 BOSAI 台風予想進路を取得して地図に描画
   async function fetchJmaTracks() {
-    const JMA_INDEX = 'https://www.jma.go.jp/bosai/typhoon/data/index.json';
-    let ids = [];
-    try {
-      const r = await fetch(JMA_INDEX, {cache:'no-store'});
-      if (!r.ok) throw new Error(`index HTTP ${r.status}`);
-      ids = await r.json();
-      alert('JMA index OK: ' + JSON.stringify(ids));
-    } catch(e) {
-      alert('JMA index 失敗: ' + e.message);
-      return;
+    // 正しいエンドポイントを探す
+    const probeUrls = [
+      'https://www.jma.go.jp/bosai/typhoon/data/list.json',
+      'https://www.jma.go.jp/bosai/typhoon/data/active.json',
+      'https://www.jma.go.jp/bosai/typhoon/data/tc.json',
+      'https://www.jma.go.jp/bosai/typhoon/data/typhoon_list.json',
+      'https://www.jma.go.jp/bosai/typhoon/data/current.json',
+      'https://www.jma.go.jp/bosai/typhoon/data/forecast.json',
+    ];
+    const results = [];
+    for (const u of probeUrls) {
+      const r = await fetch(u, {cache:'no-store'}).catch(e => ({ok:false, status:'err:'+e.message}));
+      results.push(`${r.status} ${u.replace('https://www.jma.go.jp/bosai/typhoon/data/','')}`);
     }
+    alert('JMA probe:\n' + results.join('\n'));
+    return; // プローブ中は進路描画スキップ
+
+    let ids = [];
 
     for (const id of ids) {
       let track;
