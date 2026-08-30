@@ -3867,33 +3867,6 @@ document.addEventListener('drop', e=>{
   /* ─── 台風情報（GDACS: EU/UN 災害情報API） ─── */
   const GDACS_TC_URL = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventtype=TC';
 
-  // GDACS RSS から台風進路データを抽出
-  async function fetchTyphoonTracks(targets) {
-    const rssUrl = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/RSS?eventtype=TC';
-    let xml = null;
-    let fetchStatus = '';
-    try {
-      let r = await fetch(rssUrl, {cache:'no-store'}).catch(()=>null);
-      fetchStatus = `direct:${r?.status??'err'}`;
-      if (!r?.ok) {
-        r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`, {cache:'no-store'}).catch(()=>null);
-        fetchStatus += ` proxy:${r?.status??'err'}`;
-      }
-      if (r?.ok) xml = await r.text();
-    } catch(e) { fetchStatus += ' ex:' + e.message; }
-
-    if (!xml) { alert('RSS取得失敗: ' + fetchStatus); return; }
-
-    alert(`RSS取得OK (${xml.length}文字)\n先頭:\n${xml.slice(0,300)}`);
-
-    const doc = new DOMParser().parseFromString(xml, 'text/xml');
-    const items = [...(doc.getElementsByTagName('item') ?? [])];
-    if (items.length === 0) { alert('item 0件'); return; }
-
-    const tags = [...items[0].children].map(el => el.tagName).join(', ');
-    const sample = items[0].innerHTML?.slice(0, 500) ?? items[0].outerHTML?.slice(0,500);
-    alert(`item[0] tags: ${tags}\n\n${sample}`);
-  }
   let typhoonLayers = [];
   let typhoonOn = false;
   let typhoonTimer = null;
@@ -3971,7 +3944,7 @@ document.addEventListener('drop', e=>{
         `最大風速: ${wind} kt<br>` +
         `位置: ${lat.toFixed(1)}°N ${lng.toFixed(1)}°E<br>` +
         `<a href="https://www.jma.go.jp/bosai/typhoon/" target="_blank" rel="noopener">🔗 気象庁 台風情報（予想進路）</a><br>` +
-        (eventid ? `<a href="https://www.gdacs.org/report.aspx?eventtype=TC&eventid=${eventid}" target="_blank" rel="noopener">🔗 GDACS 詳細情報</a>` : '')
+        (eventid ? `<a href="https://www.gdacs.org/documentmaps_IP.aspx?eventid=${eventid}&eventtype=TC" target="_blank" rel="noopener">🔗 GDACS 進路地図</a>` : '')
       );
       marker.addTo(map);
       typhoonLayers.push(marker);
@@ -3981,8 +3954,6 @@ document.addEventListener('drop', e=>{
     if (allLatLngs.length === 1) map.setView(allLatLngs[0], 5);
     else if (allLatLngs.length > 1) map.fitBounds(L.latLngBounds(allLatLngs), {padding: [60, 60], maxZoom: 6});
 
-    // RSS から進路データを取得試行
-    fetchTyphoonTracks(targets);
   }
 
   document.getElementById('btnTyphoon').onclick = async () => {
