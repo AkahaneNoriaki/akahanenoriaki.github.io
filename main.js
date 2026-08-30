@@ -3865,38 +3865,11 @@ document.addEventListener('drop', e=>{
   });
 
   /* ─── 台風情報（GDACS: EU/UN 災害情報API） ─── */
+  // 現在位置マーカーを表示。予想進路はポップアップのリンクから確認。
   const GDACS_TC_URL = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventtype=TC';
   let typhoonLayers = [];
   let typhoonOn = false;
   let typhoonTimer = null;
-  let typhoonStatusTimer = null;
-
-  // 画面内ステータス表示（Safari Web Inspector不要でデバッグ可能）
-  const typhoonStatusEl = (() => {
-    const el = document.createElement('div');
-    el.id = 'typhoonStatusPanel';
-    Object.assign(el.style, {
-      position: 'fixed', bottom: '80px', right: '10px',
-      background: 'rgba(0,0,0,0.82)', color: '#fff',
-      padding: '10px 14px', borderRadius: '8px',
-      fontSize: '12px', lineHeight: '1.6', maxWidth: '320px',
-      display: 'none', zIndex: '9999', whiteSpace: 'pre-wrap',
-      fontFamily: 'monospace', boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
-    });
-    document.body.appendChild(el);
-    return el;
-  })();
-
-  function showTyphoonStatus(msg, autohide = false) {
-    clearTimeout(typhoonStatusTimer);
-    typhoonStatusEl.textContent = msg;
-    typhoonStatusEl.style.display = 'block';
-    if (autohide) typhoonStatusTimer = setTimeout(() => { typhoonStatusEl.style.display = 'none'; }, 12000);
-  }
-  function hideTyphoonStatus() {
-    clearTimeout(typhoonStatusTimer);
-    typhoonStatusEl.style.display = 'none';
-  }
 
   function clearTyphoonLayers() {
     typhoonLayers.forEach(l => map.removeLayer(l));
@@ -3905,10 +3878,8 @@ document.addEventListener('drop', e=>{
 
   async function fetchTyphoon() {
     clearTyphoonLayers();
-    showTyphoonStatus('🌀 台風データ取得中...');
 
     let events;
-    let dataSource = '直接接続';
     try {
       const res = await fetch(GDACS_TC_URL, {cache: 'no-store'});
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -3917,223 +3888,77 @@ document.addEventListener('drop', e=>{
       if (!Array.isArray(events)) events = [];
     } catch(e) {
       try {
-        dataSource = 'プロキシ経由';
         const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(GDACS_TC_URL)}`;
         const res2 = await fetch(proxy, {cache: 'no-store'});
         const json2 = await res2.json();
         events = json2.features ?? json2.events ?? json2 ?? [];
         if (!Array.isArray(events)) events = [];
-      } catch(e2) {
-        showTyphoonStatus(`❌ 取得失敗\n${e.message}`, true);
+      } catch {
+        alert('台風情報の取得に失敗しました。\n' + e.message);
         document.getElementById('btnTyphoon').classList.remove('hi');
         typhoonOn = false;
         return;
       }
     }
 
-    // eventtype=TC のイベントだけに絞る（APIが全種類を返す場合がある）
+    // eventtype=TC のみに絞る
     const tcOnly = events.filter(f => {
       const et = (f.properties?.eventtype ?? f.properties?.EventType ?? '').toString().toUpperCase();
       return et === 'TC';
     });
-    const tcEvents = tcOnly.length > 0 ? tcOnly : events; // フィールドがない場合は全件
-
-    // 西太平洋域（lng 100〜180, lat 0〜50）
-    const wPacific = tcEvents.filter(f => {
-      const coords = f.geometry?.coordinates;
-      if (!coords) return true;
-      const [lng, lat] = coords;
-      return lng >= 100 && lng <= 180 && lat >= 0 && lat <= 50;
-    });
-
-    showTyphoonStatus(
-      `✅ GDACS接続: ${dataSource}\n` +
-      `全イベント: ${events.length}件 / TC: ${tcEvents.length}件 / 日本近海: ${wPacific.length}件`
-    );
+    const tcEvents = tcOnly.length > 0 ? tcOnly : events;
 
     if (tcEvents.length === 0) {
-      showTyphoonStatus('✅ 現在、発生中の台風はありません。', true);
+      alert('現在、発生中の台風はありません。');
       document.getElementById('btnTyphoon').classList.remove('hi');
       typhoonOn = false;
       clearInterval(typhoonTimer); typhoonTimer = null;
       return;
     }
 
+    // 西太平洋域（lng 100〜180, lat 0〜50）に絞る
+    const wPacific = tcEvents.filter(f => {
+      const c = f.geometry?.coordinates;
+      if (!c) return true;
+      return c[0] >= 100 && c[0] <= 180 && c[1] >= 0 && c[1] <= 50;
+    });
     const targets = wPacific.length > 0 ? wPacific : tcEvents;
 
-    // 各台風に固定インデックスを割り当て（並列更新の競合を防ぐ）
-    const statusLines = [
-      `✅ ${dataSource} / TC: ${tcEvents.length}件 / 表示: ${targets.length}件`,
-      ...targets.map((f, i) => {
-        const p = f.properties ?? {};
-        const name = p.name ?? p.eventname ?? '台風';
-        return `[${i+1}] ${name} 読込中...`;
-      })
-    ];
-    showTyphoonStatus(statusLines.join('\n'));
-
-    await Promise.allSettled(targets.map(async (f, idx) => {
-      const lineIdx = idx + 1; // この台風専用の行
+    targets.forEach(f => {
       const p = f.properties ?? {};
       const coords = f.geometry?.coordinates;
-      if (!coords) {
-        statusLines[lineIdx] = `[${idx+1}] 座標なし`;
-        showTyphoonStatus(statusLines.join('\n'));
-        return;
-      }
+      if (!coords) return;
       const [lng, lat] = coords;
 
       const name = p.name ?? p.eventname ?? p.Name ?? '台風';
       const alertLevel = p.alertlevel ?? p.alertLevel ?? '';
       const wind = p.maxwind ?? p.MaxWind ?? p.wind ?? '不明';
-      const color = alertLevel === 'Red' ? '#cc0000' : alertLevel === 'Orange' ? '#ff8800' : '#0066cc';
       const eventid = p.eventid ?? p.EventID ?? '';
-      const episodeid = p.episodeid ?? p.EpisodeID ?? '';
+      const color = alertLevel === 'Red' ? '#cc0000' : alertLevel === 'Orange' ? '#ff8800' : '#0066cc';
 
       const marker = L.circleMarker([lat, lng], {
-        radius: 12, color, fillColor: color,
-        fillOpacity: 0.85, weight: 2
+        radius: 13, color, fillColor: color, fillOpacity: 0.85, weight: 2
       }).bindPopup(
         `<b>🌀 ${name}</b><br>` +
         `警戒レベル: ${alertLevel || '不明'}<br>` +
         `最大風速: ${wind} kt<br>` +
         `位置: ${lat.toFixed(1)}°N ${lng.toFixed(1)}°E<br>` +
-        `<a href="https://www.gdacs.org/report.aspx?eventtype=TC&eventid=${eventid}" target="_blank" rel="noopener">詳細情報 →</a>`
+        `<a href="https://www.jma.go.jp/bosai/typhoon/" target="_blank" rel="noopener">🔗 気象庁 台風情報（予想進路）</a><br>` +
+        (eventid ? `<a href="https://www.gdacs.org/report.aspx?eventtype=TC&eventid=${eventid}" target="_blank" rel="noopener">🔗 GDACS 詳細情報</a>` : '')
       );
       marker.addTo(map);
       typhoonLayers.push(marker);
+    });
 
-      // 進路データ（geteventdata エンドポイント）
-      if (eventid) {
-        try {
-          const dataUrl = episodeid
-            ? `https://www.gdacs.org/gdacsapi/api/events/geteventdata?eventtype=TC&eventid=${eventid}&episodeid=${episodeid}`
-            : `https://www.gdacs.org/gdacsapi/api/events/geteventdata?eventtype=TC&eventid=${eventid}`;
-
-          statusLines[lineIdx] = `[${idx+1}] ${name}: 進路取得中...`;
-          showTyphoonStatus(statusLines.join('\n'));
-
-          let res = await fetch(dataUrl, {cache: 'no-store'}).catch(() => null);
-          if (!res?.ok) res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(dataUrl)}`, {cache:'no-store'}).catch(() => null);
-
-          if (res?.ok) {
-            const text = await res.text();
-            let gj;
-            try { gj = JSON.parse(text); } catch { gj = null; }
-
-            // features 配列を持つ GeoJSON なら描画
-            const features = gj?.features ?? (Array.isArray(gj) ? gj : null);
-            // 単一 Feature の場合も配列として扱う
-            const singleFeature = (!features && gj?.type === 'Feature') ? [gj] : null;
-            const allFeatures = features ?? singleFeature;
-
-            if (allFeatures?.length) {
-              let lineCount = 0, pointCount = 0, polyCount = 0;
-              allFeatures.forEach(feat => {
-                if (!feat?.geometry) return;
-                const fp = feat.properties ?? {};
-                const geomType = feat.geometry.type;
-                const trackType = fp.tracktype ?? fp.Type ?? fp.type ?? '';
-
-                if (geomType === 'LineString' || geomType === 'MultiLineString') {
-                  lineCount++;
-                  const isForecast = /forecast|predicted|future/i.test(trackType) || fp.isForecast;
-                  const coords2 = geomType === 'LineString'
-                    ? feat.geometry.coordinates
-                    : feat.geometry.coordinates.flat();
-                  const line = L.polyline(coords2.map(([x,y]) => [y,x]), {
-                    color: isForecast ? '#ff6600' : '#333333',
-                    weight: isForecast ? 2 : 3,
-                    dashArray: isForecast ? '8,5' : null,
-                    opacity: 0.85
-                  });
-                  line.addTo(map); typhoonLayers.push(line);
-                } else if (geomType === 'Point') {
-                  pointCount++;
-                  const [px, py] = feat.geometry.coordinates;
-                  const isFc = /forecast|predicted|future/i.test(trackType) || fp.isForecast;
-                  const dot = L.circleMarker([py, px], {
-                    radius: isFc ? 5 : 4, color: isFc ? '#ff6600' : '#555',
-                    fillColor: isFc ? '#ffaa44' : '#888', fillOpacity: 0.8, weight: 1.5
-                  });
-                  if (fp.class || fp.windspeed || fp.datetime) {
-                    dot.bindTooltip([fp.datetime ?? '', fp.class ?? '', fp.windspeed ? `${fp.windspeed}kt` : ''].filter(Boolean).join(' '));
-                  }
-                  dot.addTo(map); typhoonLayers.push(dot);
-                } else if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
-                  polyCount++;
-                  const rawRings = geomType === 'Polygon'
-                    ? [feat.geometry.coordinates[0]]
-                    : feat.geometry.coordinates.map(poly => poly[0]);
-                  const cone = L.polygon(rawRings.map(ring => ring.map(([x,y]) => [y,x])), {
-                    color: '#ff6600', fillColor: '#ffaa00', fillOpacity: 0.10, weight: 1, dashArray: '5,4'
-                  }).bindTooltip('予報円');
-                  cone.addTo(map); typhoonLayers.push(cone);
-                }
-              });
-              // idx===0 のときだけ geteventresources の中身を確認
-              if (idx === 0 && lineCount === 0) {
-                const resUrl = episodeid
-                  ? `https://www.gdacs.org/gdacsapi/api/events/geteventresources?eventtype=TC&eventid=${eventid}&episodeid=${episodeid}`
-                  : `https://www.gdacs.org/gdacsapi/api/events/geteventresources?eventtype=TC&eventid=${eventid}`;
-                let rr = await fetch(resUrl, {cache:'no-store'}).catch(()=>null);
-                if (!rr?.ok) rr = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(resUrl)}`,{cache:'no-store'}).catch(()=>null);
-                const rt = rr?.ok ? await rr.text() : '❌取得失敗';
-                statusLines[0] += `\nres: ${rt.slice(0,300).replace(/\s+/g,' ')}`;
-              }
-              statusLines[lineIdx] = `[${idx+1}] ${name}: ✅ L=${lineCount} P=${pointCount} poly=${polyCount}`;
-            } else {
-              // geteventresources でトラックファイル一覧を試みる
-              const resUrl = episodeid
-                ? `https://www.gdacs.org/gdacsapi/api/events/geteventresources?eventtype=TC&eventid=${eventid}&episodeid=${episodeid}`
-                : `https://www.gdacs.org/gdacsapi/api/events/geteventresources?eventtype=TC&eventid=${eventid}`;
-              let res2 = await fetch(resUrl, {cache:'no-store'}).catch(() => null);
-              if (!res2?.ok) res2 = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(resUrl)}`, {cache:'no-store'}).catch(() => null);
-              if (res2?.ok) {
-                const t2 = await res2.text();
-                // レスポンス最初の200文字をステータスに表示
-                statusLines[lineIdx] = `[${idx+1}] ${name}: res=${t2.slice(0,200).replace(/\s+/g,' ')}`;
-              } else {
-                const keys = gj ? Object.keys(gj).join(',') : String(gj);
-                statusLines[lineIdx] = `[${idx+1}] ${name}: ⚠️ 進路なし geom=${gj?.geometry?.type}`;
-              }
-            }
-          } else {
-            statusLines[lineIdx] = `[${idx+1}] ${name}: ❌ HTTP ${res?.status ?? 'err'}`;
-          }
-        } catch(e) {
-          statusLines[lineIdx] = `[${idx+1}] ${name}: ❌ ${e.message.slice(0,30)}`;
-        }
-        showTyphoonStatus(statusLines.join('\n'));
-      } else {
-        statusLines[lineIdx] = `[${idx+1}] ${name}: ✅ (位置のみ)`;
-        showTyphoonStatus(statusLines.join('\n'));
-      }
-    }));
-
-    showTyphoonStatus(statusLines.join('\n'), true);
-
-    if (targets.length > 0 && typhoonLayers.length === 0) {
-      showTyphoonStatus('⚠️ 台風データは取得できましたが表示できる座標がありませんでした。', true);
-      return;
-    }
-
-    const allLatLngs = targets
-      .map(f => f.geometry?.coordinates)
-      .filter(Boolean)
-      .map(([x, y]) => [y, x]);
-    if (allLatLngs.length === 1) {
-      map.setView(allLatLngs[0], 5);
-    } else if (allLatLngs.length > 1) {
-      map.fitBounds(L.latLngBounds(allLatLngs), {padding: [60, 60], maxZoom: 6});
-    }
+    const allLatLngs = targets.map(f => f.geometry?.coordinates).filter(Boolean).map(([x, y]) => [y, x]);
+    if (allLatLngs.length === 1) map.setView(allLatLngs[0], 5);
+    else if (allLatLngs.length > 1) map.fitBounds(L.latLngBounds(allLatLngs), {padding: [60, 60], maxZoom: 6});
   }
 
   document.getElementById('btnTyphoon').onclick = async () => {
     if (typhoonOn) {
       typhoonOn = false;
       clearTyphoonLayers();
-      hideTyphoonStatus();
       clearInterval(typhoonTimer); typhoonTimer = null;
       document.getElementById('btnTyphoon').classList.remove('hi');
     } else {
