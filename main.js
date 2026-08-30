@@ -3879,12 +3879,13 @@ document.addEventListener('drop', e=>{
 
   // 気象庁 BOSAI 台風予想進路を取得して地図に描画
   async function fetchJmaTracks() {
-    // forecast.json の中身を全確認
+    // forecast.json の予報部分を確認（2000文字以降）
     const BASE = 'https://www.jma.go.jp/bosai/typhoon/';
     const r = await fetch(BASE + 'data/TC2625/forecast.json', {cache:'no-store'}).catch(()=>null);
     if (!r?.ok) { alert('取得失敗'); return; }
     const data = await r.json();
-    alert(JSON.stringify(data, null, 2).slice(0, 2000));
+    const full = JSON.stringify(data, null, 2);
+    alert(full.slice(2000, 4500));
     return;
 
     let ids = [];
