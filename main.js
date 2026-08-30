@@ -3877,41 +3877,66 @@ document.addEventListener('drop', e=>{
     typhoonLayers = [];
   }
 
-  async function probeStormAtlas() {
-    const results = [];
-    const pageUrl = 'https://stormatlasx.com/ja';
-    let html = '';
-    for (const proxy of [
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(pageUrl)}`,
-      `https://corsproxy.io/?${encodeURIComponent(pageUrl)}`,
-    ]) {
-      const r = await fetch(proxy, {cache:'no-store'}).catch(()=>null);
-      if (r?.ok) { html = await r.text(); break; }
+  // 気象庁 BOSAI 台風予想進路を取得して地図に描画
+  async function fetchJmaTracks() {
+    const JMA_INDEX = 'https://www.jma.go.jp/bosai/typhoon/data/index.json';
+    let ids = [];
+    try {
+      const r = await fetch(JMA_INDEX, {cache:'no-store'});
+      if (!r.ok) throw new Error(`index HTTP ${r.status}`);
+      ids = await r.json(); // ["T2411", ...]
+    } catch { return; } // JMA API が使えない場合は無視
+
+    for (const id of ids) {
+      let track;
+      try {
+        const r = await fetch(`https://www.jma.go.jp/bosai/typhoon/data/${id}.json`, {cache:'no-store'});
+        if (!r.ok) continue;
+        track = await r.json();
+      } catch { continue; }
+
+      const points = track.track ?? track.forecasts ?? [];
+      if (!points.length) continue;
+
+      const pastCoords = [], foreCoords = [];
+      points.forEach(pt => {
+        const c = pt.coordinate ?? pt.coord;
+        if (!c) return;
+        const ll = [c[1], c[0]];
+        if (pt.forecast) foreCoords.push(ll);
+        else pastCoords.push(ll);
+      });
+
+      // 過去進路（灰色実線）
+      if (pastCoords.length >= 2) {
+        const past = L.polyline(pastCoords, {color:'#888', weight:2, dashArray:null, opacity:0.8});
+        past.addTo(map);
+        typhoonLayers.push(past);
+      }
+      // 予想進路（青破線）
+      if (foreCoords.length >= 2) {
+        const fore = L.polyline(foreCoords, {color:'#0066cc', weight:2.5, dashArray:'6 4', opacity:0.9});
+        fore.addTo(map);
+        typhoonLayers.push(fore);
+      }
+
+      // 予報円（最大風速圏・暴風域）
+      points.filter(pt => pt.forecast).forEach(pt => {
+        const c = pt.coordinate ?? pt.coord;
+        if (!c) return;
+        const ll = [c[1], c[0]];
+        const storm = pt.storm ?? pt.stormRadius ?? 0;   // 暴風域半径(km)
+        const gale  = pt.gale  ?? pt.galeRadius  ?? 0;  // 強風域半径(km)
+        if (gale > 0) {
+          const gc = L.circle(ll, {radius: gale*1000, color:'#0066cc', weight:1, fillColor:'#0066cc', fillOpacity:0.06});
+          gc.addTo(map); typhoonLayers.push(gc);
+        }
+        if (storm > 0) {
+          const sc = L.circle(ll, {radius: storm*1000, color:'#cc3300', weight:1, fillColor:'#cc3300', fillOpacity:0.12});
+          sc.addTo(map); typhoonLayers.push(sc);
+        }
+      });
     }
-    if (html) {
-      const hits = [
-        ...[...html.matchAll(/["'`](https?:\/\/[^"'`\s<>]{10,})["'`]/g)].map(m=>m[1]),
-        ...[...html.matchAll(/["'`](\/(?:api|data|track|typhoon|storm|cyclone)[^"'`\s<>]*)["'`]/gi)].map(m=>'https://stormatlasx.com'+m[1]),
-        ...[...html.matchAll(/fetch\(["'`]([^"'`]+)["'`]/g)].map(m=>m[1]),
-      ];
-      const unique = [...new Set(hits)].filter(u => /json|api|track|storm|typhoon|cyclone|data/i.test(u)).slice(0,15);
-      if (unique.length) { alert('stormatlasx URLs:\n' + unique.join('\n')); return; }
-      alert('HTML取得OK、URLパターン見つからず\n先頭:\n' + html.slice(0,400));
-      return;
-    }
-    const candidates = [
-      'https://stormatlasx.com/api/v1/storms',
-      'https://stormatlasx.com/api/storms',
-      'https://stormatlasx.com/api/typhoon',
-      'https://stormatlasx.com/data/storms.json',
-      'https://api.stormatlasx.com/v1/storms',
-    ];
-    for (const url of candidates) {
-      let r = await fetch(url, {cache:'no-store'}).catch(()=>null);
-      if (!r?.ok) r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, {cache:'no-store'}).catch(()=>null);
-      results.push(`${r?.status??'err'} ${url.replace('https://','')}`);
-    }
-    alert('stormatlasx direct probe:\n' + results.join('\n'));
   }
 
   async function fetchTyphoon() {
@@ -3993,8 +4018,8 @@ document.addEventListener('drop', e=>{
     if (allLatLngs.length === 1) map.setView(allLatLngs[0], 5);
     else if (allLatLngs.length > 1) map.fitBounds(L.latLngBounds(allLatLngs), {padding: [60, 60], maxZoom: 6});
 
-    // stormatlasx.com 調査（台風情報が出たときに自動実行）
-    probeStormAtlas();
+    // 気象庁 BOSAI から予想進路を重ねて描画
+    await fetchJmaTracks();
   }
 
   document.getElementById('btnTyphoon').onclick = async () => {
