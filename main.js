@@ -3877,6 +3877,43 @@ document.addEventListener('drop', e=>{
     typhoonLayers = [];
   }
 
+  async function probeStormAtlas() {
+    const results = [];
+    const pageUrl = 'https://stormatlasx.com/ja';
+    let html = '';
+    for (const proxy of [
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(pageUrl)}`,
+      `https://corsproxy.io/?${encodeURIComponent(pageUrl)}`,
+    ]) {
+      const r = await fetch(proxy, {cache:'no-store'}).catch(()=>null);
+      if (r?.ok) { html = await r.text(); break; }
+    }
+    if (html) {
+      const hits = [
+        ...[...html.matchAll(/["'`](https?:\/\/[^"'`\s<>]{10,})["'`]/g)].map(m=>m[1]),
+        ...[...html.matchAll(/["'`](\/(?:api|data|track|typhoon|storm|cyclone)[^"'`\s<>]*)["'`]/gi)].map(m=>'https://stormatlasx.com'+m[1]),
+        ...[...html.matchAll(/fetch\(["'`]([^"'`]+)["'`]/g)].map(m=>m[1]),
+      ];
+      const unique = [...new Set(hits)].filter(u => /json|api|track|storm|typhoon|cyclone|data/i.test(u)).slice(0,15);
+      if (unique.length) { alert('stormatlasx URLs:\n' + unique.join('\n')); return; }
+      alert('HTML取得OK、URLパターン見つからず\n先頭:\n' + html.slice(0,400));
+      return;
+    }
+    const candidates = [
+      'https://stormatlasx.com/api/v1/storms',
+      'https://stormatlasx.com/api/storms',
+      'https://stormatlasx.com/api/typhoon',
+      'https://stormatlasx.com/data/storms.json',
+      'https://api.stormatlasx.com/v1/storms',
+    ];
+    for (const url of candidates) {
+      let r = await fetch(url, {cache:'no-store'}).catch(()=>null);
+      if (!r?.ok) r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, {cache:'no-store'}).catch(()=>null);
+      results.push(`${r?.status??'err'} ${url.replace('https://','')}`);
+    }
+    alert('stormatlasx direct probe:\n' + results.join('\n'));
+  }
+
   async function fetchTyphoon() {
     clearTyphoonLayers();
 
@@ -3956,6 +3993,8 @@ document.addEventListener('drop', e=>{
     if (allLatLngs.length === 1) map.setView(allLatLngs[0], 5);
     else if (allLatLngs.length > 1) map.fitBounds(L.latLngBounds(allLatLngs), {padding: [60, 60], maxZoom: 6});
 
+    // stormatlasx.com 調査（台風情報が出たときに自動実行）
+    probeStormAtlas();
   }
 
   document.getElementById('btnTyphoon').onclick = async () => {
