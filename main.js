@@ -3884,8 +3884,12 @@ document.addEventListener('drop', e=>{
     try {
       const r = await fetch(JMA_INDEX, {cache:'no-store'});
       if (!r.ok) throw new Error(`index HTTP ${r.status}`);
-      ids = await r.json(); // ["T2411", ...]
-    } catch { return; } // JMA API が使えない場合は無視
+      ids = await r.json();
+      alert('JMA index OK: ' + JSON.stringify(ids));
+    } catch(e) {
+      alert('JMA index 失敗: ' + e.message);
+      return;
+    }
 
     for (const id of ids) {
       let track;
