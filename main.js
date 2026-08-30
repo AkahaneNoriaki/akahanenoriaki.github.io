@@ -3865,6 +3865,7 @@ document.addEventListener('drop', e=>{
   });
 
   /* ─── 台風情報（気象庁 BOSAI API） ─── */
+  // JMA BOSAI nowcast.json: 各要素は { id, name_ja, name_en, current:{lat,lng,prs,wsp,storm,gale,...}, forecast:[...] }
   const TYPHOON_URL = 'https://www.jma.go.jp/bosai/typhoon/data/nowcast.json';
   let typhoonLayers = [];
   let typhoonOn = false;
@@ -3879,14 +3880,16 @@ document.addEventListener('drop', e=>{
     clearTyphoonLayers();
     let data;
     try {
-      const res = await fetch(TYPHOON_URL);
-      data = await res.json();
+      // CORSプロキシ経由でフェッチ、テキストで取得してJSONパース
+      const res = await rpFetch(TYPHOON_URL);
+      const text = await res.text();
+      data = JSON.parse(text);
     } catch(e) {
       alert('台風情報の取得に失敗しました: ' + e.message);
       return;
     }
 
-    if (!data || data.length === 0) {
+    if (!data || !Array.isArray(data) || data.length === 0) {
       alert('現在、発生中の台風はありません。');
       document.getElementById('btnTyphoon').classList.remove('hi');
       typhoonOn = false;
@@ -3895,7 +3898,10 @@ document.addEventListener('drop', e=>{
     }
 
     data.forEach(typhoon => {
-      const name = typhoon.name || typhoon.number || '台風';
+      // JMA APIのフィールド: name_ja / name_en / id
+      const nameJa = typhoon.name_ja || typhoon.name || '';
+      const nameEn = typhoon.name_en || '';
+      const displayName = nameJa ? `${nameJa}（${nameEn}）` : (nameEn || typhoon.id || '台風');
       const current = typhoon.current;
       if (!current) return;
 
@@ -3903,73 +3909,73 @@ document.addEventListener('drop', e=>{
       const lng = current.lng;
       if (lat == null || lng == null) return;
 
+      // JMA APIのフィールド: prs=気圧, wsp=最大風速
+      const prs = current.prs ?? current.pressure ?? '不明';
+      const wsp = current.wsp ?? current.wind_speed ?? '不明';
+
       // 現在位置マーカー
       const marker = L.circleMarker([lat, lng], {
         radius: 10, color: '#cc0000', fillColor: '#ff4444',
         fillOpacity: 0.9, weight: 2
       }).bindPopup(
-        `<b>🌀 ${name}</b><br>` +
-        `中心気圧: ${current.pressure ?? '不明'} hPa<br>` +
-        `最大風速: ${current.wind_speed ?? '不明'} m/s<br>` +
+        `<b>🌀 ${displayName}</b><br>` +
+        `中心気圧: ${prs} hPa<br>` +
+        `最大風速: ${wsp} m/s<br>` +
         `位置: ${lat.toFixed(1)}°N ${lng.toFixed(1)}°E`
       );
       marker.addTo(map);
       typhoonLayers.push(marker);
 
-      // 暴風域
-      if (current.storm_radius) {
-        const sr = current.storm_radius;
-        const r = (sr.all ?? sr.ne ?? 0) * 1000;
-        if (r > 0) {
-          const storm = L.circle([lat, lng], {
-            radius: r, color: '#cc0000', fillColor: '#ff0000',
-            fillOpacity: 0.12, weight: 1.5, dashArray: '4,4'
-          }).bindTooltip('暴風域');
-          storm.addTo(map);
-          typhoonLayers.push(storm);
-        }
+      // 暴風域 (storm): km単位の場合とnm単位の場合がある → km*1000でm変換
+      const stormKm = current.storm ?? current.storm_radius;
+      if (stormKm && stormKm > 0) {
+        const storm = L.circle([lat, lng], {
+          radius: stormKm * 1000, color: '#cc0000', fillColor: '#ff0000',
+          fillOpacity: 0.12, weight: 1.5, dashArray: '4,4'
+        }).bindTooltip('暴風域');
+        storm.addTo(map);
+        typhoonLayers.push(storm);
       }
 
-      // 強風域
-      if (current.gale_radius) {
-        const gr = current.gale_radius;
-        const r = (gr.all ?? gr.ne ?? 0) * 1000;
-        if (r > 0) {
-          const gale = L.circle([lat, lng], {
-            radius: r, color: '#ff8800', fillColor: '#ffaa00',
-            fillOpacity: 0.08, weight: 1, dashArray: '6,4'
-          }).bindTooltip('強風域');
-          gale.addTo(map);
-          typhoonLayers.push(gale);
-        }
+      // 強風域 (gale)
+      const galeKm = current.gale ?? current.gale_radius;
+      if (galeKm && galeKm > 0) {
+        const gale = L.circle([lat, lng], {
+          radius: galeKm * 1000, color: '#ff8800', fillColor: '#ffaa00',
+          fillOpacity: 0.08, weight: 1, dashArray: '6,4'
+        }).bindTooltip('強風域');
+        gale.addTo(map);
+        typhoonLayers.push(gale);
       }
 
       // 予報円と進路線
-      const forecasts = typhoon.forecasts ?? [];
+      const forecasts = typhoon.forecast ?? typhoon.forecasts ?? [];
       const pathCoords = [[lat, lng]];
       forecasts.forEach(fc => {
         if (!fc.lat || !fc.lng) return;
         pathCoords.push([fc.lat, fc.lng]);
 
-        // 予報円
-        const fcRadius = (fc.error_radius ?? 0) * 1000;
+        // 予報円 (error_radius or prob_circle in km)
+        const fcRadius = (fc.error_radius ?? fc.prob_circle ?? 0) * 1000;
         if (fcRadius > 0) {
           const fcCircle = L.circle([fc.lat, fc.lng], {
             radius: fcRadius, color: '#0066cc', fillColor: '#3399ff',
             fillOpacity: 0.07, weight: 1
-          }).bindTooltip(`${fc.time ?? ''}予報`);
+          }).bindTooltip(`${fc.time ?? fc.jst ?? ''}予報`);
           fcCircle.addTo(map);
           typhoonLayers.push(fcCircle);
         }
 
         // 予報点
+        const fcPrs = fc.prs ?? fc.pressure ?? '不明';
+        const fcWsp = fc.wsp ?? fc.wind_speed ?? '不明';
         const fcDot = L.circleMarker([fc.lat, fc.lng], {
           radius: 5, color: '#0066cc', fillColor: '#66aaff',
           fillOpacity: 0.8, weight: 1.5
         }).bindPopup(
-          `<b>${fc.time ?? '予報'}</b><br>` +
-          `中心気圧: ${fc.pressure ?? '不明'} hPa<br>` +
-          `最大風速: ${fc.wind_speed ?? '不明'} m/s`
+          `<b>${fc.time ?? fc.jst ?? '予報'}</b><br>` +
+          `中心気圧: ${fcPrs} hPa<br>` +
+          `最大風速: ${fcWsp} m/s`
         );
         fcDot.addTo(map);
         typhoonLayers.push(fcDot);
