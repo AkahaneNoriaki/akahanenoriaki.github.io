@@ -3867,27 +3867,6 @@ document.addEventListener('drop', e=>{
   /* ─── 台風情報（GDACS: EU/UN 災害情報API） ─── */
   const GDACS_TC_URL = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventtype=TC';
 
-  // gpvweather.com の台風アンサンブル進路データ URL を探す（1回だけ）
-  async function probeGpvWeather() {
-    const pageUrl = 'https://www.gpvweather.com/typmodel_ecmwf_ens.php?z=3&ln=170&la=30';
-    let html = '';
-    try {
-      let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(pageUrl)}`, {cache:'no-store'}).catch(()=>null);
-      if (!r?.ok) r = await fetch(`https://corsproxy.io/?${encodeURIComponent(pageUrl)}`, {cache:'no-store'}).catch(()=>null);
-      if (r?.ok) html = await r.text();
-    } catch {}
-    if (!html) { alert('gpvweather 取得失敗'); return; }
-
-    // JS 内の fetch/ajax/URL パターンを抽出
-    const hits = [
-      ...[...html.matchAll(/["'`](https?:\/\/[^"'`\s]{10,})["'`]/g)].map(m=>m[1]),
-      ...[...html.matchAll(/["'`](\/[^"'`\s]*(?:json|geojson|track|typhoon|typ|ecmwf)[^"'`\s]*)["'`]/gi)].map(m=>'https://www.gpvweather.com'+m[1]),
-      ...[...html.matchAll(/fetch\(["'`]([^"'`]+)["'`]/g)].map(m=>m[1]),
-      ...[...html.matchAll(/url\s*[:=]\s*["'`]([^"'`]+)["'`]/gi)].map(m=>m[1]),
-    ];
-    const unique = [...new Set(hits)].filter(u => /json|geojson|track|typ|ecmwf|api/i.test(u)).slice(0,15);
-    alert(`gpvweather data URLs (${unique.length}):\n${unique.join('\n') || '該当なし\n\nHTML先頭:\n'+html.slice(0,400)}`);
-  }
 
   let typhoonLayers = [];
   let typhoonOn = false;
@@ -3966,6 +3945,7 @@ document.addEventListener('drop', e=>{
         `最大風速: ${wind} kt<br>` +
         `位置: ${lat.toFixed(1)}°N ${lng.toFixed(1)}°E<br>` +
         `<a href="https://www.jma.go.jp/bosai/typhoon/" target="_blank" rel="noopener">🔗 気象庁 台風情報（予想進路）</a><br>` +
+        `<a href="https://www.gpvweather.com/typmodel_ecmwf_ens.php?z=3&ln=${lng.toFixed(0)}&la=${lat.toFixed(0)}" target="_blank" rel="noopener">🔗 アンサンブル進路（ECMWF）</a><br>` +
         (eventid ? `<a href="https://www.gdacs.org/documentmaps_IP.aspx?eventid=${eventid}&eventtype=TC" target="_blank" rel="noopener">🔗 GDACS 進路地図</a>` : '')
       );
       marker.addTo(map);
@@ -3976,7 +3956,6 @@ document.addEventListener('drop', e=>{
     if (allLatLngs.length === 1) map.setView(allLatLngs[0], 5);
     else if (allLatLngs.length > 1) map.fitBounds(L.latLngBounds(allLatLngs), {padding: [60, 60], maxZoom: 6});
 
-    probeGpvWeather();
   }
 
   document.getElementById('btnTyphoon').onclick = async () => {
