@@ -4023,9 +4023,13 @@ document.addEventListener('drop', e=>{
 
             // features 配列を持つ GeoJSON なら描画
             const features = gj?.features ?? (Array.isArray(gj) ? gj : null);
-            if (features?.length) {
+            // 単一 Feature の場合も配列として扱う
+            const singleFeature = (!features && gj?.type === 'Feature') ? [gj] : null;
+            const allFeatures = features ?? singleFeature;
+
+            if (allFeatures?.length) {
               let lineCount = 0, pointCount = 0, polyCount = 0;
-              features.forEach(feat => {
+              allFeatures.forEach(feat => {
                 if (!feat?.geometry) return;
                 const fp = feat.properties ?? {};
                 const geomType = feat.geometry.type;
@@ -4069,8 +4073,20 @@ document.addEventListener('drop', e=>{
               });
               statusLines[lineIdx] = `[${idx+1}] ${name}: ✅ L=${lineCount} P=${pointCount} poly=${polyCount}`;
             } else {
-              const keys = gj ? Object.keys(gj).join(',') : String(gj);
-              statusLines[lineIdx] = `[${idx+1}] ${name}: ⚠️ 進路なし[${keys}]`;
+              // geteventresources でトラックファイル一覧を試みる
+              const resUrl = episodeid
+                ? `https://www.gdacs.org/gdacsapi/api/events/geteventresources?eventtype=TC&eventid=${eventid}&episodeid=${episodeid}`
+                : `https://www.gdacs.org/gdacsapi/api/events/geteventresources?eventtype=TC&eventid=${eventid}`;
+              let res2 = await fetch(resUrl, {cache:'no-store'}).catch(() => null);
+              if (!res2?.ok) res2 = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(resUrl)}`, {cache:'no-store'}).catch(() => null);
+              if (res2?.ok) {
+                const t2 = await res2.text();
+                // レスポンス最初の200文字をステータスに表示
+                statusLines[lineIdx] = `[${idx+1}] ${name}: res=${t2.slice(0,200).replace(/\s+/g,' ')}`;
+              } else {
+                const keys = gj ? Object.keys(gj).join(',') : String(gj);
+                statusLines[lineIdx] = `[${idx+1}] ${name}: ⚠️ 進路なし geom=${gj?.geometry?.type}`;
+              }
             }
           } else {
             statusLines[lineIdx] = `[${idx+1}] ${name}: ❌ HTTP ${res?.status ?? 'err'}`;
