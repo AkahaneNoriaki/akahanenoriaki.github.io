@@ -3920,7 +3920,9 @@ document.addEventListener('drop', e=>{
     }
 
     const targets = wPacific.length > 0 ? wPacific : events;
-    targets.forEach(f => {
+
+    // 各台風の進路データを並行取得
+    await Promise.allSettled(targets.map(async f => {
       const p = f.properties ?? {};
       const coords = f.geometry?.coordinates;
       if (!coords) return;
@@ -3930,7 +3932,10 @@ document.addEventListener('drop', e=>{
       const alertLevel = p.alertlevel ?? p.alertLevel ?? '';
       const wind = p.maxwind ?? p.MaxWind ?? p.wind ?? '不明';
       const color = alertLevel === 'Red' ? '#cc0000' : alertLevel === 'Orange' ? '#ff8800' : '#0066cc';
+      const eventid = p.eventid ?? p.EventID ?? '';
+      const episodeid = p.episodeid ?? p.EpisodeID ?? '';
 
+      // 現在位置マーカー
       const marker = L.circleMarker([lat, lng], {
         radius: 12, color, fillColor: color,
         fillOpacity: 0.85, weight: 2
@@ -3939,12 +3944,77 @@ document.addEventListener('drop', e=>{
         `警戒レベル: ${alertLevel || '不明'}<br>` +
         `最大風速: ${wind} kt<br>` +
         `位置: ${lat.toFixed(1)}°N ${lng.toFixed(1)}°E<br>` +
-        `<a href="https://www.gdacs.org/report.aspx?eventtype=TC&eventid=${p.eventid ?? ''}" target="_blank" rel="noopener">詳細情報 →</a>`
+        `<a href="https://www.gdacs.org/report.aspx?eventtype=TC&eventid=${eventid}" target="_blank" rel="noopener">詳細情報 →</a>`
       );
       marker.addTo(map);
       typhoonLayers.push(marker);
       map.panTo([lat, lng]);
-    });
+
+      // 進路データ取得（GDACS polygons API）
+      if (!eventid) return;
+      try {
+        const trackUrl = `https://www.gdacs.org/gdacsapi/api/polygons/getpolygons?eventtype=TC&eventid=${eventid}&episodeid=${episodeid}`;
+        const res = await fetch(trackUrl, {cache: 'no-store'});
+        if (!res.ok) return;
+        const gj = await res.json();
+        if (!gj?.features) return;
+
+        gj.features.forEach(feat => {
+          const fp = feat.properties ?? {};
+          const geomType = feat.geometry?.type;
+          const trackType = fp.tracktype ?? fp.Type ?? fp.type ?? '';
+
+          if (geomType === 'LineString' || geomType === 'MultiLineString') {
+            // 過去経路（実線）と予報進路（破線）を分けて描画
+            const isForecast = /forecast|predicted|future/i.test(trackType) || fp.isForecast;
+            const lineCoords = geomType === 'LineString'
+              ? feat.geometry.coordinates.map(([x,y]) => [y,x])
+              : feat.geometry.coordinates.flat().map(([x,y]) => [y,x]);
+            const line = L.polyline(lineCoords, {
+              color: isForecast ? '#ff6600' : '#333333',
+              weight: isForecast ? 2 : 3,
+              dashArray: isForecast ? '8,5' : null,
+              opacity: 0.85
+            });
+            line.addTo(map);
+            typhoonLayers.push(line);
+
+          } else if (geomType === 'Point') {
+            // 予報点（過去or予報）
+            const [px, py] = feat.geometry.coordinates;
+            const isFc = /forecast|predicted|future/i.test(trackType) || fp.isForecast;
+            const dot = L.circleMarker([py, px], {
+              radius: isFc ? 5 : 4,
+              color: isFc ? '#ff6600' : '#555',
+              fillColor: isFc ? '#ffaa44' : '#888',
+              fillOpacity: 0.8, weight: 1.5
+            });
+            if (fp.class || fp.windspeed || fp.datetime) {
+              dot.bindTooltip(
+                [fp.datetime ?? '', fp.class ?? '', fp.windspeed ? `${fp.windspeed}kt` : '']
+                  .filter(Boolean).join(' ')
+              );
+            }
+            dot.addTo(map);
+            typhoonLayers.push(dot);
+
+          } else if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
+            // 予報円・不確定コーン
+            const polyCoords = geomType === 'Polygon'
+              ? [feat.geometry.coordinates[0].map(([x,y])=>[y,x])]
+              : feat.geometry.coordinates.map(ring => ring[0].map(([x,y])=>[y,x]));
+            const cone = L.polygon(polyCoords, {
+              color: '#ff6600', fillColor: '#ffaa00',
+              fillOpacity: 0.10, weight: 1, dashArray: '5,4'
+            }).bindTooltip('予報円');
+            cone.addTo(map);
+            typhoonLayers.push(cone);
+          }
+        });
+      } catch(e) {
+        console.warn('[Typhoon track]', e);
+      }
+    }));
 
     if (targets.length > 0 && typhoonLayers.length === 0) {
       alert('台風データを取得しましたが表示できる座標がありませんでした。');
