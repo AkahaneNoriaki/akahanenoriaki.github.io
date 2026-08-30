@@ -1,4 +1,4 @@
-const CACHE_VER = 'map-20260830d';
+const CACHE_VER = 'map-20260830e';
 const APP_CACHE  = CACHE_VER + '-app';
 const CDN_CACHE  = CACHE_VER + '-cdn';
 const TILE_CACHE = CACHE_VER + '-tiles';
@@ -112,6 +112,13 @@ self.addEventListener('fetch', event => {
   // PMTiles（同一オリジン）
   if (url.origin === self.location.origin && url.pathname.endsWith('.pmtiles')) {
     event.respondWith(pmtilesHandler(event.request));
+    return;
+  }
+
+  // index.html はネットワークファースト（常に最新版を取得）
+  if (url.origin === self.location.origin &&
+      (url.pathname === '/' || url.pathname === '/index.html')) {
+    event.respondWith(networkFirst(APP_CACHE, event.request));
     return;
   }
 
