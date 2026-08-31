@@ -632,6 +632,80 @@ _rinpanBtn.onclick=()=>{
   closeSheet();
 };
 
+/* --- 国有林林班 PMTiles（伊那谷・固定URL） --- */
+let _kokuyuurinLayer=null;
+let _kokuyuurinOn=false;
+const _kokuyuurinBtn=document.getElementById('btnToggleKokuyuurin');
+
+function _buildKokuyuurinLayer(){
+  const paintRules=[
+    {
+      dataLayer:'kokuyuurin_rinpan',
+      symbolizer: new protomapsL.PolygonSymbolizer({
+        fill: 'rgba(45,122,45,0.10)',
+        stroke: '#2d7a2d',
+        width: 1.5
+      })
+    }
+  ];
+  const layer = protomapsL.leafletLayer({
+    url: 'data/inadani_kokuyuurin_rinpan.pmtiles',
+    pane:'rinpanPane',
+    paintRules,
+    labelRules:[
+      {
+        dataLayer:'kokuyuurin_rinpan',
+        minzoom:11,
+        symbolizer:(()=>{
+          const _inner=new protomapsL.CenteredTextSymbolizer({
+            labelProps:['林班主番'],
+            font:'11px sans-serif',
+            fill:'#1a5c1a',
+            stroke:'rgba(255,255,255,0.8)',
+            width:2
+          });
+          return {
+            place(layout,geom,feature){
+              const ring=geom[0];
+              if(!ring||ring.length===0) return;
+              const{x:cx,y:cy}=_polygonCentroid(ring);
+              return _inner.place(layout,[[{x:cx,y:cy}]],feature);
+            }
+          };
+        })()
+      }
+    ]
+  });
+  layer.on('click', e => {
+    const props = e.features?.[0]?.props;
+    if(!props) return;
+    const rin = props['林班主番'] ?? '';
+    const eda = props['林班枝番'] ?? '';
+    const sho = props['署名称'] ?? '';
+    const kyoku = props['局名称'] ?? '';
+    L.popup().setLatLng(e.latlng)
+      .setContent(`<b>🏔️ 国有林</b><br>林班: ${rin}${eda?`-${eda}`:''}<br>森林管理署: ${sho}<br>森林管理局: ${kyoku}`)
+      .openOn(map);
+  });
+  return layer;
+}
+
+_kokuyuurinBtn.onclick=()=>{
+  if(_kokuyuurinOn){
+    if(_kokuyuurinLayer){ map.removeLayer(_kokuyuurinLayer); }
+    _kokuyuurinOn=false;
+    _kokuyuurinBtn.classList.remove('active');
+    toast('国有林林班を非表示');
+  } else {
+    if(!_kokuyuurinLayer){ _kokuyuurinLayer=_buildKokuyuurinLayer(); }
+    _kokuyuurinLayer.addTo(map);
+    _kokuyuurinOn=true;
+    _kokuyuurinBtn.classList.add('active');
+    toast('国有林林班を表示');
+  }
+  closeSheet();
+};
+
 /* --- 連携可能レイヤ: 小班 PMTiles --- */
 const _IROHA=['い','ろ','は','に','ほ','へ','と','ち','り','ぬ','る','を','わ','か','よ','た','れ','そ','つ','ね','な','ら','む','う','ゐ','の','お','く','や','ま','け','ふ','こ','え','て','あ','さ','き','ゆ','め','み','し','ゑ','ひ','も','せ','す'];
 const _KATA_IROHA=['イ','ロ','ハ','ニ','ホ','ヘ','ト','チ','リ','ヌ','ル','ヲ','ワ','カ','ヨ','タ','レ','ソ','ツ','ネ','ナ','ラ','ム','ウ','ヰ','ノ','オ','ク','ヤ','マ','ケ','フ','コ','エ','テ','ア','サ','キ','ユ','メ','ミ','シ','ヱ','ヒ','モ','セ','ス'];
