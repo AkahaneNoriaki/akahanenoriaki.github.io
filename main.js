@@ -809,7 +809,7 @@ function _buildKokuyuurinRindouLayer(){
     {
       dataLayer:'kokuyuurin_rindou',
       symbolizer: new protomapsL.LineSymbolizer({
-        color: '#c47c00',
+        color: '#ff6600',
         width: 2.5,
         opacity: 0.9
       })
@@ -826,7 +826,7 @@ function _buildKokuyuurinRindouLayer(){
         symbolizer: new protomapsL.LineLabelSymbolizer({
           labelProps:['林道名'],
           font:'11px sans-serif',
-          fill:'#7a4c00',
+          fill:'#cc4400',
           stroke:'rgba(255,255,255,0.85)',
           width:2
         })
