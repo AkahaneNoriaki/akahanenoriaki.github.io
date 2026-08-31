@@ -90,6 +90,7 @@ const map=L.map('map',{maxZoom:25,zoomControl:false}).setView([36.2,138.0],12);
 map.createPane('segyohanPane').style.zIndex='410';
 map.createPane('shohanPane').style.zIndex='420';
 map.createPane('rinpanPane').style.zIndex='430';
+map.createPane('rindouPane').style.zIndex='440';
 const zoomCtrl=L.control.zoom({position:'topright'}).addTo(map);
 const gsiStd=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
   {maxNativeZoom:18,maxZoom:25,attribution:'© 地理院'});
@@ -794,6 +795,68 @@ _kokuyuurinShohanBtn.onclick=()=>{
     _kokuyuurinShohanOn=true;
     _kokuyuurinShohanBtn.classList.add('active');
     toast('国有林小班を表示');
+  }
+  closeSheet();
+};
+
+/* --- 国有林林道 PMTiles --- */
+let _kokuyuurinRindouLayer=null;
+let _kokuyuurinRindouOn=false;
+const _kokuyuurinRindouBtn=document.getElementById('btnToggleKokuyuurinRindou');
+
+function _buildKokuyuurinRindouLayer(){
+  const paintRules=[
+    {
+      dataLayer:'kokuyuurin_rindou',
+      symbolizer: new protomapsL.LineSymbolizer({
+        color: '#c47c00',
+        width: 2.5,
+        opacity: 0.9
+      })
+    }
+  ];
+  const layer = protomapsL.leafletLayer({
+    url: 'data/inadani_kokuyuurin_rindou.pmtiles',
+    pane:'rindouPane',
+    paintRules,
+    labelRules:[
+      {
+        dataLayer:'kokuyuurin_rindou',
+        minzoom:13,
+        symbolizer: new protomapsL.LineLabelSymbolizer({
+          labelProps:['林道名'],
+          font:'11px sans-serif',
+          fill:'#7a4c00',
+          stroke:'rgba(255,255,255,0.85)',
+          width:2
+        })
+      }
+    ]
+  });
+  layer.on('click', e => {
+    const props = e.features?.[0]?.props;
+    if(!props) return;
+    const name = props['林道名'] ?? '';
+    const rosen = props['路線番号'] ?? '';
+    L.popup().setLatLng(e.latlng)
+      .setContent(`<b>🛤️ 国有林林道</b><br>林道名: ${name}<br>路線番号: ${rosen}`)
+      .openOn(map);
+  });
+  return layer;
+}
+
+_kokuyuurinRindouBtn.onclick=()=>{
+  if(_kokuyuurinRindouOn){
+    if(_kokuyuurinRindouLayer){ map.removeLayer(_kokuyuurinRindouLayer); }
+    _kokuyuurinRindouOn=false;
+    _kokuyuurinRindouBtn.classList.remove('active');
+    toast('国有林林道を非表示');
+  } else {
+    if(!_kokuyuurinRindouLayer){ _kokuyuurinRindouLayer=_buildKokuyuurinRindouLayer(); }
+    _kokuyuurinRindouLayer.addTo(map);
+    _kokuyuurinRindouOn=true;
+    _kokuyuurinRindouBtn.classList.add('active');
+    toast('国有林林道を表示');
   }
   closeSheet();
 };
