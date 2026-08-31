@@ -706,6 +706,98 @@ _kokuyuurinBtn.onclick=()=>{
   closeSheet();
 };
 
+/* --- 国有林小班 PMTiles --- */
+let _kokuyuurinShohanLayer=null;
+let _kokuyuurinShohanOn=false;
+const _kokuyuurinShohanBtn=document.getElementById('btnToggleKokuyuurinShohan');
+
+function _buildKokuyuurinShohanLayer(){
+  const paintRules=[
+    {
+      dataLayer:'kokuyuurin_shohan',
+      symbolizer: new protomapsL.PolygonSymbolizer({
+        fill: 'rgba(45,122,45,0.15)',
+        stroke: '#1a7a1a',
+        width: 1.0
+      })
+    }
+  ];
+  const layer = protomapsL.leafletLayer({
+    url: 'data/inadani_kokuyuurin_shohan.pmtiles',
+    pane:'shohanPane',
+    paintRules,
+    labelRules:[
+      {
+        dataLayer:'kokuyuurin_shohan',
+        minzoom:13,
+        symbolizer:(()=>{
+          const _inner=new protomapsL.CenteredTextSymbolizer({
+            labelProps:['小班名'],
+            font:'10px sans-serif',
+            fill:'#1a5c1a',
+            stroke:'rgba(255,255,255,0.8)',
+            width:2
+          });
+          return {
+            place(layout,geom,feature){
+              const ring=geom[0];
+              if(!ring||ring.length===0) return;
+              const{x:cx,y:cy}=_polygonCentroid(ring);
+              return _inner.place(layout,[[{x:cx,y:cy}]],feature);
+            }
+          };
+        })()
+      }
+    ]
+  });
+  layer.on('click', e => {
+    const props = e.features?.[0]?.props;
+    if(!props) return;
+    const rin = props['林班主番'] ?? '';
+    const eda = props['林班枝番'] ?? '';
+    const sho = props['小班名'] ?? '';
+    const sho2 = props['小班枝番'] ?? '';
+    const kokuyuurin = props['国有林名'] ?? '';
+    const tanto = props['担当区'] ?? '';
+    const jus = props['樹種１'] ?? '';
+    const reir = props['樹立林齢１'] ?? '';
+    const jus2 = props['樹種２'] ?? '';
+    const reir2 = props['樹立林齢２'] ?? '';
+    const menseki = props['面積'] ?? '';
+    const rintan = props['林種の細分'] ?? '';
+    const kino = props['機能類型'] ?? '';
+    const hoan = props['保安林１'] ?? '';
+    const shomei = props['署名称'] ?? '';
+    let html = `<b>🌄 国有林小班</b><br>`;
+    html += `林班: ${rin}${eda?`-${eda}`:''} 小班: ${sho}${sho2&&sho2!=='0'?`-${sho2}`:''}<br>`;
+    html += `国有林名: ${kokuyuurin}　担当区: ${tanto}<br>`;
+    html += `森林管理署: ${shomei}<br>`;
+    if(jus) html += `樹種: ${jus}${reir?` (${reir}年)`:''}${jus2?` / ${jus2}${reir2?` (${reir2}年)`:''}`:''}<br>`;
+    if(menseki) html += `面積: ${menseki} ha<br>`;
+    if(rintan) html += `林種: ${rintan}<br>`;
+    if(kino) html += `機能類型: ${kino}<br>`;
+    if(hoan) html += `保安林: ${hoan}`;
+    L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
+  });
+  return layer;
+}
+
+_kokuyuurinShohanBtn.onclick=()=>{
+  if(_kokuyuurinShohanOn){
+    if(_kokuyuurinShohanLayer){ map.removeLayer(_kokuyuurinShohanLayer); }
+    _kokuyuurinShohanOn=false;
+    _kokuyuurinShohanBtn.classList.remove('active');
+    toast('国有林小班を非表示');
+  } else {
+    if(!_kokuyuurinShohanLayer){ _kokuyuurinShohanLayer=_buildKokuyuurinShohanLayer(); }
+    _kokuyuurinShohanLayer.addTo(map);
+    _kokuyuurinShohanOn=true;
+    _kokuyuurinShohanBtn.classList.add('active');
+    toast('国有林小班を表示');
+  }
+  closeSheet();
+};
+
 /* --- 連携可能レイヤ: 小班 PMTiles --- */
 const _IROHA=['い','ろ','は','に','ほ','へ','と','ち','り','ぬ','る','を','わ','か','よ','た','れ','そ','つ','ね','な','ら','む','う','ゐ','の','お','く','や','ま','け','ふ','こ','え','て','あ','さ','き','ゆ','め','み','し','ゑ','ひ','も','せ','す'];
 const _KATA_IROHA=['イ','ロ','ハ','ニ','ホ','ヘ','ト','チ','リ','ヌ','ル','ヲ','ワ','カ','ヨ','タ','レ','ソ','ツ','ネ','ナ','ラ','ム','ウ','ヰ','ノ','オ','ク','ヤ','マ','ケ','フ','コ','エ','テ','ア','サ','キ','ユ','メ','ミ','シ','ヱ','ヒ','モ','セ','ス'];
