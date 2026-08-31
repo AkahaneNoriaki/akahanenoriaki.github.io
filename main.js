@@ -677,17 +677,6 @@ function _buildKokuyuurinLayer(){
       }
     ]
   });
-  layer.on('click', e => {
-    const props = e.features?.[0]?.props;
-    if(!props) return;
-    const rin = props['林班主番'] ?? '';
-    const eda = props['林班枝番'] ?? '';
-    const sho = props['署名称'] ?? '';
-    const kyoku = props['局名称'] ?? '';
-    L.popup().setLatLng(e.latlng)
-      .setContent(`<b>🏔️ 国有林</b><br>林班: ${rin}${eda?`-${eda}`:''}<br>森林管理署: ${sho}<br>森林管理局: ${kyoku}`)
-      .openOn(map);
-  });
   return layer;
 }
 
@@ -751,35 +740,6 @@ function _buildKokuyuurinShohanLayer(){
       }
     ]
   });
-  layer.on('click', e => {
-    const props = e.features?.[0]?.props;
-    if(!props) return;
-    const rin = props['林班主番'] ?? '';
-    const eda = props['林班枝番'] ?? '';
-    const sho = props['小班名'] ?? '';
-    const sho2 = props['小班枝番'] ?? '';
-    const kokuyuurin = props['国有林名'] ?? '';
-    const tanto = props['担当区'] ?? '';
-    const jus = props['樹種１'] ?? '';
-    const reir = props['樹立林齢１'] ?? '';
-    const jus2 = props['樹種２'] ?? '';
-    const reir2 = props['樹立林齢２'] ?? '';
-    const menseki = props['面積'] ?? '';
-    const rintan = props['林種の細分'] ?? '';
-    const kino = props['機能類型'] ?? '';
-    const hoan = props['保安林１'] ?? '';
-    const shomei = props['署名称'] ?? '';
-    let html = `<b>🌄 国有林小班</b><br>`;
-    html += `林班: ${rin}${eda?`-${eda}`:''} 小班: ${sho}${sho2&&sho2!=='0'?`-${sho2}`:''}<br>`;
-    html += `国有林名: ${kokuyuurin}　担当区: ${tanto}<br>`;
-    html += `森林管理署: ${shomei}<br>`;
-    if(jus) html += `樹種: ${jus}${reir?` (${reir}年)`:''}${jus2?` / ${jus2}${reir2?` (${reir2}年)`:''}`:''}<br>`;
-    if(menseki) html += `面積: ${menseki} ha<br>`;
-    if(rintan) html += `林種: ${rintan}<br>`;
-    if(kino) html += `機能類型: ${kino}<br>`;
-    if(hoan) html += `保安林: ${hoan}`;
-    L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
-  });
   return layer;
 }
 
@@ -832,15 +792,6 @@ function _buildKokuyuurinRindouLayer(){
         })
       }
     ]
-  });
-  layer.on('click', e => {
-    const props = e.features?.[0]?.props;
-    if(!props) return;
-    const name = props['林道名'] ?? '';
-    const rosen = props['路線番号'] ?? '';
-    L.popup().setLatLng(e.latlng)
-      .setContent(`<b>🛤️ 国有林林道</b><br>林道名: ${name}<br>路線番号: ${rosen}`)
-      .openOn(map);
   });
   return layer;
 }
@@ -1764,7 +1715,8 @@ function _queryLayer(layer, layerName, latlng){
 }
 
 map.on('click',(e)=>{
-  const hasPmt=(_rinpanOn&&_rinpanLayer)||(_shohanOn&&_shohanLayer)||(_segyohanOn&&_segyohanLayer);
+  const hasPmt=(_rinpanOn&&_rinpanLayer)||(_shohanOn&&_shohanLayer)||(_segyohanOn&&_segyohanLayer)
+    ||(_kokuyuurinOn&&_kokuyuurinLayer)||(_kokuyuurinShohanOn&&_kokuyuurinShohanLayer)||(_kokuyuurinRindouOn&&_kokuyuurinRindouLayer);
   if(!hasPmt) return;
 
   let props=null, layerLabel='', layerColor='';
@@ -1780,7 +1732,45 @@ map.on('click',(e)=>{
     props=_queryLayer(_rinpanLayer,'rinpan',e.latlng);
     layerLabel='林班'; layerColor='#2e7d32';
   }
+  if(!props&&_kokuyuurinRindouOn&&_kokuyuurinRindouLayer){
+    props=_queryLayer(_kokuyuurinRindouLayer,'kokuyuurin_rindou',e.latlng);
+    layerLabel='国有林林道'; layerColor='#ff6600';
+  }
+  if(!props&&_kokuyuurinShohanOn&&_kokuyuurinShohanLayer){
+    props=_queryLayer(_kokuyuurinShohanLayer,'kokuyuurin_shohan',e.latlng);
+    layerLabel='国有林小班'; layerColor='#1a7a1a';
+  }
+  if(!props&&_kokuyuurinOn&&_kokuyuurinLayer){
+    props=_queryLayer(_kokuyuurinLayer,'kokuyuurin_rinpan',e.latlng);
+    layerLabel='国有林林班'; layerColor='#2d7a2d';
+  }
   if(!props) return;
+
+  // 国有林レイヤのポップアップ
+  const _isKokuyuurin = layerLabel.startsWith('国有林');
+  if(_isKokuyuurin){
+    let html=`<div class="rinpanPopup">`;
+    html+=`<b style="color:${layerColor}">[${layerLabel}]</b><br>`;
+    if(layerLabel==='国有林林道'){
+      html+=`<span class="xlKey">林道名:</span> ${props['林道名']??''}<br>`;
+      html+=`<span class="xlKey">路線番号:</span> ${props['路線番号']??''}<br>`;
+      html+=`<span class="xlKey">森林管理署:</span> ${props['署名称']??''}`;
+    } else if(layerLabel==='国有林林班'){
+      const rin=props['林班主番']??''; const eda=props['林班枝番']??'';
+      html+=`<span class="xlKey">林班:</span> ${rin}${eda&&eda!=='0'?`-${eda}`:''}<br>`;
+      html+=`<span class="xlKey">署名称:</span> ${props['署名称']??''}<br>`;
+      html+=`<span class="xlKey">局名称:</span> ${props['局名称']??''}`;
+    } else { // 国有林小班
+      const _KOKU_SKIP=new Set(['ID','森林管理局','森林管理署']);
+      html+=`<span class="xlKey">林小班:</span> ${props['林小班名称']??''}<br>`;
+      const entries=Object.entries(props).filter(([k,v])=>!_KOKU_SKIP.has(k)&&k!=='林小班名称'&&v!=null&&v!=='');
+      html+='<hr>';
+      for(const [k,v] of entries) html+=`<span class="xlKey">${k}:</span> ${v}<br>`;
+    }
+    html+='</div>';
+    L.popup({maxWidth:320}).setLatLng(e.latlng).setContent(html).openOn(map);
+    return;
+  }
 
   let title='';
   if(layerLabel==='施業班'){
