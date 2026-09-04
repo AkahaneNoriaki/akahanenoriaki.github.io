@@ -344,10 +344,10 @@ function dmsToDecimal(dms,ref){
 
 document.getElementById('btnLoadPhotos').onclick=()=>{ photoLoadInput.value=''; photoLoadInput.click(); closeSheet(); };
 
-photoLoadInput.addEventListener('change',async()=>{
-  const files=[...photoLoadInput.files]; if(!files.length) return;
+async function _processPhotoFiles(files){
   let added=0, skipped=0;
   for(const file of files){
+    if(!file.type.startsWith('image/')) continue;
     await new Promise(resolve=>{
       const reader=new FileReader();
       reader.onload=e=>{
@@ -381,6 +381,26 @@ photoLoadInput.addEventListener('change',async()=>{
   }
   const msg=skipped>0?`${added}枚表示（${skipped}枚は位置情報なし）`:`${added}枚を地図に表示しました`;
   toast(msg,3000);
+}
+
+photoLoadInput.addEventListener('change',async()=>{
+  const files=[...photoLoadInput.files]; if(!files.length) return;
+  await _processPhotoFiles(files);
+});
+
+// 写真ドラッグ＆ドロップ
+const _mapContainer=map.getContainer();
+_mapContainer.addEventListener('dragover',e=>{
+  if([...e.dataTransfer.items].some(i=>i.kind==='file'&&i.type.startsWith('image/'))){
+    e.preventDefault();
+    e.dataTransfer.dropEffect='copy';
+  }
+});
+_mapContainer.addEventListener('drop',async e=>{
+  const files=[...e.dataTransfer.files].filter(f=>f.type.startsWith('image/'));
+  if(!files.length) return;
+  e.preventDefault();
+  await _processPhotoFiles(files);
 });
 
 document.getElementById('btnClearPhotos').onclick=()=>{
