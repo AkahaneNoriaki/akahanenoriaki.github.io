@@ -55,13 +55,66 @@
 <div id="measureBadge"></div>
 <div id="shareBadge">📍 共有したい場所をタップ</div>
 
-<input id="geojsonInput" type="file" accept=".geojson,.json" style="display:none">
+<input id="geojsonInput" type="file" accept=".geojson,.json" multiple style="display:none">
 <input id="xlsxInput"   type="file" accept=".xlsx,.xls,.csv" style="display:none">
 
 <!-- 施業班 複数選択パネル -->
 <div id="segyohanSelectPanel" style="display:none">
   <span id="segyohanSelectInfo"></span>
   <button id="btnSegyohanSelectClear">✕ クリア</button>
+</div>
+
+<!-- ベクタファイル一覧カード -->
+<div id="vecFileCard">
+  <div id="vecFileList"></div>
+  <button id="btnDetectDup" style="display:none">🔍 重複検出</button>
+</div>
+
+<!-- 重複検出モーダル -->
+<div id="dupModal">
+  <div id="dupModalBox">
+    <div class="dupTitle">🔍 重複検出</div>
+    <div class="dupRow">
+      <label class="dupLabel">ファイル1</label>
+      <select id="dupSel1"></select>
+    </div>
+    <div class="dupRow">
+      <label class="dupLabel">ファイル2</label>
+      <select id="dupSel2"></select>
+    </div>
+    <div class="dupRow">
+      <label class="dupLabel">検出方法</label>
+      <div id="dupMethods">
+        <label><input type="radio" name="dupMethod" value="spatial" checked> 空間的な重なり</label>
+        <label><input type="radio" name="dupMethod" value="attr"> 属性値の一致</label>
+        <label><input type="radio" name="dupMethod" value="both"> 両方（AND）</label>
+      </div>
+    </div>
+    <div id="dupAttrRow" class="dupRow" style="display:none">
+      <label class="dupLabel">属性キー</label>
+      <div style="display:flex;align-items:center;gap:6px">
+        <select id="dupAttrCol1"></select>
+        <span style="font-size:13px">=</span>
+        <select id="dupAttrCol2"></select>
+      </div>
+    </div>
+    <div id="dupProgress" style="display:none">
+      <div id="dupProgressBar"><div id="dupProgressFill"></div></div>
+      <div id="dupProgressText">検出中...</div>
+    </div>
+    <div id="dupResult" style="display:none">
+      <div id="dupResultText"></div>
+      <div id="dupResultBtns">
+        <button id="btnDupExcel">📥 Excel</button>
+        <button id="btnDupGeoJSON">📂 GeoJSON</button>
+        <button id="btnDupHighlight">🗺️ ハイライト</button>
+      </div>
+    </div>
+    <div class="dupBtns">
+      <button id="dupCancel">閉じる</button>
+      <button id="dupRun" class="dupOk">検出する</button>
+    </div>
+  </div>
 </div>
 
 <!-- Excel連携 統計カード -->
@@ -575,6 +628,6 @@
 <!-- 印刷時の縮尺表示（地図左下） -->
 <div id="printMapScale"></div>
 
-<script src="./main.js?v=20260905a"></script>
+<script src="./main.js?v=20260905b"></script>
 </body>
 </html>

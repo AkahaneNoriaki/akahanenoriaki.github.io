@@ -631,6 +631,62 @@ html, body { height:100%; margin:0; }
   font-size:11px; cursor:pointer; padding:3px 8px; border-radius:10px;
 }
 
+/* ─── ベクタファイル一覧カード ───────────────── */
+#vecFileCard {
+  display:none; position:fixed; bottom:56px; left:50%; transform:translateX(-50%);
+  z-index:7900; background:rgba(30,30,30,0.93); color:#fff;
+  border-radius:14px; padding:8px 12px; font-size:12px; font-family:sans-serif;
+  box-shadow:0 2px 10px rgba(0,0,0,0.3);
+  flex-direction:column; gap:4px; max-width:calc(100vw - 32px); min-width:220px;
+}
+#vecFileCard.visible { display:flex; }
+#vecFileList { display:flex; flex-direction:column; gap:3px; }
+.vecFileRow { display:flex; align-items:center; gap:7px; font-size:12px; }
+.vecFileDot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.vecFileName { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:200px; }
+.vecFileCount { opacity:0.65; font-size:11px; flex-shrink:0; }
+#btnDetectDup {
+  margin-top:4px; padding:5px 10px; background:rgba(255,255,255,0.18);
+  border:none; color:#fff; border-radius:8px; font-size:12px; cursor:pointer;
+  align-self:flex-end;
+}
+#btnDetectDup:hover { background:rgba(255,255,255,0.28); }
+
+/* ─── 重複検出モーダル ───────────────────────── */
+#dupModal {
+  display:none; position:fixed; inset:0; z-index:12000;
+  background:rgba(0,0,0,0.5); align-items:center; justify-content:center;
+}
+#dupModal.open { display:flex; }
+#dupModalBox {
+  background:#fff; border-radius:16px; padding:22px 20px 18px;
+  width:min(400px,92vw); box-shadow:0 6px 32px rgba(0,0,0,0.25);
+  display:flex; flex-direction:column; gap:12px;
+}
+.dupTitle { font-size:16px; font-weight:bold; color:#1a1a1a; }
+.dupRow { display:flex; align-items:flex-start; gap:10px; }
+.dupLabel { font-size:12px; color:#555; width:70px; flex-shrink:0; padding-top:3px; }
+.dupRow select { flex:1; padding:5px 8px; border:1px solid #ccc; border-radius:8px; font-size:13px; }
+#dupMethods { display:flex; flex-direction:column; gap:4px; }
+#dupMethods label { font-size:13px; display:flex; align-items:center; gap:6px; cursor:pointer; }
+#dupProgressBar {
+  height:6px; background:#eee; border-radius:3px; overflow:hidden; margin-top:2px;
+}
+#dupProgressFill { height:100%; background:#1565c0; border-radius:3px; transition:width 0.2s; width:0%; }
+#dupProgressText { font-size:12px; color:#666; margin-top:4px; }
+#dupResult { background:#e8f5e9; border-radius:10px; padding:10px 12px; }
+#dupResultText { font-size:14px; font-weight:bold; color:#1b5e20; margin-bottom:8px; }
+#dupResultBtns { display:flex; gap:8px; flex-wrap:wrap; }
+#dupResultBtns button {
+  padding:6px 12px; border:none; border-radius:8px; font-size:12px; cursor:pointer;
+  background:#1565c0; color:#fff;
+}
+#dupResultBtns button:hover { opacity:0.85; }
+.dupBtns { display:flex; justify-content:flex-end; gap:8px; margin-top:4px; }
+.dupBtns button { padding:8px 18px; border:none; border-radius:10px; font-size:13px; cursor:pointer; }
+#dupCancel { background:#eee; color:#333; }
+#dupRun.dupOk { background:#1565c0; color:#fff; }
+
 /* ─── Excel連携 統計カード ───────────────────── */
 #xlsxStatCard {
   display:none; position:fixed; bottom:56px; left:50%; transform:translateX(-50%);
