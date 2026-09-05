@@ -647,6 +647,36 @@ html, body { height:100%; margin:0; }
   flex-shrink:0;
 }
 
+/* ─── GPX位置推定カード ─────────────────────── */
+#gpxGeotagCard {
+  display:none; position:fixed; bottom:56px; left:50%; transform:translateX(-50%);
+  z-index:8000; background:rgba(21,101,192,0.93); color:#fff;
+  border-radius:14px; padding:8px 10px 8px 14px;
+  font-size:12px; font-family:sans-serif; font-weight:bold;
+  box-shadow:0 2px 10px rgba(0,0,0,0.2);
+  display:none; flex-direction:column; gap:4px;
+  max-width:calc(100vw - 32px); min-width:260px;
+}
+#gpxGeotagCard.visible { display:flex; }
+#gpxGeotagInfo { font-size:13px; }
+#gpxGeotagControls {
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+}
+#gpxGeotagControls label {
+  display:flex; align-items:center; gap:4px; font-size:11px; font-weight:normal;
+}
+#gpxTzOffset {
+  width:38px; padding:2px 4px; border:none; border-radius:6px;
+  font-size:11px; text-align:center; background:rgba(255,255,255,0.25); color:#fff;
+}
+#gpxTimeAdj { width:80px; accent-color:#fff; }
+#gpxTimeAdjVal { min-width:22px; text-align:right; font-size:11px; }
+#gpxGeotagClose {
+  position:absolute; top:6px; right:8px;
+  background:rgba(255,255,255,0.2); border:none; color:#fff;
+  font-size:11px; cursor:pointer; padding:2px 7px; border-radius:10px;
+}
+
 /* ─── エクスポートモーダル ───────────────────── */
 #exportModal {
   display:none; position:fixed; inset:0; z-index:11000;
