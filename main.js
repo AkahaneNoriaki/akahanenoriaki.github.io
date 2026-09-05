@@ -646,6 +646,38 @@ updateTrackUI();
 ========================= */
 const gjGroup=L.featureGroup().addTo(map);
 
+/* ─── ベクタファイル管理 ─── */
+const _VEC_COLORS=['#e53935','#1565c0','#2e7d32','#f57c00','#6a1b9a','#00838f','#ad1457','#558b2f'];
+let _vectorFiles=[]; // {name, color, geojson, layer}
+let _dupResults=null; // 最後の重複検出結果
+let _dupHighlightLayer=null;
+
+function _vecNextColor(){ return _VEC_COLORS[_vectorFiles.length%_VEC_COLORS.length]; }
+
+function _updateVecFileCard(){
+  const card=document.getElementById('vecFileCard');
+  const list=document.getElementById('vecFileList');
+  const btn=document.getElementById('btnDetectDup');
+  if(!_vectorFiles.length){ card.classList.remove('visible'); return; }
+  list.innerHTML=_vectorFiles.map((f,i)=>
+    `<div class="vecFileRow">
+      <div class="vecFileDot" style="background:${f.color}"></div>
+      <span class="vecFileName">${f.name}</span>
+      <span class="vecFileCount">${f.geojson.features.length}件</span>
+    </div>`
+  ).join('');
+  btn.style.display=_vectorFiles.length>=2?'block':'none';
+  card.classList.add('visible');
+}
+
+function _addVectorFile(name, geojson){
+  const color=_vecNextColor();
+  const layer=makeVectorLayer(geojson, color);
+  gjGroup.addLayer(layer);
+  _vectorFiles.push({name, color, geojson, layer});
+  _updateVecFileCard();
+}
+
 function geoJsonPts(coords){ return coords.map(c=>({lat:c[1],lng:c[0]})); }
 
 function calcGeomMeasure(geom){
@@ -667,9 +699,9 @@ function calcGeomMeasure(geom){
   }
 }
 
-function makeVectorLayer(geojson){
+function makeVectorLayer(geojson, color='#ff0066'){
   return L.geoJSON(geojson,{
-    style:()=>({color:'#ff0066',weight:2,fillOpacity:0.2}),
+    style:()=>({color,weight:2,fillOpacity:0.2}),
     onEachFeature:(ft,l)=>l.on('click',e=>{
       const m=calcGeomMeasure(ft.geometry);
       const mHtml=m
@@ -685,7 +717,11 @@ document.getElementById('btnJumpVector').onclick=()=>{
   map.fitBounds(gjGroup.getBounds().pad(0.1)); closeSheet();
 };
 document.getElementById('btnClearVector').onclick=()=>{
-  gjGroup.clearLayers(); map.closePopup(); toast('ベクタデータをクリア'); closeSheet();
+  gjGroup.clearLayers(); map.closePopup();
+  _vectorFiles=[]; _dupResults=null;
+  if(_dupHighlightLayer){ map.removeLayer(_dupHighlightLayer); _dupHighlightLayer=null; }
+  _updateVecFileCard();
+  toast('ベクタデータをクリア'); closeSheet();
 };
 
 /* --- ポリゴン面積重心 --- */
@@ -2032,18 +2068,185 @@ window._segyohanToggleFromPopup=function(){
 /* --- GeoJSON --- */
 const geojsonInput=document.getElementById('geojsonInput');
 document.getElementById('btnPickGeojson').onclick=()=>{ geojsonInput.value=''; geojsonInput.click(); closeSheet(); };
-geojsonInput.onchange=()=>{
-  const f=geojsonInput.files[0]; if(!f) return;
-  const r=new FileReader();
-  r.onload=()=>{
-    try{
-      gjGroup.addLayer(makeVectorLayer(JSON.parse(r.result)));
-      map.fitBounds(gjGroup.getBounds().pad(0.1));
-      toast('GeoJSON 読み込み完了');
-    } catch{ toast('GeoJSONの読み込みに失敗しました'); }
-  };
-  r.readAsText(f);
+geojsonInput.onchange=async()=>{
+  const files=[...geojsonInput.files]; if(!files.length) return;
+  let loaded=0;
+  for(const f of files){
+    await new Promise(res=>{
+      const r=new FileReader();
+      r.onload=()=>{
+        try{
+          const gj=JSON.parse(r.result);
+          _addVectorFile(f.name, gj);
+          loaded++;
+        }catch{ toast(`GeoJSONの読み込みに失敗: ${f.name}`); }
+        res();
+      };
+      r.readAsText(f);
+    });
+  }
+  if(loaded&&gjGroup.getLayers().length) map.fitBounds(gjGroup.getBounds().pad(0.1));
+  if(loaded) toast(`GeoJSON ${loaded}ファイル読み込み完了`);
 };
+
+/* =========================
+   重複検出
+========================= */
+function _featureBBox(feat){
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  function walk(c){ if(typeof c[0]==='number'){if(c[0]<x0)x0=c[0];if(c[0]>x1)x1=c[0];if(c[1]<y0)y0=c[1];if(c[1]>y1)y1=c[1];}else c.forEach(walk); }
+  if(feat.geometry?.coordinates) walk(feat.geometry.coordinates);
+  return [x0,y0,x1,y1];
+}
+function _bboxOverlap(a,b){ return a[0]<=b[2]&&a[2]>=b[0]&&a[1]<=b[3]&&a[3]>=b[1]; }
+
+function _toPolyClipRings(geom){
+  if(!geom) return null;
+  if(geom.type==='Polygon') return geom.coordinates;
+  if(geom.type==='MultiPolygon') return geom.coordinates.flat();
+  return null;
+}
+function _spatialIntersects(f1,f2){
+  const r1=_toPolyClipRings(f1.geometry), r2=_toPolyClipRings(f2.geometry);
+  if(!r1||!r2) return false;
+  try{ return polygonClipping.intersection(r1,r2).length>0; }catch{ return false; }
+}
+
+async function _detectDuplicates(fi1,fi2,method,col1,col2,onProgress){
+  const feats1=fi1.geojson.features, feats2=fi2.geojson.features;
+  const pairs=[];
+
+  if(method==='attr'||method==='both'){
+    const map2=new Map();
+    feats2.forEach(f=>{ const k=String(f.properties?.[col2]??'').trim(); if(k) map2.set(k,f); });
+    feats1.forEach(f=>{ const k=String(f.properties?.[col1]??'').trim(); if(k&&map2.has(k)) pairs.push({f1:f,f2:map2.get(k),key:k}); });
+    if(method==='attr') return pairs;
+  }
+
+  // 空間判定（BBOX前処理付き）
+  const bboxes2=feats2.map(_featureBBox);
+  const total=feats1.length;
+  const spatialPairs=[];
+  for(let i=0;i<total;i++){
+    if(i%50===0) onProgress(i/total);
+    const bb1=_featureBBox(feats1[i]);
+    for(let j=0;j<feats2.length;j++){
+      if(!_bboxOverlap(bb1,bboxes2[j])) continue;
+      if(!_spatialIntersects(feats1[i],feats2[j])) continue;
+      spatialPairs.push({f1:feats1[i],f2:feats2[j]});
+    }
+    if(i%50===0) await new Promise(r=>setTimeout(r,0)); // yield
+  }
+  if(method==='spatial') return spatialPairs;
+
+  // both: spatial AND attr の積
+  const attrKeys=new Set(pairs.map(p=>p.key));
+  return spatialPairs.filter(p=>{
+    const k=String(p.f1.properties?.[col1]??'').trim();
+    return attrKeys.has(k);
+  });
+}
+
+function _dupExportExcel(pairs,name1,name2){
+  if(!pairs.length){ toast('重複データがありません'); return; }
+  const XLSX=window.XLSX;
+  const cols1=[...new Set(pairs.flatMap(p=>Object.keys(p.f1.properties||{})))];
+  const cols2=[...new Set(pairs.flatMap(p=>Object.keys(p.f2.properties||{})))];
+  const rows=pairs.map(p=>{
+    const row={};
+    cols1.forEach(c=>row[`[${name1}]${c}`]=p.f1.properties?.[c]??'');
+    cols2.forEach(c=>row[`[${name2}]${c}`]=p.f2.properties?.[c]??'');
+    return row;
+  });
+  const ws=XLSX.utils.json_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'重複データ');
+  XLSX.writeFile(wb,'duplicates.xlsx');
+  toast('Excel出力完了');
+}
+function _dupExportGeoJSON(pairs,name1){
+  if(!pairs.length){ toast('重複データがありません'); return; }
+  const fc={type:'FeatureCollection',features:pairs.map(p=>({
+    ...p.f1,
+    properties:{...(p.f1.properties||{}),_dup_source:name1}
+  }))};
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(fc)],{type:'application/json'}));
+  a.download='duplicates.geojson'; a.click();
+  toast('GeoJSON出力完了');
+}
+function _dupHighlight(pairs){
+  if(_dupHighlightLayer){ map.removeLayer(_dupHighlightLayer); _dupHighlightLayer=null; }
+  if(!pairs.length){ toast('ハイライトするデータがありません'); return; }
+  const fc={type:'FeatureCollection',features:pairs.flatMap(p=>[p.f1,p.f2])};
+  _dupHighlightLayer=L.geoJSON(fc,{style:()=>({color:'#ffd600',weight:3,fillColor:'#ffd600',fillOpacity:0.4})}).addTo(map);
+  map.fitBounds(_dupHighlightLayer.getBounds().pad(0.05));
+  toast(`${pairs.length}件をハイライト表示`);
+}
+
+// モーダル制御
+const _dupModal=document.getElementById('dupModal');
+const _dupSel1=document.getElementById('dupSel1');
+const _dupSel2=document.getElementById('dupSel2');
+const _dupAttrRow=document.getElementById('dupAttrRow');
+const _dupAttrCol1=document.getElementById('dupAttrCol1');
+const _dupAttrCol2=document.getElementById('dupAttrCol2');
+const _dupProgress=document.getElementById('dupProgress');
+const _dupProgressFill=document.getElementById('dupProgressFill');
+const _dupProgressText=document.getElementById('dupProgressText');
+const _dupResult=document.getElementById('dupResult');
+
+function _fillDupCols(sel, file){
+  const cols=[...new Set(file.geojson.features.flatMap(f=>Object.keys(f.properties||{})))];
+  sel.innerHTML=cols.map(c=>`<option>${c}</option>`).join('');
+}
+function _dupOpenModal(){
+  if(_vectorFiles.length<2){ toast('ファイルを2つ以上読み込んでください'); return; }
+  _dupSel1.innerHTML=_dupSel2.innerHTML=_vectorFiles.map((f,i)=>`<option value="${i}">${f.name}</option>`).join('');
+  _dupSel2.selectedIndex=1;
+  _fillDupCols(_dupAttrCol1,_vectorFiles[0]);
+  _fillDupCols(_dupAttrCol2,_vectorFiles[1]);
+  _dupAttrRow.style.display='none';
+  _dupProgress.style.display='none';
+  _dupResult.style.display='none';
+  document.getElementById('dupRun').style.display='';
+  _dupModal.classList.add('open');
+}
+document.getElementById('btnDetectDup').onclick=_dupOpenModal;
+document.getElementById('dupCancel').onclick=()=>_dupModal.classList.remove('open');
+_dupSel1.addEventListener('change',()=>_fillDupCols(_dupAttrCol1,_vectorFiles[+_dupSel1.value]));
+_dupSel2.addEventListener('change',()=>_fillDupCols(_dupAttrCol2,_vectorFiles[+_dupSel2.value]));
+document.querySelectorAll('input[name="dupMethod"]').forEach(r=>r.addEventListener('change',()=>{
+  _dupAttrRow.style.display=(r.value==='spatial')?'none':'flex';
+}));
+
+document.getElementById('dupRun').onclick=async()=>{
+  const fi1=_vectorFiles[+_dupSel1.value], fi2=_vectorFiles[+_dupSel2.value];
+  if(fi1===fi2){ toast('異なるファイルを選択してください'); return; }
+  const method=document.querySelector('input[name="dupMethod"]:checked').value;
+  const col1=_dupAttrCol1.value, col2=_dupAttrCol2.value;
+  _dupProgress.style.display='block'; _dupResult.style.display='none';
+  _dupProgressFill.style.width='0%'; _dupProgressText.textContent='検出中...';
+  document.getElementById('dupRun').style.display='none';
+  try{
+    _dupResults=await _detectDuplicates(fi1,fi2,method,col1,col2,pct=>{
+      _dupProgressFill.style.width=`${Math.round(pct*100)}%`;
+      _dupProgressText.textContent=`検出中... ${Math.round(pct*100)}%`;
+    });
+    _dupProgressFill.style.width='100%';
+    _dupProgressText.textContent='完了';
+    document.getElementById('dupResultText').textContent=`重複: ${_dupResults.length}件 が見つかりました`;
+    _dupResult.style.display='block';
+  }catch(e){
+    toast('検出エラー: '+e.message);
+    document.getElementById('dupRun').style.display='';
+  }
+  _dupProgress.style.display='none';
+  document.getElementById('dupRun').style.display='';
+};
+document.getElementById('btnDupExcel').onclick=()=>_dupExportExcel(_dupResults||[],_vectorFiles[+_dupSel1.value]?.name,_vectorFiles[+_dupSel2.value]?.name);
+document.getElementById('btnDupGeoJSON').onclick=()=>_dupExportGeoJSON(_dupResults||[],_vectorFiles[+_dupSel1.value]?.name);
+document.getElementById('btnDupHighlight').onclick=()=>_dupHighlight(_dupResults||[]);
 
 /* =========================
    GPKG（GeoPackage）読み込み
@@ -2173,7 +2376,7 @@ async function loadGPKG(file){
           const props={}; columns.forEach((c,i)=>{ if(i!==gi) props[c]=row[i]; });
           features.push({type:'Feature',geometry:geom,properties:props});
         }
-        if(features.length){ gjGroup.addLayer(makeVectorLayer({type:'FeatureCollection',features})); total+=features.length; }
+        if(features.length){ const gj={type:'FeatureCollection',features}; _addVectorFile(`${file.name}/${tbl}`,gj); total+=features.length; }
       } catch(e){ console.warn(`GPKG table "${tbl}":`,e); }
     }
     db.close();
@@ -3951,7 +4154,7 @@ async function _getShpjs(){
 
 function _addGeoJSONToMap(gj, label){
   try{
-    gjGroup.addLayer(makeVectorLayer(gj));
+    _addVectorFile(label, gj);
     if(gjGroup.getLayers().length) map.fitBounds(gjGroup.getBounds().pad(0.1));
     toast(`${label} 読み込み完了`);
   } catch(e){ toast(`${label} 表示失敗: ${e.message}`, 4000); console.error(e); }
