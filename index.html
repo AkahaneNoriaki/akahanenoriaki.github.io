@@ -71,6 +71,16 @@
   <button id="xlsxStatClose" title="閉じる">✕</button>
 </div>
 
+<div id="gpxGeotagCard">
+  <div id="gpxGeotagInfo">📍 <span id="gpxPointCount">0</span>点</div>
+  <div id="gpxGeotagTime" style="font-size:10px;opacity:0.85"></div>
+  <div id="gpxGeotagControls">
+    <label>UTC<input id="gpxTzOffset" type="number" value="9" min="-12" max="14">h</label>
+    <label>補正<input id="gpxTimeAdj" type="range" min="-300" max="300" value="0"><span id="gpxTimeAdjVal">0</span>s</label>
+  </div>
+  <button id="gpxGeotagClose" title="GPX解除">✕</button>
+</div>
+
 <!-- Excel連携 キー選択モーダル -->
 <div id="xlsxModal">
   <div id="xlsxModalBox">
@@ -160,6 +170,7 @@
 <input id="cameraInput"  type="file" accept="image/*" capture="environment" style="display:none">
 <input id="photoLoadInput" type="file" accept="image/*" multiple style="display:none">
 <input id="geotiffInput" type="file" accept=".tif,.tiff,.geotiff" style="display:none">
+<input id="gpxGeotagInput" type="file" accept=".gpx" style="display:none">
 
 <div id="bottomSheet">
   <!-- PC時はサイドバーヘッダー（スマホ時は非表示） -->
@@ -216,6 +227,12 @@
         </button>
         <button class="s-btn" id="btnClearPhotos" style="display:none">
           <span class="ico">🗑️</span>写真クリア
+        </button>
+        <button class="s-btn" id="btnLoadGpxGeotag">
+          <span class="ico">📍</span>GPX読込
+        </button>
+        <button class="s-btn" id="btnClearGpxGeotag" style="display:none">
+          <span class="ico">🗑️</span>GPX解除
         </button>
         <button class="s-btn" id="btnRecord">
           <span class="ico">🔴</span>記録開始
@@ -558,6 +575,6 @@
 <!-- 印刷時の縮尺表示（地図左下） -->
 <div id="printMapScale"></div>
 
-<script src="./main.js?v=20260904a"></script>
+<script src="./main.js?v=20260905a"></script>
 </body>
 </html>

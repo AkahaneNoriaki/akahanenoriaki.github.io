@@ -344,6 +344,114 @@ function dmsToDecimal(dms,ref){
 
 document.getElementById('btnLoadPhotos').onclick=()=>{ photoLoadInput.value=''; photoLoadInput.click(); closeSheet(); };
 
+/* ─── GPX位置推定 ─── */
+let _gpxPoints = [];
+let _gpxTzOffsetH = 9;
+let _gpxTimeAdjS  = 0;
+const _gpxGeotagCard = document.getElementById('gpxGeotagCard');
+const _gpxBtnLoad    = document.getElementById('btnLoadGpxGeotag');
+const _gpxBtnClear   = document.getElementById('btnClearGpxGeotag');
+const _gpxInput      = document.getElementById('gpxGeotagInput');
+
+function _parseGpxPoints(xmlText){
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  const pts = [...doc.querySelectorAll('trkpt, rtept, wpt')];
+  return pts.map(pt=>{
+    const timeEl = pt.querySelector('time');
+    if(!timeEl) return null;
+    const t = new Date(timeEl.textContent.trim());
+    if(isNaN(t)) return null;
+    return { time:t, lat:parseFloat(pt.getAttribute('lat')), lng:parseFloat(pt.getAttribute('lon')) };
+  }).filter(Boolean).sort((a,b)=>a.time-b.time);
+}
+
+function _gpxUpdateCard(){
+  if(!_gpxPoints.length){ _gpxGeotagCard.classList.remove('visible'); return; }
+  document.getElementById('gpxPointCount').textContent = _gpxPoints.length;
+  const fmt = d => d.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',timeZone:'UTC'});
+  const t0 = _gpxPoints[0].time, t1 = _gpxPoints[_gpxPoints.length-1].time;
+  document.getElementById('gpxGeotagTime').textContent =
+    `${t0.toLocaleDateString('ja-JP',{timeZone:'UTC'})} ${fmt(t0)}〜${fmt(t1)} (UTC)`;
+  _gpxGeotagCard.classList.add('visible');
+}
+
+function _exifTimeToUtcMs(exifTime){
+  const m = exifTime.match(/(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+  if(!m) return null;
+  const localMs = Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]);
+  return localMs - _gpxTzOffsetH*3600000 - _gpxTimeAdjS*1000;
+}
+
+function _gpxEstimate(exifTime){
+  if(!_gpxPoints.length || !exifTime) return null;
+  const utcMs = _exifTimeToUtcMs(exifTime);
+  if(utcMs === null) return null;
+  const pts = _gpxPoints;
+  const first = pts[0].time.getTime(), last = pts[pts.length-1].time.getTime();
+  const MAX_GAP = 600000; // 10分以上離れていたらnull
+  if(utcMs < first){ if(first-utcMs > MAX_GAP) return null; return {lat:pts[0].lat, lng:pts[0].lng, diffS:(first-utcMs)/1000}; }
+  if(utcMs > last){  if(utcMs-last  > MAX_GAP) return null; return {lat:pts[pts.length-1].lat, lng:pts[pts.length-1].lng, diffS:(utcMs-last)/1000}; }
+  let lo=0, hi=pts.length-1;
+  while(hi-lo>1){ const mid=(lo+hi)>>1; if(pts[mid].time.getTime()<=utcMs) lo=mid; else hi=mid; }
+  const t0=pts[lo].time.getTime(), t1=pts[hi].time.getTime(), r=(utcMs-t0)/(t1-t0);
+  return { lat:pts[lo].lat+(pts[hi].lat-pts[lo].lat)*r, lng:pts[lo].lng+(pts[hi].lng-pts[lo].lng)*r, diffS:0 };
+}
+
+// GPX推定写真のダウンロード（GPS EXIF書き込み）
+const _gpxPhotoStore = new Map();
+let _gpxPhotoKeyGen = 0;
+window._downloadGpxPhoto = async function(key){
+  const d = _gpxPhotoStore.get(key); if(!d){ toast('データが見つかりません'); return; }
+  const { file, lat, lng } = d;
+  const dataUrl = await new Promise(res=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.readAsDataURL(file); });
+  try{
+    const exifObj = piexif.load(dataUrl);
+    if(!exifObj['GPS']) exifObj['GPS']={};
+    exifObj['GPS'][piexif.GPSIFD.GPSLatitudeRef]  = lat>=0?'N':'S';
+    exifObj['GPS'][piexif.GPSIFD.GPSLatitude]     = decToDmsRational(Math.abs(lat));
+    exifObj['GPS'][piexif.GPSIFD.GPSLongitudeRef] = lng>=0?'E':'W';
+    exifObj['GPS'][piexif.GPSIFD.GPSLongitude]    = decToDmsRational(Math.abs(lng));
+    const modified = piexif.insert(piexif.dump(exifObj), dataUrl);
+    const bin = atob(modified.split(',')[1]);
+    const arr = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+    const blob = new Blob([arr],{type:'image/jpeg'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = file.name.replace(/(\.[^.]+)?$/,'_gps.jpg');
+    a.click();
+    toast('GPS書き込み完了・ダウンロード');
+  }catch(err){ toast('EXIF書き込み失敗: '+err.message); }
+};
+
+_gpxBtnLoad.onclick = ()=>{ _gpxInput.value=''; _gpxInput.click(); closeSheet(); };
+_gpxInput.addEventListener('change', async()=>{
+  const file = _gpxInput.files[0]; if(!file) return;
+  const text = await file.text();
+  _gpxPoints = _parseGpxPoints(text);
+  if(!_gpxPoints.length){ toast('GPXにトラックポイントが見つかりません'); return; }
+  _gpxBtnClear.style.display = 'block';
+  _gpxUpdateCard();
+  toast(`GPX読込: ${_gpxPoints.length}点`);
+});
+_gpxBtnClear.onclick = document.getElementById('gpxGeotagClose').onclick = ()=>{
+  _gpxPoints=[]; _gpxGeotagCard.classList.remove('visible'); _gpxBtnClear.style.display='none';
+  toast('GPX解除'); closeSheet();
+};
+document.getElementById('gpxTzOffset').addEventListener('input', function(){
+  _gpxTzOffsetH = parseFloat(this.value)||9;
+});
+document.getElementById('gpxTimeAdj').addEventListener('input', function(){
+  _gpxTimeAdjS = parseInt(this.value)||0;
+  document.getElementById('gpxTimeAdjVal').textContent = _gpxTimeAdjS;
+});
+
+// マップへのGPXドラッグ対応（写真と並行して）
+map.getContainer().addEventListener('dragover', e=>{
+  if([...e.dataTransfer.items].some(i=>i.kind==='file'&&(i.type.startsWith('image/')||i.name?.endsWith('.gpx')||i.type==='')))
+    e.dataTransfer.dropEffect='copy';
+}, true);
+
 async function _processPhotoFiles(files){
   let added=0, skipped=0;
   for(const file of files){
@@ -354,10 +462,47 @@ async function _processPhotoFiles(files){
         try{
           const exif=piexif.load(e.target.result);
           const gps=exif['GPS'];
+          const imgURL=URL.createObjectURL(file);
+
+          // GPX位置推定モード
+          if(_gpxPoints.length){
+            const dt = exif?.['Exif']?.[piexif.ExifIFD.DateTimeOriginal]
+                     ?? exif?.['0th']?.[piexif.ImageIFD.DateTime];
+            const est = _gpxEstimate(dt);
+            if(est){
+              const key = ++_gpxPhotoKeyGen;
+              _gpxPhotoStore.set(key, {file, lat:est.lat, lng:est.lng});
+              const diffTxt = est.diffS>0 ? ` <span style="color:#f9a825">±${Math.round(est.diffS)}s</span>` : '';
+              // 元GPSがある場合は元座標も表示
+              let origTxt = '';
+              if(gps&&gps[piexif.GPSIFD.GPSLatitude]){
+                const olat=dmsToDecimal(gps[piexif.GPSIFD.GPSLatitude],gps[piexif.GPSIFD.GPSLatitudeRef]);
+                const olng=dmsToDecimal(gps[piexif.GPSIFD.GPSLongitude],gps[piexif.GPSIFD.GPSLongitudeRef]);
+                origTxt=`<div style="font-size:10px;color:#999;margin-top:2px">元GPS: ${olat.toFixed(6)}, ${olng.toFixed(6)}</div>`;
+              }
+              const marker=L.marker([est.lat,est.lng],{
+                icon:L.divIcon({html:'<div style="font-size:22px;margin:-22px 0 0 -11px">📍</div>',iconSize:[22,22],className:''})
+              }).addTo(map).bindPopup(`
+                <div style="text-align:center">
+                  <img src="${imgURL}" class="photo-thumb" onclick="openPhoto('${imgURL}')"><br>
+                  <div style="font-size:11px;margin-top:4px;color:#666">${file.name}</div>
+                  <div style="font-size:11px;color:#1565c0">📍 GPX推定: ${est.lat.toFixed(6)}, ${est.lng.toFixed(6)}${diffTxt}</div>
+                  ${origTxt}
+                  <button onclick="window._downloadGpxPhoto(${key})"
+                    style="margin-top:6px;width:100%;padding:8px;background:#1565c0;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">
+                    💾 GPS書込みDL
+                  </button>
+                </div>`);
+              loadedPhotoMarkers.push(marker);
+              added++;
+              resolve(); return;
+            }
+          }
+
+          // 通常モード（EXIFのGPSを使用）
           if(!gps||!gps[piexif.GPSIFD.GPSLatitude]){ skipped++; resolve(); return; }
           const lat=dmsToDecimal(gps[piexif.GPSIFD.GPSLatitude],gps[piexif.GPSIFD.GPSLatitudeRef]);
           const lng=dmsToDecimal(gps[piexif.GPSIFD.GPSLongitude],gps[piexif.GPSIFD.GPSLongitudeRef]);
-          const imgURL=URL.createObjectURL(file);
           const marker=L.marker([lat,lng],{
             icon:L.divIcon({html:'<div style="font-size:22px;margin:-22px 0 0 -11px">🖼️</div>',iconSize:[22,22],className:''})
           }).addTo(map).bindPopup(`
@@ -379,7 +524,7 @@ async function _processPhotoFiles(files){
     const group=L.featureGroup(loadedPhotoMarkers);
     map.fitBounds(group.getBounds(),{padding:[40,40]});
   }
-  const msg=skipped>0?`${added}枚表示（${skipped}枚は位置情報なし）`:`${added}枚を地図に表示しました`;
+  const msg=skipped>0?`${added}枚表示（${skipped}枚は位置情報なし・GPX範囲外）`:`${added}枚を地図に表示しました`;
   toast(msg,3000);
 }
 
@@ -388,19 +533,31 @@ photoLoadInput.addEventListener('change',async()=>{
   await _processPhotoFiles(files);
 });
 
-// 写真ドラッグ＆ドロップ
+// 写真・GPXドラッグ＆ドロップ
 const _mapContainer=map.getContainer();
 _mapContainer.addEventListener('dragover',e=>{
-  if([...e.dataTransfer.items].some(i=>i.kind==='file'&&i.type.startsWith('image/'))){
-    e.preventDefault();
-    e.dataTransfer.dropEffect='copy';
-  }
+  const items=[...e.dataTransfer.items];
+  const hasImage=items.some(i=>i.kind==='file'&&i.type.startsWith('image/'));
+  const hasGpx=items.some(i=>i.kind==='file'&&(i.type==='application/gpx+xml'||i.type===''||i.type==='text/xml'));
+  if(hasImage||hasGpx){ e.preventDefault(); e.dataTransfer.dropEffect='copy'; }
 });
 _mapContainer.addEventListener('drop',async e=>{
-  const files=[...e.dataTransfer.files].filter(f=>f.type.startsWith('image/'));
-  if(!files.length) return;
+  const allFiles=[...e.dataTransfer.files];
+  const gpxFiles=allFiles.filter(f=>f.name.toLowerCase().endsWith('.gpx'));
+  const imgFiles=allFiles.filter(f=>f.type.startsWith('image/'));
+  if(!gpxFiles.length&&!imgFiles.length) return;
   e.preventDefault();
-  await _processPhotoFiles(files);
+  // GPXを先に処理
+  for(const gf of gpxFiles){
+    const text=await gf.text();
+    _gpxPoints=_parseGpxPoints(text);
+    if(_gpxPoints.length){
+      _gpxBtnClear.style.display='block';
+      _gpxUpdateCard();
+      toast(`GPX読込: ${_gpxPoints.length}点`);
+    } else { toast('GPXにトラックポイントが見つかりません'); }
+  }
+  if(imgFiles.length) await _processPhotoFiles(imgFiles);
 });
 
 document.getElementById('btnClearPhotos').onclick=()=>{
