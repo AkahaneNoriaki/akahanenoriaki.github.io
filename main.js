@@ -4583,4 +4583,37 @@ document.addEventListener('drop', e=>{
     }
   };
 
+// ── ネイティブアプリからのGPSログ受信 ────────────────────────────
+let _nativeTrackLayer = null;
+let _nativeTrackPoints = [];
+let _nativeMarker = null;
+
+window._nativeGpsUpdate = function(lat, lon) {
+  _nativeTrackPoints.push([lat, lon]);
+
+  // 現在地マーカー更新
+  if (_nativeMarker) {
+    _nativeMarker.setLatLng([lat, lon]);
+  } else {
+    _nativeMarker = L.circleMarker([lat, lon], {
+      radius: 8, color: '#ff6600', fillColor: '#ff6600', fillOpacity: 1, weight: 2
+    }).addTo(map);
+  }
+
+  // 軌跡ライン更新
+  if (_nativeTrackLayer) {
+    _nativeTrackLayer.setLatLngs(_nativeTrackPoints);
+  } else {
+    _nativeTrackLayer = L.polyline(_nativeTrackPoints, {
+      color: '#ff6600', weight: 3, opacity: 0.8
+    }).addTo(map);
+  }
+};
+
+window._nativeGpsClear = function() {
+  if (_nativeTrackLayer) { map.removeLayer(_nativeTrackLayer); _nativeTrackLayer = null; }
+  if (_nativeMarker) { map.removeLayer(_nativeMarker); _nativeMarker = null; }
+  _nativeTrackPoints = [];
+};
+
 })();
