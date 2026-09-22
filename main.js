@@ -29,6 +29,7 @@ if('serviceWorker' in navigator){
         color: '#ff6600', weight: 3, opacity: 0.8
       }).addTo(map);
     }
+    map.setView([lat, lon]);
   };
 
   window._nativeGpsClear = function() {
