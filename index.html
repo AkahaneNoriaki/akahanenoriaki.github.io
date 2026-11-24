@@ -50,6 +50,15 @@
     <div class="drop-hint">対応形式: GeoJSON / GPKG / SHP(ZIP) / GPX / KML</div>
   </div>
 </div>
+<div id="qrScanOverlay">
+  <video id="qrScanVideo" playsinline muted autoplay></video>
+  <div id="qrScanFrame"></div>
+  <div id="qrScanMsg">QRコードを、枠の中に入れてください</div>
+  <div id="qrScanBtns">
+    <button id="qrScanUrl">アドレスを入力</button>
+    <button id="qrScanClose">閉じる</button>
+  </div>
+</div>
 <div id="lightbox"><img id="lightboxImg" src=""></div>
 <div id="recBadge">● REC</div>
 <div id="measureBadge"></div>
@@ -297,6 +306,17 @@
           <span class="ico">🗑️</span>軌跡クリア
         </button>
       </div>
+    </div>
+
+    <!-- QRコードで読み込む -->
+    <div class="s-section">
+      <div class="s-title">QRコードで読み込む</div>
+      <div class="s-grid">
+        <button class="s-btn" id="btnScanQr">
+          <span class="ico">🔳</span>QRで読込
+        </button>
+      </div>
+      <div class="s-hint" style="font-size:11px;color:#666;padding:2px 4px 0">カメラでQRコードを読んで、ファイルを開きます（GeoJSON / GPKG / SHP(ZIP) / GPX / KML / GeoTIFF）</div>
     </div>
 
     <!-- ベクタデータ -->
@@ -628,6 +648,6 @@
 <!-- 印刷時の縮尺表示（地図左下） -->
 <div id="printMapScale"></div>
 
-<script src="./main.js?v=20260922a"></script>
+<script src="./main.js?v=20261124b"></script>
 </body>
 </html>
