@@ -50,6 +50,15 @@
     <div class="drop-hint">対応形式: GeoJSON / GPKG / SHP(ZIP) / GPX / KML</div>
   </div>
 </div>
+<div id="qrScanOverlay">
+  <video id="qrScanVideo" playsinline muted autoplay></video>
+  <div id="qrScanFrame"></div>
+  <div id="qrScanMsg">QRコードを、枠の中に入れてください</div>
+  <div id="qrScanBtns">
+    <button id="qrScanUrl">アドレスを入力</button>
+    <button id="qrScanClose">閉じる</button>
+  </div>
+</div>
 <div id="lightbox"><img id="lightboxImg" src=""></div>
 <div id="recBadge">● REC</div>
 <div id="measureBadge"></div>
@@ -308,6 +317,9 @@
         </button>
         <button class="s-btn" id="btnPickGpkg">
           <span class="ico">📦</span>GPKG
+        </button>
+        <button class="s-btn" id="btnScanQr">
+          <span class="ico">📷</span>QR読取
         </button>
         <button class="s-btn" id="btnJumpVector">
           <span class="ico">🎯</span>ジャンプ
@@ -628,6 +640,6 @@
 <!-- 印刷時の縮尺表示（地図左下） -->
 <div id="printMapScale"></div>
 
-<script src="./main.js?v=20260922a"></script>
+<script src="./main.js?v=20261124a"></script>
 </body>
 </html>
