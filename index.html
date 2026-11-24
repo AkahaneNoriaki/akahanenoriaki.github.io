@@ -308,6 +308,17 @@
       </div>
     </div>
 
+    <!-- QRコードで読み込む -->
+    <div class="s-section">
+      <div class="s-title">QRコードで読み込む</div>
+      <div class="s-grid">
+        <button class="s-btn" id="btnScanQr">
+          <span class="ico">🔳</span>QRで読込
+        </button>
+      </div>
+      <div class="s-hint" style="font-size:11px;color:#666;padding:2px 4px 0">カメラでQRコードを読んで、ファイルを開きます（GeoJSON / GPKG / SHP(ZIP) / GPX / KML / GeoTIFF）</div>
+    </div>
+
     <!-- ベクタデータ -->
     <div class="s-section">
       <div class="s-title">ベクタデータ</div>
@@ -317,9 +328,6 @@
         </button>
         <button class="s-btn" id="btnPickGpkg">
           <span class="ico">📦</span>GPKG
-        </button>
-        <button class="s-btn" id="btnScanQr">
-          <span class="ico">📷</span>QR読取
         </button>
         <button class="s-btn" id="btnJumpVector">
           <span class="ico">🎯</span>ジャンプ
@@ -640,6 +648,6 @@
 <!-- 印刷時の縮尺表示（地図左下） -->
 <div id="printMapScale"></div>
 
-<script src="./main.js?v=20261124a"></script>
+<script src="./main.js?v=20261124b"></script>
 </body>
 </html>

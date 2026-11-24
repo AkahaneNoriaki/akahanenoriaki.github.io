@@ -2424,80 +2424,107 @@ document.getElementById('btnPickGpkg').onclick=()=>{ gpkgInput.value=''; gpkgInp
 gpkgInput.addEventListener('change',()=>{ const f=gpkgInput.files[0]; if(!f) return; loadGPKG(f); });
 
 /* =========================
-   GPKG を、URL・QRコードから読み込む
-   ・?gpkg=URL （複数可）：QRコードを、カメラアプリで読むと、そのまま開く
-   ・「QR読取」ボタン：この画面の中で、QRコードを読む
-   QRの中身は、「.gpkg のURL」、または「?gpkg= つきの、このページのURL」
-   GPKGを置く場所は、https（または localhost）で、他のサイトから読める設定が必要
+   レイヤファイルを、URL・QRコードから読み込む
+   対応: GeoJSON / GPKG / SHP(ZIP) / GPX / KML / GeoTIFF
+   ・?file=URL （複数可。?gpkg= でも、同じ）：QRコードを、カメラアプリで読むと、そのまま開く
+   ・「QRで読込」ボタン：この画面の中で、カメラを使って、QRコードを読む
+   QRの中身は、「ファイルのURL」、または「?file= つきの、このページのURL」
+   ファイルを置く場所は、https（または localhost）で、他のサイトから読める設定が必要
    （このサイトの中に置けば、設定は、要らない。GitHub Pages は、そのまま読める）
 ========================= */
-/* GPKG-QR-BEGIN */
-const GPKG_URL_MAX_MB = 200;
+/* LAYER-QR-BEGIN */
+const LAYER_URL_MAX_MB = 200;
+const LAYER_EXTS = ['geojson','json','gpkg','zip','gpx','kml','tif','tiff','geotiff'];
+const LAYER_PARAMS = ['file','gpkg'];
 
-function _okGpkgUrl(u){
+function _okLayerUrl(u){
   return u.protocol==='https:' || (u.protocol==='http:' && (u.hostname==='localhost'||u.hostname==='127.0.0.1'));
 }
+function _extOfUrl(u){ const m=/\.([a-z0-9]+)$/i.exec(u.pathname); return m?m[1].toLowerCase():''; }
 
-// 文字から、GPKGのURLを取り出す（なければ、空の配列）
-function _gpkgUrlsFromText(text, base){
+// 文字から、読み込めるファイルのURLを、取り出す（なければ、空の配列）
+function _layerUrlsFromText(text, base){
   text=(text||'').trim();
   if(!text||text.length>2000) return [];
   let u;
   try{ u=new URL(text, base||location.href); }catch{ return []; }
-  if(!_okGpkgUrl(u)) return [];
-  const viaParam=u.searchParams.getAll('gpkg');
-  if(viaParam.length){
+  if(!_okLayerUrl(u)) return [];
+  const vals=[];
+  for(const k of LAYER_PARAMS) vals.push(...u.searchParams.getAll(k));
+  if(vals.length){
     const out=[];
-    for(const v of viaParam){
-      try{ const g=new URL(v,u); if(_okGpkgUrl(g)) out.push(g.href); }catch{}
+    for(const v of vals){
+      try{
+        const g=new URL(v,u);
+        if(_okLayerUrl(g) && LAYER_EXTS.includes(_extOfUrl(g))) out.push(g.href);
+      }catch{}
     }
     return out;
   }
-  return /\.gpkg$/i.test(u.pathname) ? [u.href] : [];
+  return LAYER_EXTS.includes(_extOfUrl(u)) ? [u.href] : [];
 }
 
-function _gpkgNameOf(href){
+function _layerNameOf(href){
   try{
     const n=decodeURIComponent(new URL(href).pathname.split('/').pop()||'');
-    return n||'data.gpkg';
-  }catch{ return 'data.gpkg'; }
+    return n||'data';
+  }catch{ return 'data'; }
 }
 
-async function loadGPKGFromUrl(href){
-  const name=_gpkgNameOf(href);
-  toast(`GPKGを取得中: ${name}`, 60000);
+// 中身が、拡張子と、合っているか、確かめる（合っていなければ、メッセージ）
+function _sniffLayer(ext, buf){
+  const u8=new Uint8Array(buf,0,Math.min(64,buf.byteLength));
+  const ascii=(a,b)=>Array.from(u8.subarray(a,b)).map(c=>String.fromCharCode(c)).join('');
+  let i=0; if(u8[0]===0xEF&&u8[1]===0xBB&&u8[2]===0xBF) i=3;           // BOM
+  while(i<u8.length && (u8[i]===0x20||u8[i]===0x0A||u8[i]===0x0D||u8[i]===0x09)) i++;
+  const c=String.fromCharCode(u8[i]||0);
+  if(ext==='gpkg') return ascii(0,15)==='SQLite format 3' ? null : 'GPKGのファイルではありません';
+  if(ext==='zip')  return (u8[0]===0x50&&u8[1]===0x4B) ? null : 'ZIPのファイルではありません';
+  if(ext==='tif'||ext==='tiff'||ext==='geotiff'){
+    const ok=(ascii(0,2)==='II'&&(u8[2]===42||u8[2]===43)&&u8[3]===0)||(ascii(0,2)==='MM'&&u8[2]===0&&(u8[3]===42||u8[3]===43));
+    return ok ? null : 'GeoTIFFのファイルではありません';
+  }
+  if(ext==='geojson'||ext==='json') return (c==='{'||c==='[') ? null : 'GeoJSONのファイルではありません';
+  if(ext==='gpx'||ext==='kml') return c==='<' ? null : `${ext.toUpperCase()}のファイルではありません`;
+  return '非対応の形式です';
+}
+
+async function loadLayerFromUrl(href){
+  const name=_layerNameOf(href);
+  const ext=_extOfUrl(new URL(href));
+  toast(`取得中: ${name}`, 60000);
   let res;
   try{ res=await fetch(href,{mode:'cors'}); }
   catch{ toast('取得できません（ネットワーク、または、配信元の設定）',6000); return false; }
   if(!res.ok){ toast(`取得できません（HTTP ${res.status}）`,6000); return false; }
   const len=parseInt(res.headers.get('content-length')||'0');
-  if(len>GPKG_URL_MAX_MB*1048576){ toast(`大きすぎます（${GPKG_URL_MAX_MB}MBまで）`,6000); return false; }
+  if(len>LAYER_URL_MAX_MB*1048576){ toast(`大きすぎます（${LAYER_URL_MAX_MB}MBまで）`,6000); return false; }
   let buf;
   try{ buf=await res.arrayBuffer(); }catch{ toast('受信が途中で止まりました',6000); return false; }
-  if(buf.byteLength>GPKG_URL_MAX_MB*1048576){ toast(`大きすぎます（${GPKG_URL_MAX_MB}MBまで）`,6000); return false; }
-  const head=new TextDecoder().decode(new Uint8Array(buf,0,Math.min(15,buf.byteLength)));
-  if(head!=='SQLite format 3'){ toast('GPKG（GeoPackage）のファイルではありません',6000); return false; }
-  await loadGPKG(new File([buf],name,{type:'application/geopackage+sqlite3'}));
+  if(buf.byteLength>LAYER_URL_MAX_MB*1048576){ toast(`大きすぎます（${LAYER_URL_MAX_MB}MBまで）`,6000); return false; }
+  const bad=_sniffLayer(ext,buf);
+  if(bad){ toast(bad,6000); return false; }
+  await _handleDroppedFile(new File([buf],name));
   return true;
 }
 
 // 読み込む前に、配信元を確認する（このサイトの中のファイルは、確認なし）
-async function loadGpkgUrls(urls){
+async function loadLayerUrls(urls){
   const outside=urls.filter(h=>{ try{ return new URL(h).origin!==location.origin; }catch{ return true; } });
   if(outside.length){
-    const lines=outside.map(h=>`・${_gpkgNameOf(h)}（${new URL(h).host}）`).join('\n');
-    if(!window.confirm(`次のGPKGを、読み込みます。\n\n${lines}\n\n配信元を、確認してください。よろしいですか？`)) return;
+    const lines=outside.map(h=>`・${_layerNameOf(h)}（${new URL(h).host}）`).join('\n');
+    if(!window.confirm(`次のファイルを、読み込みます。\n\n${lines}\n\n配信元を、確認してください。よろしいですか？`)) return;
   }
-  for(const h of urls) await loadGPKGFromUrl(h);
+  for(const h of urls) await loadLayerFromUrl(h);
 }
 
-// ページのURLに ?gpkg= があれば、読み込む
+// ページのURLに ?file= （または ?gpkg=）があれば、読み込む
 (()=>{
   const p=new URLSearchParams(location.search);
-  if(!p.getAll('gpkg').length) return;
-  const urls=_gpkgUrlsFromText(location.href);
-  if(urls.length) setTimeout(()=>loadGpkgUrls(urls),600);
-  else toast('?gpkg= のアドレスが、正しくありません',5000);
+  if(!LAYER_PARAMS.some(k=>p.has(k))) return;
+  const urls=_layerUrlsFromText(location.href);
+  if(urls.length) setTimeout(()=>loadLayerUrls(urls),600);
+  else toast('?file= のアドレスが、正しくありません（対応: GeoJSON・GPKG・SHP(ZIP)・GPX・KML・GeoTIFF）',6000);
 })();
 
 /* ---- QRコードの読み取り ---- */
@@ -2568,9 +2595,9 @@ async function startQrScan(){
         }
       }catch{}
       if(text){
-        const urls=_gpkgUrlsFromText(text);
-        if(urls.length){ stopQrScan(); await loadGpkgUrls(urls); return; }
-        msg.textContent='GPKGのQRコードでは、ありません';
+        const urls=_layerUrlsFromText(text);
+        if(urls.length){ stopQrScan(); await loadLayerUrls(urls); return; }
+        msg.textContent='読み込めるファイルのQRコードでは、ありません';
       }
       _qrBusy=false;
     }
@@ -2580,18 +2607,18 @@ async function startQrScan(){
 }
 
 // アドレスを、手で入れる（カメラが使えないとき）
-function enterGpkgUrl(){
-  const t=window.prompt('GPKGのアドレス（https://…/○○.gpkg）を、入力してください','');
+function enterLayerUrl(){
+  const t=window.prompt('ファイルのアドレスを、入力してください（https://…/○○.gpkg、.geojson、.zip、.gpx、.kml、.tif）','');
   if(!t) return;
-  const urls=_gpkgUrlsFromText(t);
-  if(!urls.length){ toast('GPKGのアドレスでは、ありません',4000); return; }
-  stopQrScan(); loadGpkgUrls(urls);
+  const urls=_layerUrlsFromText(t);
+  if(!urls.length){ toast('読み込めるファイルのアドレスでは、ありません',4000); return; }
+  stopQrScan(); loadLayerUrls(urls);
 }
 
 document.getElementById('btnScanQr').onclick=()=>{ closeSheet(); startQrScan(); };
 document.getElementById('qrScanClose').onclick=stopQrScan;
-document.getElementById('qrScanUrl').onclick=enterGpkgUrl;
-/* GPKG-QR-END */
+document.getElementById('qrScanUrl').onclick=enterLayerUrl;
+/* LAYER-QR-END */
 
 /* =========================
    GeoTIFF
@@ -2600,8 +2627,7 @@ const geotiffInput=document.getElementById('geotiffInput');
 let geotiffLayer=null, geotiffBounds=null;
 
 document.getElementById('btnPickGeotiff').onclick=()=>{ geotiffInput.value=''; geotiffInput.click(); closeSheet(); };
-geotiffInput.addEventListener('change',async()=>{
-  const file=geotiffInput.files[0]; if(!file) return;
+async function loadGeoTIFFFile(file){
   toast('GeoTIFF読み込み中...',15000);
   try{
     const georaster=await parseGeoraster(await file.arrayBuffer());
@@ -2611,8 +2637,12 @@ geotiffInput.addEventListener('change',async()=>{
     geotiffBounds=geotiffLayer.getBounds();
     map.fitBounds(geotiffBounds);
     toast(`GeoTIFF表示完了（${file.name}）`,3000);
-  } catch(e){ toast('GeoTIFF読み込み失敗',3000); console.error(e); }
+  } catch(e){ toast('GeoTIFF読み込み失敗（位置情報つきのGeoTIFFか、確認してください）',4000); console.error(e); }
   updateGeotiffUI();
+}
+geotiffInput.addEventListener('change',()=>{
+  const file=geotiffInput.files[0]; if(!file) return;
+  loadGeoTIFFFile(file);
 });
 document.getElementById('btnClearGeotiff').onclick=()=>{
   if(geotiffLayer){ map.removeLayer(geotiffLayer); geotiffLayer=null; }
@@ -4422,6 +4452,11 @@ async function _handleDroppedFile(file){
       const gj   = tgj.kml(dom);
       _addGeoJSONToMap(gj, file.name);
     } catch(e){ toast('KMLの読み込みに失敗しました', 3000); console.error(e); }
+    return;
+  }
+
+  if(ext === 'tif' || ext === 'tiff' || ext === 'geotiff'){
+    await loadGeoTIFFFile(file);
     return;
   }
 
