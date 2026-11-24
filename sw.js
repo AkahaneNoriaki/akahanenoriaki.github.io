@@ -1,4 +1,4 @@
-const CACHE_VER = 'map-20261124a';
+const CACHE_VER = 'map-20260922a';
 const APP_CACHE  = CACHE_VER + '-app';
 const CDN_CACHE  = CACHE_VER + '-cdn';
 const TILE_CACHE = CACHE_VER + '-tiles';
@@ -26,7 +26,6 @@ const CDN_URLS = [
   'https://unpkg.com/pbf@3.3.0/dist/pbf.js',
   'https://unpkg.com/polygon-clipping@0.15.7/dist/polygon-clipping.umd.js',
   'https://unpkg.com/exifr/dist/mini.legacy.umd.js',
-  'https://unpkg.com/jsqr@1.4.0/dist/jsQR.js',
 ];
 
 // インストール：アプリシェルとCDNをキャッシュ
