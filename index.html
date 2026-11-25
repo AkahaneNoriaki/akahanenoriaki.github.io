@@ -59,6 +59,19 @@
     <button id="qrScanClose">閉じる</button>
   </div>
 </div>
+<div id="layerPickOverlay">
+  <div id="layerPickBox">
+    <div id="layerPickTitle">GitHubのファイル</div>
+    <div id="layerPickPath"></div>
+    <div id="layerPickList"></div>
+    <div id="layerPickNote"></div>
+    <div id="layerPickBtns">
+      <button id="layerPickAll">全部選ぶ</button>
+      <button id="layerPickGo" disabled>選んだ 0 個を読み込む</button>
+      <button id="layerPickClose">閉じる</button>
+    </div>
+  </div>
+</div>
 <div id="lightbox"><img id="lightboxImg" src=""></div>
 <div id="recBadge">● REC</div>
 <div id="measureBadge"></div>
@@ -316,7 +329,7 @@
           <span class="ico">🔳</span>QRで読込
         </button>
       </div>
-      <div class="s-hint" style="font-size:11px;color:#666;padding:2px 4px 0">カメラでQRコードを読んで、ファイルを開きます（GeoJSON / GPKG / SHP(ZIP) / GPX / KML / GeoTIFF）</div>
+      <div class="s-hint" style="font-size:11px;color:#666;padding:2px 4px 0">カメラでQRコードを読んで、ファイルを開きます（GeoJSON / GPKG / SHP(ZIP) / GPX / KML / GeoTIFF）。GitHubのリポジトリ・フォルダのアドレスなら、中のファイルを選べます</div>
     </div>
 
     <!-- ベクタデータ -->
@@ -648,6 +661,6 @@
 <!-- 印刷時の縮尺表示（地図左下） -->
 <div id="printMapScale"></div>
 
-<script src="./main.js?v=20261124b"></script>
+<script src="./main.js?v=20261125a"></script>
 </body>
 </html>

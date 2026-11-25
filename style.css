@@ -225,6 +225,29 @@ html, body { height:100%; margin:0; }
   padding:10px 18px; font-size:15px; border:none; border-radius:22px;
   background:rgba(255,255,255,0.92); color:#222; cursor:pointer;
 }
+/* ─── GitHubのフォルダを開く（ファイルを選ぶ） ─── */
+#layerPickOverlay {
+  display:none; position:fixed; inset:0; z-index:30600; background:rgba(0,0,0,0.5);
+  align-items:center; justify-content:center; padding:12px; box-sizing:border-box;
+}
+#layerPickBox {
+  background:#fff; border-radius:14px; width:min(94vw,480px); max-height:84vh;
+  display:flex; flex-direction:column; padding:14px; box-sizing:border-box; box-shadow:0 8px 30px rgba(0,0,0,0.3);
+}
+#layerPickTitle { font-size:16px; font-weight:bold; }
+#layerPickPath { font-size:12px; color:#555; margin:2px 0 8px; word-break:break-all; }
+#layerPickList { overflow-y:auto; flex:1; min-height:120px; border:1px solid #ddd; border-radius:8px; }
+#layerPickList .lp-row { display:flex; align-items:center; gap:8px; padding:10px 10px; border-bottom:1px solid #eee; font-size:14px; cursor:pointer; }
+#layerPickList .lp-dir { background:#f6f8fa; }
+#layerPickList .lp-name { flex:1; word-break:break-all; }
+#layerPickList .lp-size { font-size:11px; color:#777; white-space:nowrap; }
+#layerPickList .lp-msg { padding:16px; color:#555; font-size:13px; }
+#layerPickList input[type=checkbox] { width:20px; height:20px; }
+#layerPickNote { font-size:11px; color:#666; margin-top:6px; }
+#layerPickBtns { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+#layerPickBtns button { flex:1; padding:10px 8px; font-size:14px; border:none; border-radius:10px; background:#e8ebef; color:#222; cursor:pointer; }
+#layerPickBtns #layerPickGo { flex:2; background:#1a73e8; color:#fff; }
+#layerPickBtns #layerPickGo:disabled { background:#9bbcf0; }
 #toast {
   position:fixed; left:50%; bottom:60px; transform:translateX(-50%);
   background:rgba(0,0,0,0.75); color:white;

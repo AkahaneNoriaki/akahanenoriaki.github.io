@@ -2428,7 +2428,7 @@ gpkgInput.addEventListener('change',()=>{ const f=gpkgInput.files[0]; if(!f) ret
    対応: GeoJSON / GPKG / SHP(ZIP) / GPX / KML / GeoTIFF
    ・?file=URL （複数可。?gpkg= でも、同じ）：QRコードを、カメラアプリで読むと、そのまま開く
    ・「QRで読込」ボタン：この画面の中で、カメラを使って、QRコードを読む
-   QRの中身は、「ファイルのURL」、または「?file= つきの、このページのURL」
+   QRの中身は、「ファイルのURL」、「?file= つきの、このページのURL」、または「GitHubのリポジトリ・フォルダのURL」
    ファイルを置く場所は、https（または localhost）で、他のサイトから読める設定が必要
    （このサイトの中に置けば、設定は、要らない。GitHub Pages は、そのまま読める）
 ========================= */
@@ -2518,14 +2518,168 @@ async function loadLayerUrls(urls){
   for(const h of urls) await loadLayerFromUrl(h);
 }
 
-// ページのURLに ?file= （または ?gpkg=）があれば、読み込む
-(()=>{
-  const p=new URLSearchParams(location.search);
-  if(!LAYER_PARAMS.some(k=>p.has(k))) return;
-  const urls=_layerUrlsFromText(location.href);
-  if(urls.length) setTimeout(()=>loadLayerUrls(urls),600);
-  else toast('?file= のアドレスが、正しくありません（対応: GeoJSON・GPKG・SHP(ZIP)・GPX・KML・GeoTIFF）',6000);
-})();
+/* ---- GitHub のリポジトリ・フォルダを開く ----
+   QRの中身が、GitHub の、リポジトリ・フォルダのアドレスのとき、中のファイルを、一覧にして、選んで読み込む
+   対応するアドレス:
+     https://github.com/ユーザー/リポジトリ
+     https://github.com/ユーザー/リポジトリ/tree/ブランチ/フォルダ
+     https://github.com/ユーザー/リポジトリ/blob/ブランチ/ファイル.gpkg （ファイル本体に、直して読む）
+     https://ユーザー.github.io/リポジトリ/フォルダ/ （GitHub Pages）
+   一覧は GitHub の API で取る（登録なしでは、同じ回線から、1時間に60回まで）
+   研修で、多くの人が、同じ回線から、読むときは、ファイルのアドレスの、QRが、確実 */
+const GH_DIR_EXTS = ['geojson','gpkg','zip','gpx','kml','tif','tiff','geotiff'];
+const GH_MAX_PICK = 30;
+
+function _parseGithub(u){
+  const host=u.hostname.toLowerCase();
+  const seg=u.pathname.split('/').filter(Boolean).map(s=>{ try{ return decodeURIComponent(s); }catch{ return s; } });
+  if(host==='github.com'||host==='www.github.com'){
+    if(seg.length<2) return null;
+    const owner=seg[0], repo=seg[1].replace(/\.git$/,'');
+    if(seg.length===2) return {type:'dir',owner,repo,branch:null,path:''};
+    const kind=seg[2], branch=seg[3], rest=seg.slice(4);
+    if(kind==='tree' && branch) return {type:'dir',owner,repo,branch,path:rest.join('/')};
+    if(kind==='blob' && branch && rest.length && GH_DIR_EXTS.concat(['json']).includes((rest[rest.length-1].split('.').pop()||'').toLowerCase())){
+      return {type:'file',url:`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${rest.map(encodeURIComponent).join('/')}`};
+    }
+    return null;
+  }
+  if(host.endsWith('.github.io')){
+    const owner=host.slice(0,-'.github.io'.length);
+    if(u.origin===location.origin && seg.length===0) return null;      // このアプリ自身の、トップは、対象外
+    if(seg.length && LAYER_EXTS.includes((seg[seg.length-1].split('.').pop()||'').toLowerCase())) return null; // ファイルのアドレスは、別の道
+    if(!seg.length) return {type:'dir',owner,repo:host,branch:null,path:''};
+    return {type:'dir',owner,repo:seg[0],branch:null,path:seg.slice(1).join('/'),pagesAlt:{repo:host,path:seg.join('/')}};
+  }
+  return null;
+}
+
+function _isDriveUrl(u){
+  const h=u.hostname.toLowerCase();
+  return h==='drive.google.com'||h==='docs.google.com'||h.endsWith('.googleusercontent.com');
+}
+
+// QRなどの文字から、読み込む対象を決める: {kind:'files',urls} / {kind:'dir',ref} / {kind:'drive'} / null
+function _layerTargetFromText(text, base){
+  text=(text||'').trim();
+  if(!text||text.length>2000) return null;
+  let u;
+  try{ u=new URL(text, base||location.href); }catch{ return null; }
+  if(!_okLayerUrl(u)) return null;
+  if(_isDriveUrl(u)) return {kind:'drive'};
+  const vals=[];
+  for(const k of LAYER_PARAMS) vals.push(...u.searchParams.getAll(k));
+  if(vals.length){
+    const urls=[]; let dir=null, drive=false;
+    for(const v of vals){
+      const t=_layerTargetFromText(v,u);
+      if(!t) continue;
+      if(t.kind==='dir'&&!dir) dir=t; else if(t.kind==='files') urls.push(...t.urls); else if(t.kind==='drive') drive=true;
+    }
+    if(dir) return dir;
+    if(urls.length) return {kind:'files',urls};
+    return drive ? {kind:'drive'} : null;
+  }
+  const gh=_parseGithub(u);
+  if(gh) return gh.type==='dir' ? {kind:'dir',ref:gh} : {kind:'files',urls:[gh.url]};
+  const urls=_layerUrlsFromText(text,base);
+  return urls.length ? {kind:'files',urls} : null;
+}
+
+async function _ghList(ref){
+  const p=ref.path.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+  const api=`https://api.github.com/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/contents${p?'/'+p:''}${ref.branch?`?ref=${encodeURIComponent(ref.branch)}`:''}`;
+  let r;
+  try{ r=await fetch(api,{headers:{Accept:'application/vnd.github+json'}}); }
+  catch{ throw {code:'net'}; }
+  if(r.status===404) throw {code:404};
+  if(r.status===403||r.status===429) throw {code:'rate'};
+  if(!r.ok) throw {code:r.status};
+  const j=await r.json();
+  if(!Array.isArray(j)) throw {code:'notdir'};
+  return j.map(e=>({name:e.name,type:e.type,size:e.size||0,url:e.download_url||null}));
+}
+
+function _fmtBytes(n){ return n>=1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB'; }
+function _escH(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function showLayerPicker(ref0){
+  const ov=document.getElementById('layerPickOverlay');
+  const title=document.getElementById('layerPickTitle');
+  const pathEl=document.getElementById('layerPickPath');
+  const list=document.getElementById('layerPickList');
+  const note=document.getElementById('layerPickNote');
+  const go=document.getElementById('layerPickGo');
+  const ref={...ref0};
+  const picked=new Map();                  // URL → 名前
+  let shown=[];                            // 今の一覧の、ファイル
+
+  const updateGo=()=>{ go.textContent=`選んだ ${picked.size} 個を読み込む`; go.disabled=picked.size===0; };
+  const close=()=>{ ov.style.display='none'; };
+  document.getElementById('layerPickClose').onclick=close;
+  title.textContent='GitHubのファイル';
+  ov.style.display='flex';
+
+  async function openDir(path){
+    ref.path=path;
+    pathEl.textContent=`${ref.owner}/${ref.repo}${ref.path?' / '+ref.path:''}`;
+    list.innerHTML='<div class="lp-msg">読み込み中…</div>'; note.textContent='';
+    let ents;
+    try{ ents=await _ghList(ref); }
+    catch(e){
+      if(e.code===404 && ref.pagesAlt){            // GitHub Pages: ユーザーのページ（ユーザー名.github.io）の、中のフォルダかも
+        const alt=ref.pagesAlt; ref.pagesAlt=null; ref.repo=alt.repo; return openDir(alt.path);
+      }
+      const m = e.code===404 ? 'リポジトリ、またはフォルダが、見つかりません（非公開の場合も、見えません）'
+              : e.code==='rate' ? 'GitHubの、取得回数の上限に、達しました。しばらく待つか、ファイルのアドレスのQRを、使ってください'
+              : e.code==='notdir' ? 'フォルダではありません'
+              : e.code==='net' ? '取得できません（ネットワークを、確認してください）'
+              : `取得できません（${e.code}）`;
+      list.innerHTML=`<div class="lp-msg">${_escH(m)}</div>`; return;
+    }
+    const dirs=ents.filter(e=>e.type==='dir').sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+    shown=ents.filter(e=>e.type==='file'&&e.url&&GH_DIR_EXTS.includes((e.name.split('.').pop()||'').toLowerCase())).sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+    const skipped=ents.filter(e=>e.type==='file').length-shown.length;
+    let h='';
+    if(ref.path) h+='<div class="lp-row lp-dir" data-up="1">⬆️ 上のフォルダへ</div>';
+    dirs.slice(0,100).forEach((d,i)=>{ h+=`<div class="lp-row lp-dir" data-dir="${i}">📁 ${_escH(d.name)}</div>`; });
+    shown.slice(0,200).forEach((f,i)=>{
+      h+=`<label class="lp-row"><input type="checkbox" data-f="${i}"${picked.has(f.url)?' checked':''}> <span class="lp-name">${_escH(f.name)}</span> <span class="lp-size">${_fmtBytes(f.size)}</span></label>`;
+    });
+    if(!dirs.length&&!shown.length) h+='<div class="lp-msg">読み込めるファイルが、見つかりません</div>';
+    list.innerHTML=h;
+    note.textContent=(skipped>0?`対応しないファイル ${skipped} 個は、表示していません。`:'')+'　対応: GeoJSON / GPKG / SHP(ZIP) / GPX / KML / GeoTIFF';
+    list.querySelectorAll('[data-dir]').forEach(el=>el.onclick=()=>openDir((ref.path?ref.path+'/':'')+dirs[+el.dataset.dir].name));
+    const up=list.querySelector('[data-up]'); if(up) up.onclick=()=>openDir(ref.path.split('/').slice(0,-1).join('/'));
+    list.querySelectorAll('[data-f]').forEach(el=>el.onchange=()=>{
+      const f=shown[+el.dataset.f];
+      if(el.checked){
+        if(picked.size>=GH_MAX_PICK){ el.checked=false; toast(`一度に読み込めるのは、${GH_MAX_PICK}個までです`,3000); return; }
+        picked.set(f.url,f.name);
+      }else picked.delete(f.url);
+      updateGo();
+    });
+  }
+  document.getElementById('layerPickAll').onclick=()=>{
+    for(const f of shown){ if(picked.size<GH_MAX_PICK) picked.set(f.url,f.name); }
+    list.querySelectorAll('[data-f]').forEach(el=>{ el.checked=picked.has(shown[+el.dataset.f].url); });
+    updateGo();
+  };
+  go.onclick=async()=>{
+    const urls=[...picked.keys()]; close();
+    for(const h of urls) await loadLayerFromUrl(h);
+  };
+  updateGo();
+  await openDir(ref.path);
+}
+
+// 読み込む対象を、開く
+async function handleLayerTarget(t){
+  if(!t) return;
+  if(t.kind==='files') return loadLayerUrls(t.urls);
+  if(t.kind==='dir') return showLayerPicker(t.ref);
+  if(t.kind==='drive') toast('Googleドライブは、まだ対応していません（GitHubのアドレス、または、ファイルのアドレスを、使ってください）',7000);
+}
 
 /* ---- QRコードの読み取り ---- */
 let _qrStream=null, _qrRaf=0, _qrBusy=false;
@@ -2595,9 +2749,9 @@ async function startQrScan(){
         }
       }catch{}
       if(text){
-        const urls=_layerUrlsFromText(text);
-        if(urls.length){ stopQrScan(); await loadLayerUrls(urls); return; }
-        msg.textContent='読み込めるファイルのQRコードでは、ありません';
+        const t=_layerTargetFromText(text);
+        if(t){ stopQrScan(); await handleLayerTarget(t); return; }
+        msg.textContent='読み込めるファイル、または、GitHubのフォルダのQRコードでは、ありません';
       }
       _qrBusy=false;
     }
@@ -2608,16 +2762,24 @@ async function startQrScan(){
 
 // アドレスを、手で入れる（カメラが使えないとき）
 function enterLayerUrl(){
-  const t=window.prompt('ファイルのアドレスを、入力してください（https://…/○○.gpkg、.geojson、.zip、.gpx、.kml、.tif）','');
-  if(!t) return;
-  const urls=_layerUrlsFromText(t);
-  if(!urls.length){ toast('読み込めるファイルのアドレスでは、ありません',4000); return; }
-  stopQrScan(); loadLayerUrls(urls);
+  const x=window.prompt('ファイル、または、GitHubのフォルダのアドレスを、入力してください（https://…/○○.gpkg、.geojson、.zip、.gpx、.kml、.tif、https://github.com/…）','');
+  if(!x) return;
+  const t=_layerTargetFromText(x);
+  if(!t){ toast('読み込めるアドレスでは、ありません',4000); return; }
+  stopQrScan(); handleLayerTarget(t);
 }
 
 document.getElementById('btnScanQr').onclick=()=>{ closeSheet(); startQrScan(); };
 document.getElementById('qrScanClose').onclick=stopQrScan;
 document.getElementById('qrScanUrl').onclick=enterLayerUrl;
+// ページのURLに ?file= （または ?gpkg=）があれば、読み込む
+(()=>{
+  const p=new URLSearchParams(location.search);
+  if(!LAYER_PARAMS.some(k=>p.has(k))) return;
+  const t=_layerTargetFromText(location.href);
+  if(t) setTimeout(()=>handleLayerTarget(t),600);
+  else toast('?file= のアドレスが、正しくありません（対応: GeoJSON・GPKG・SHP(ZIP)・GPX・KML・GeoTIFF、GitHubのフォルダ）',6000);
+})();
 /* LAYER-QR-END */
 
 /* =========================
